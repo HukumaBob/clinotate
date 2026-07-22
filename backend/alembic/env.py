@@ -17,6 +17,7 @@ from app.db import Base
 from app.auth import models as auth_models  # noqa: F401
 from app.taxonomy import models as taxonomy_models  # noqa: F401
 from app.media import models as media_models  # noqa: F401
+from app.annotation import models as annotation_models  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
