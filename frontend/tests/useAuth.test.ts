@@ -16,6 +16,16 @@ describe("useAuth", () => {
     expect(result.current.user).toBeNull();
   });
 
+  it("starts authenticated when a token is already stored", async () => {
+    localStorage.setItem("endoscopy_auth_token", "existing-token");
+    vi.resetModules();
+    const { useAuth: freshUseAuth } = await import("../src/features/auth/useAuth");
+
+    const { result } = renderHook(() => freshUseAuth());
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.token).toBe("existing-token");
+  });
+
   it("logs in, stores the token, and fetches the current user", async () => {
     vi.spyOn(apiClient, "POST").mockResolvedValueOnce({
       data: { access_token: "fake-token", token_type: "bearer" },

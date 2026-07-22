@@ -18,10 +18,15 @@ interface AuthState {
   logout: () => void;
 }
 
+const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+if (storedToken) {
+  setAuthToken(storedToken);
+}
+
 export const useAuth = create<AuthState>((set) => ({
-  token: localStorage.getItem(TOKEN_STORAGE_KEY),
+  token: storedToken,
   user: null,
-  isAuthenticated: false,
+  isAuthenticated: storedToken !== null,
 
   login: async (email: string, password: string) => {
     const loginResult = await apiClient.POST("/auth/login", {
