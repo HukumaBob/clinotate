@@ -1,8 +1,10 @@
 import type { JSX } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import { FrameAnnotationPage } from "../features/annotation/FrameAnnotationPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
+import { VideoListPage } from "../features/media/VideoListPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuth((state) => state.isAuthenticated);
@@ -18,7 +20,15 @@ export function App() {
           path="/videos"
           element={
             <RequireAuth>
-              <div className="p-8 text-gray-100">Videos page placeholder</div>
+              <VideoListPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/frames/:frameId"
+          element={
+            <RequireAuth>
+              <FrameAnnotationPage />
             </RequireAuth>
           }
         />
