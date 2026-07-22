@@ -61,14 +61,43 @@ review. Detailed per-task commit ranges: `.superpowers/sdd/progress.md`.
   requires `docker compose up -d` + backend + frontend already running
   manually. Acceptable for a walking skeleton; would need automation for CI.
 
-### Phase 2: ML worker — NOT STARTED
+### Phase 2a: Jobs infrastructure + SAM-3 segmentation (predict/track) — PLANNED, NOT STARTED
 
-Plan: not yet written. Scope per the design spec: Celery worker, SAM-3
-adapter (point/box/text/exemplar prompts — all four, not just point/box),
-Ultralytics YOLO11/YOLO12/YOLO26 detection adapters selectable per-job via
-`Job.payload`, RT-DETRv2 adapter, RF-DETR adapter (interface-level stub, no
-working inference yet), MLflow experiment tracking, dataset export, model
-training. Explicitly out of scope for Phase 1 by design.
+Plan: [docs/plans/2026-07-22-jobs-and-sam3.md](docs/plans/2026-07-22-jobs-and-sam3.md)
+
+Scope, decided during planning on 2026-07-22: `jobs` domain (Celery + Redis,
+already-provisioned Redis finally gets a consumer), a separate `ml-worker`
+GPU-backed project (own `uv` environment, doesn't import `backend/app` —
+tasks are coupled to the API only by Celery task name, not code import),
+and a real `Sam3Adapter` covering `predict()` (point/box prompts on one
+frame) and `track()` (mask propagation across a sequence). SAM-3's actual
+Python API was verified directly against `facebookresearch/sam3`'s source
+during planning (`add_geometric_prompt`, not a documented "point" method —
+the public README only shows text prompts). Progress surfaces via TanStack
+Query polling, not SSE (SSE deferred, human's explicit choice). SAM-3
+text/exemplar prompts, all detection adapters (YOLO/RT-DETRv2/RF-DETR),
+MLflow, datasets, and training are explicitly out of scope for this
+sub-phase — see Phase 2b below.
+
+**NOTICE correction made ahead of this phase (2026-07-22):** verified
+directly against `facebookresearch/sam3`'s `LICENSE` file that SAM-3 is
+under Meta's custom **SAM License**, not Apache 2.0 as `NOTICE` previously
+(incorrectly) stated for the SAM family. The SAM License prohibits military/
+weapons end use, requires export-control/trade-sanctions compliance,
+prohibits reverse-engineering, and requires publication attribution; weights
+are gated on Hugging Face. `NOTICE` now states this accurately, plus
+confirmed RT-DETRv2 (Apache 2.0) and added RF-DETR (Apache 2.0 base package;
+a separate Platform Model License covers Roboflow's larger "RF-DETR+"
+weights) ahead of Phase 2b integrating them.
+
+### Phase 2b: Detection adapters, datasets, training — NOT STARTED, NOT PLANNED
+
+Scope per the design spec: Ultralytics YOLO11/YOLO12/YOLO26 detection
+adapters selectable per-job via `Job.payload`, RT-DETRv2 adapter, RF-DETR
+adapter (interface-level stub, no working inference yet — human's explicit
+call, see the spec correction above), MLflow experiment tracking, dataset
+export, model training. No implementation plan written yet; depends on
+Phase 2a's `jobs` infrastructure landing first.
 
 **Spec correction logged 2026-07-22 (before Phase 2 work started):** the
 design spec originally described SAM-2 (point/box only) and YOLO11/RT-DETRv2
