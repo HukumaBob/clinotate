@@ -1,0 +1,24 @@
+Endoscopy Annotation Platform
+Copyright 2026 AIIRISDX Inc.
+
+This product includes software developed as part of the following
+third-party projects, used for machine-learning inference and training
+in this repository:
+
+- Segment Anything Model 2 (SAM2) — Meta AI
+  https://github.com/facebookresearch/segment-anything-2
+  Licensed under the Apache License, Version 2.0
+
+- Ultralytics YOLO — Ultralytics
+  https://github.com/ultralytics/ultralytics
+  Licensed under the AGPL-3.0 License
+
+- RT-DETR — Baidu / lyuwenyu
+  https://github.com/lyuwenyu/RT-DETR
+  Licensed under the Apache License, Version 2.0
+
+- DINOv2 / DINOv3 — Meta AI
+  https://github.com/facebookresearch/dinov2
+  Licensed under the Apache License, Version 2.0 (DINOv2) /
+  DINOv3 License (Meta, non-commercial research use) — verify current
+  terms before any commercial use.

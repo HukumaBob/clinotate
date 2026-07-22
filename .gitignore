@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+frontend/src/shared/api/generated/
+
+# Env
+.env
+
+# OS
+.DS_Store
