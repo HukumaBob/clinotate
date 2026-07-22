@@ -17,5 +17,6 @@ Contact: ldc.endoscopy@gmail.com
 
 ## Status
 
-Early development. See `docs/superpowers/specs/` and `docs/superpowers/plans/`
-for the design and implementation roadmap.
+Early development. See [ROADMAP.md](ROADMAP.md) for phase status, and
+[CLAUDE.md](CLAUDE.md) for how the design spec and implementation plans
+(kept in a sibling repository) relate to this codebase.
