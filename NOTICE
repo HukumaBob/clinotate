@@ -1,21 +1,49 @@
 Endoscopy Annotation Platform
 Copyright 2026 AIIRISDX Inc.
 
-This product includes software developed as part of the following
-third-party projects, used for machine-learning inference and training
-in this repository:
+This product includes, or is planned to include, software and/or model
+weights developed as part of the following third-party projects, used for
+machine-learning inference and training in this repository. Where a project
+is not yet integrated in the codebase, it is listed here in advance because
+the license/attribution requirements are recorded when the model is
+selected, not as an afterthought once code lands (see ROADMAP.md).
 
-- Segment Anything Model 2 (SAM2) — Meta AI
-  https://github.com/facebookresearch/segment-anything-2
-  Licensed under the Apache License, Version 2.0
+- Segment Anything Model 3 (SAM 3) — Meta AI
+  https://github.com/facebookresearch/sam3
+  Model weights and inference/training code licensed under Meta's SAM
+  License (a custom license, NOT Apache 2.0 or another OSI-approved
+  license) — https://github.com/facebookresearch/sam3/blob/main/LICENSE
+  The SAM License imposes use restrictions beyond typical open-source terms:
+  prohibits military/weapons end uses, requires compliance with U.S./EU/UK
+  trade-control and export-sanctions law (ITAR and similar), prohibits
+  reverse-engineering the model, and requires attribution if you publish
+  research performed using SAM Materials. Weights are gated on Hugging Face
+  and require accepting this license there before download. Verify current
+  terms before any commercial deployment or redistribution.
+  (SAM2, an earlier version previously evaluated for this project, is
+  Apache 2.0 licensed — https://github.com/facebookresearch/sam2 — but is
+  not the version this project uses.)
 
-- Ultralytics YOLO — Ultralytics
+- Ultralytics YOLO (YOLO11 / YOLO12 / YOLO26) — Ultralytics
   https://github.com/ultralytics/ultralytics
-  Licensed under the AGPL-3.0 License
+  Licensed under the AGPL-3.0 License. AGPL-3.0 is copyleft: unlike Apache
+  2.0, it can require source disclosure for network-accessible services
+  built on the licensed code, depending on how it's integrated. Verify
+  compliance before any commercial/hosted deployment; an Ultralytics
+  Enterprise License is available as an alternative if AGPL terms are
+  unsuitable.
 
-- RT-DETR — Baidu / lyuwenyu
+- RT-DETRv2 — Baidu / lyuwenyu
   https://github.com/lyuwenyu/RT-DETR
   Licensed under the Apache License, Version 2.0
+
+- RF-DETR — Roboflow
+  https://github.com/roboflow/rf-detr
+  Base package and Apache-designated model weights licensed under the
+  Apache License, Version 2.0. Roboflow's separate "RF-DETR+" extension
+  and its larger XL/2XL model weights are licensed under a different
+  Platform Model License (PML 1.0), not Apache 2.0 — verify which specific
+  weights are in use before assuming Apache terms apply.
 
 - DINOv2 / DINOv3 — Meta AI
   https://github.com/facebookresearch/dinov2
