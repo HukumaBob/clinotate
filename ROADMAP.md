@@ -63,10 +63,25 @@ review. Detailed per-task commit ranges: `.superpowers/sdd/progress.md`.
 
 ### Phase 2: ML worker — NOT STARTED
 
-Plan: not yet written. Scope per the design spec: Celery worker, SAM
-adapter (point/box prompts, SAM-3-ready prompt abstraction), YOLO/RT-DETR
-detection adapters, MLflow experiment tracking, dataset export, model
+Plan: not yet written. Scope per the design spec: Celery worker, SAM-3
+adapter (point/box/text/exemplar prompts — all four, not just point/box),
+Ultralytics YOLO11/YOLO12/YOLO26 detection adapters selectable per-job via
+`Job.payload`, RT-DETRv2 adapter, RF-DETR adapter (interface-level stub, no
+working inference yet), MLflow experiment tracking, dataset export, model
 training. Explicitly out of scope for Phase 1 by design.
+
+**Spec correction logged 2026-07-22 (before Phase 2 work started):** the
+design spec originally described SAM-2 (point/box only) and YOLO11/RT-DETRv2
+as current, with SAM-3/YOLO26 as future work "when they arrive." Both have
+since shipped and become the project's primary targets — the spec's
+"ML-сервис: adapter-паттерн" section was rewritten in place (with an inline
+actualization note) to reflect: SAM-3 as the primary segmentation adapter
+using all four prompt forms; YOLO11/12/26 as three separate `DetectionAdapter`
+implementations chosen per-job (not a global service-wide switch); RF-DETR
+added to the detection adapter registry as an interface-only stub alongside
+RT-DETRv2. No architectural pattern changed — the adapter-registry design
+already anticipated exactly this kind of model-version churn — only which
+concrete adapters are the near-term target.
 
 ---
 
