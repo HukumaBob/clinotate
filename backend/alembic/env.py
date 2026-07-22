@@ -15,6 +15,7 @@ from app.db import Base
 # Import every domain's models module here so Base.metadata is complete
 # before autogenerate runs. Add new imports as new domains are added.
 from app.auth import models as auth_models  # noqa: F401
+from app.taxonomy import models as taxonomy_models  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
