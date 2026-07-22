@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 test("annotator can log in, upload a video, and classify a frame", async ({ page, request }) => {
   const email = `e2e-${Date.now()}@example.com`;
   const password = "e2e-pass-1234";
+  const videoTitle = `E2E procedure ${Date.now()}`;
 
   const registerResponse = await request.post("http://localhost:8000/auth/register", {
     data: { email, password, role: "annotator" },
@@ -30,9 +31,9 @@ test("annotator can log in, upload a video, and classify a frame", async ({ page
 
   await expect(page).toHaveURL(/\/videos$/);
 
-  await page.getByPlaceholder("Title").fill("E2E procedure");
+  await page.getByPlaceholder("Title").fill(videoTitle);
   await page.setInputFiles('input[type="file"]', path.join(__dirname, "..", "tests", "fixtures", "tiny.mp4"));
   await page.getByRole("button", { name: "Upload" }).click();
 
-  await expect(page.getByText("E2E procedure")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(videoTitle)).toBeVisible({ timeout: 10_000 });
 });
