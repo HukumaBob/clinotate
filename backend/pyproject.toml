@@ -1,0 +1,28 @@
+[project]
+name = "endoscopy-platform-backend"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.18.5",
+    "boto3>=1.43.53",
+    "fastapi>=0.139.2",
+    "passlib[bcrypt]>=1.7.4",
+    "psycopg2-binary>=2.9.12",
+    "pydantic-settings>=2.14.2",
+    "python-jose[cryptography]>=3.5.0",
+    "python-multipart>=0.0.32",
+    "sqlalchemy>=2.0",
+    "uvicorn[standard]>=0.51.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "httpx2>=2.7.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
