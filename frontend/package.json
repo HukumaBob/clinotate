@@ -4,12 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run generate-api",
     "dev": "vite",
+    "prebuild": "npm run generate-api",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "generate-api": "openapi-typescript ../openapi.json -o src/shared/api/generated/schema.d.ts",
+    "pretest": "npm run generate-api",
     "test": "vitest run",
+    "pretest:e2e": "npm run generate-api",
     "test:e2e": "playwright test"
   },
   "dependencies": {
