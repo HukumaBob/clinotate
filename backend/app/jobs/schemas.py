@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -17,3 +18,19 @@ class JobRead(BaseModel):
     created_by_id: int
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class PromptIn(BaseModel):
+    type: Literal["point", "box"]
+    coords: list[float]
+    label: bool = True
+
+
+class Sam3PredictRequest(BaseModel):
+    frame_id: int
+    prompts: list[PromptIn]
+
+
+class Sam3TrackRequest(BaseModel):
+    sequence_id: int
+    prompts: list[PromptIn]
