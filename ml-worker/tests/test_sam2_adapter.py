@@ -23,3 +23,54 @@ def test_predict_with_point_prompt_returns_mask():
     assert isinstance(result.mask_png, bytes)
     assert len(result.mask_png) > 0
     assert 0.0 <= result.score <= 1.0
+
+
+def test_point_prompts_convert_to_point_coords_and_labels():
+    from app.sam2_adapter import _prompts_to_predict_kwargs
+
+    kwargs = _prompts_to_predict_kwargs([
+        {"type": "point", "coords": [0.5, 0.3], "label": True},
+        {"type": "point", "coords": [0.2, 0.1], "label": False},
+    ])
+
+    assert kwargs["point_coords"].tolist() == [[0.5, 0.3], [0.2, 0.1]]
+    assert kwargs["point_labels"].tolist() == [1, 0]
+    assert "box" not in kwargs
+    assert "mask_input" not in kwargs
+
+
+def test_box_prompt_converts_to_box_kwarg():
+    from app.sam2_adapter import _prompts_to_predict_kwargs
+
+    kwargs = _prompts_to_predict_kwargs([
+        {"type": "box", "coords": [0.1, 0.1, 0.4, 0.4], "label": True},
+    ])
+
+    assert kwargs["box"].tolist() == [0.1, 0.1, 0.4, 0.4]
+    assert "point_coords" not in kwargs
+
+
+def test_mask_prompt_converts_to_256x256_logits():
+    import base64
+    import io
+
+    from PIL import Image
+
+    from app.sam2_adapter import _prompts_to_predict_kwargs
+
+    small_mask = Image.new("L", (64, 64), color=255)
+    buffer = io.BytesIO()
+    small_mask.save(buffer, format="PNG")
+    mask_b64 = base64.b64encode(buffer.getvalue()).decode()
+
+    kwargs = _prompts_to_predict_kwargs([{"type": "mask", "mask_png": mask_b64}])
+
+    assert kwargs["mask_input"].shape == (1, 256, 256)
+    assert (kwargs["mask_input"] == 32.0).all()
+
+
+def test_unknown_prompt_type_raises():
+    from app.sam2_adapter import _prompts_to_predict_kwargs
+
+    with pytest.raises(ValueError, match="Unknown prompt type"):
+        _prompts_to_predict_kwargs([{"type": "exemplar", "coords": []}])
