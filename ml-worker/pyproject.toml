@@ -20,4 +20,7 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-markers = ["requires_sam3_weights: needs real SAM-3 weights and GPU, see conftest.py"]
+markers = [
+    "requires_sam3_weights: needs real SAM-3 weights and GPU, see conftest.py",
+    "requires_sam2_weights: needs real SAM 2.1 weights and GPU, see conftest.py",
+]
