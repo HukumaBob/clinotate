@@ -239,3 +239,51 @@ def test_job_type_has_sam2_variants():
 
     assert JobType.SAM2_PREDICT == "sam2_predict"
     assert JobType.SAM2_TRACK == "sam2_track"
+
+
+def test_enqueue_sam2_predict_creates_pending_job():
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.service import enqueue_sam2_predict
+
+    token = _register_and_login("sam2-jobs1@example.com")
+    frame_id, _ = _create_frame(token)
+    label_id = _create_label()
+
+    session = SessionLocal()
+    user = session.query(User).filter(User.email == "sam2-jobs1@example.com").one()
+    job = enqueue_sam2_predict(
+        session, frame_id, label_id,
+        prompts=[{"type": "point", "coords": [0.5, 0.5], "label": True}],
+        created_by=user,
+    )
+    session.close()
+
+    assert job.job_type == "sam2_predict"
+    assert job.status == "pending"
+    assert job.payload["frame_id"] == frame_id
+
+
+def test_enqueue_sam2_track_stores_anchor_and_direction_in_payload():
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.service import enqueue_sam2_track
+
+    token = _register_and_login("sam2-jobs2@example.com")
+    frame_id, sequence_id = _create_frame(token)
+    label_id = _create_label()
+
+    session = SessionLocal()
+    user = session.query(User).filter(User.email == "sam2-jobs2@example.com").one()
+    job = enqueue_sam2_track(
+        session, sequence_id, label_id,
+        prompts=[{"type": "box", "coords": [0.1, 0.1, 0.3, 0.3], "label": True}],
+        anchor_frame_id=frame_id, backward=2, forward=4,
+        created_by=user,
+    )
+    session.close()
+
+    assert job.job_type == "sam2_track"
+    assert job.payload["anchor_frame_id"] == frame_id
+    assert job.payload["backward"] == 2
+    assert job.payload["forward"] == 4
