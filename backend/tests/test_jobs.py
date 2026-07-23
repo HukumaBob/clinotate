@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -205,3 +206,29 @@ def test_prompt_in_accepts_mask_type_with_base64_png():
     assert prompt.type == "mask"
     assert prompt.mask_png == "aGVsbG8="
     assert prompt.coords == []
+
+
+def test_sam2_track_request_requires_anchor_and_direction_fields():
+    from pydantic import ValidationError
+
+    from app.jobs.schemas import Sam2TrackRequest
+
+    with pytest.raises(ValidationError):
+        Sam2TrackRequest(sequence_id=1, label_id=1, prompts=[])
+
+
+def test_sam2_track_request_accepts_full_payload():
+    from app.jobs.schemas import Sam2TrackRequest, PromptIn
+
+    request = Sam2TrackRequest(
+        sequence_id=1,
+        label_id=2,
+        prompts=[PromptIn(type="point", coords=[0.5, 0.5], label=True)],
+        anchor_frame_id=10,
+        backward=3,
+        forward=5,
+    )
+
+    assert request.anchor_frame_id == 10
+    assert request.backward == 3
+    assert request.forward == 5

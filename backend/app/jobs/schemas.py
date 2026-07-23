@@ -37,3 +37,18 @@ class Sam3TrackRequest(BaseModel):
     sequence_id: int
     label_id: int
     prompts: list[PromptIn]
+
+
+class Sam2PredictRequest(BaseModel):
+    frame_id: int
+    label_id: int
+    prompts: list[PromptIn]
+
+
+class Sam2TrackRequest(BaseModel):
+    sequence_id: int
+    label_id: int
+    prompts: list[PromptIn]
+    anchor_frame_id: int
+    backward: int
+    forward: int
