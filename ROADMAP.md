@@ -269,6 +269,50 @@ call, see the spec correction above), MLflow experiment tracking, dataset
 export, model training. No implementation plan written yet; depends on
 Phase 2a's `jobs` infrastructure landing first.
 
+**Rough domain map, checked against Phase 2a.1's now-approved UI (added
+2026-07-23, before any Phase 2b code exists — so a domain plan exists
+before anyone starts coding into this blind, per an explicit ask following
+the SAM 2.1 detour above).** The design spec's own `## Домены` /
+`## Модель данных` sections already name most of this — this is not a new
+design, just making explicit which UI-spec screen maps to which
+already-specified backend domain, and calling out the one real gap:
+
+- **Dataset screen → `datasets` module (already specified, not built).**
+  Design spec already has `Dataset(id, name, task_type, taxonomy_version,
+  split_config JSONB, balance_metrics JSONB)` and `DatasetItem(dataset_id,
+  frame_id, annotation_ids[], split)`. The UI spec's live class-balance
+  panel is `balance_metrics` computed on selection, not stored per-request;
+  the sequence-picker checkbox list reads from `media`'s existing
+  `Sequence`/`Frame` tables, no new media-side model needed.
+- **Train screen → `training` module (already specified, not built).**
+  Design spec already has `ModelVersion(id, name, task_type, base_model_id,
+  dataset_id, mlflow_run_id, storage_key, is_active)`. The UI spec's live
+  log stream reuses the `jobs` module's existing progress-reporting pattern
+  (a `Job` row a Celery task updates) — training is a `Job.type` like
+  `sam3_predict`/`sam3_track` are today, not a parallel status-tracking
+  mechanism.
+- **Results screen → the one real gap: no "inference run" concept exists
+  anywhere yet**, in either spec. Design spec's `jobs` module already
+  covers "run inference," but nothing currently models *keeping* a result
+  around to show in the UI spec's "previous runs" history table (video
+  used, model used, date, re-viewable output) — today's `Job` rows are
+  transient work units, not a persisted result log. Needs either a thin
+  `InferenceRun` record (references the `Job`, the input video, the
+  `ModelVersion`, and the output `storage_key`) added to `training` — or
+  folding into `jobs` itself if a completed `Job` row turns out to already
+  carry enough (its `result_ref` field may already be sufficient; not
+  decided here, left for Phase 2b's own implementation plan).
+- **`SegmentationAdapter`/`DetectionAdapter` registry (design spec's
+  `## ML-сервис: adapter-паттерн`) already covers per-adapter selection**
+  via `Job.payload = {"adapter": "<name>", ...}` — this is the existing
+  architectural answer to "how does a caller pick SAM-3 vs. SAM 2.1 vs. a
+  future YOLO variant," predating this session. The open question Phase
+  2a.1 deliberately left unresolved (see its own entry above) is *whether*
+  the SAM-3/SAM 2.1 split reuses this exact `adapter` string mechanism or
+  needs something else given `jobs`' current `Sam3PredictRequest`-shaped,
+  SAM-3-only schemas — not whether a registry pattern exists, since it
+  already does.
+
 **Spec correction logged 2026-07-22 (before Phase 2 work started):** the
 design spec originally described SAM-2 (point/box only) and YOLO11/RT-DETRv2
 as current, with SAM-3/YOLO26 as future work "when they arrive." Both have
