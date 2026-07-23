@@ -24,7 +24,15 @@ RUN uv sync --frozen --no-install-project
 # raising `RuntimeError: operator torchvision::nms does not exist` at import
 # time. Pin both from the same release line to keep them compatible.
 RUN uv pip install "torch==2.7.1" "torchvision==0.22.1" --index-url https://download.pytorch.org/whl/cu126
-RUN uv pip install "sam3 @ git+https://github.com/facebookresearch/sam3.git"
+# Pinned to the exact commit this image (and app/sam3_adapter.py's
+# monkeypatch of sam3.perflib.fused.addmm_act, see that module's docstring)
+# was verified against. sam3 is installed from git HEAD with no releases, so
+# an unpinned install could silently pick up upstream changes -- including a
+# fix for the dtype bug this project patches around -- without a visible,
+# reviewed commit bump. Bump deliberately, and re-verify the patch (or drop
+# it if upstream has merged an equivalent fix; see
+# https://github.com/facebookresearch/sam3/pull/570) when updating this pin.
+RUN uv pip install "sam3 @ git+https://github.com/facebookresearch/sam3.git@46957e47805eaa273f4aa7bbbd25a88bca9108ce"
 # sam3's own package metadata under-declares its runtime dependencies: these
 # four are imported eagerly by sam3's __init__ chain (including training-only
 # code paths) but are missing from its `Requires-Dist` list, so uv/pip won't
