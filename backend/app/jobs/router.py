@@ -18,7 +18,7 @@ def create_sam3_predict_job(
     session: Session = Depends(get_session),
 ) -> Job:
     prompts = [p.model_dump() for p in payload.prompts]
-    return enqueue_sam3_predict(session, payload.frame_id, prompts, current_user)
+    return enqueue_sam3_predict(session, payload.frame_id, payload.label_id, prompts, current_user)
 
 
 @router.post("/sam3/track", response_model=JobRead, status_code=status.HTTP_201_CREATED)
@@ -28,7 +28,7 @@ def create_sam3_track_job(
     session: Session = Depends(get_session),
 ) -> Job:
     prompts = [p.model_dump() for p in payload.prompts]
-    return enqueue_sam3_track(session, payload.sequence_id, prompts, current_user)
+    return enqueue_sam3_track(session, payload.sequence_id, payload.label_id, prompts, current_user)
 
 
 @router.get("/{job_id}", response_model=JobRead)

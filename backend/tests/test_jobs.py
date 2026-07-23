@@ -77,13 +77,32 @@ def _create_frame(token: str) -> int:
     return frames[0]["id"], sequence["id"]
 
 
+def _create_label() -> int:
+    from app.db import SessionLocal
+    from app.taxonomy.models import Label, LabelType
+
+    session = SessionLocal()
+    label = Label(name="jobs-test-label", label_type=LabelType.MORPHOLOGICAL, taxonomy_version=1)
+    session.add(label)
+    session.commit()
+    session.refresh(label)
+    label_id = label.id
+    session.close()
+    return label_id
+
+
 def test_enqueue_sam3_predict_creates_pending_job():
     token = _register_and_login("jobs3@example.com")
     frame_id, _ = _create_frame(token)
+    label_id = _create_label()
 
     response = client.post(
         "/jobs/sam3/predict",
-        json={"frame_id": frame_id, "prompts": [{"type": "point", "coords": [0.5, 0.5], "label": True}]},
+        json={
+            "frame_id": frame_id,
+            "label_id": label_id,
+            "prompts": [{"type": "point", "coords": [0.5, 0.5], "label": True}],
+        },
         headers=_auth_headers(token),
     )
 
@@ -93,13 +112,60 @@ def test_enqueue_sam3_predict_creates_pending_job():
     assert body["status"] == "pending"
 
 
+def test_enqueue_sam3_predict_stores_label_id_in_payload():
+    from app.db import SessionLocal
+    from app.jobs.models import Job
+
+    token = _register_and_login("jobs5@example.com")
+    frame_id, _ = _create_frame(token)
+    label_id = _create_label()
+
+    response = client.post(
+        "/jobs/sam3/predict",
+        json={
+            "frame_id": frame_id,
+            "label_id": label_id,
+            "prompts": [{"type": "point", "coords": [0.5, 0.5], "label": True}],
+        },
+        headers=_auth_headers(token),
+    )
+
+    job_id = response.json()["id"]
+    session = SessionLocal()
+    job = session.get(Job, job_id)
+    assert job.payload["label_id"] == label_id
+    session.close()
+
+
+def test_enqueue_sam3_predict_with_unknown_label_returns_404():
+    token = _register_and_login("jobs6@example.com")
+    frame_id, _ = _create_frame(token)
+
+    response = client.post(
+        "/jobs/sam3/predict",
+        json={
+            "frame_id": frame_id,
+            "label_id": 999999,
+            "prompts": [{"type": "point", "coords": [0.5, 0.5], "label": True}],
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 404
+
+
 def test_enqueue_sam3_track_creates_pending_job():
     token = _register_and_login("jobs4@example.com")
     _, sequence_id = _create_frame(token)
+    label_id = _create_label()
 
     response = client.post(
         "/jobs/sam3/track",
-        json={"sequence_id": sequence_id, "prompts": [{"type": "box", "coords": [0.1, 0.1, 0.3, 0.3], "label": True}]},
+        json={
+            "sequence_id": sequence_id,
+            "label_id": label_id,
+            "prompts": [{"type": "box", "coords": [0.1, 0.1, 0.3, 0.3], "label": True}],
+        },
         headers=_auth_headers(token),
     )
 
@@ -109,6 +175,23 @@ def test_enqueue_sam3_track_creates_pending_job():
     assert body["status"] == "pending"
 
 
+def test_enqueue_sam3_track_with_unknown_label_returns_404():
+    token = _register_and_login("jobs7@example.com")
+    _, sequence_id = _create_frame(token)
+
+    response = client.post(
+        "/jobs/sam3/track",
+        json={
+            "sequence_id": sequence_id,
+            "label_id": 999999,
+            "prompts": [{"type": "box", "coords": [0.1, 0.1, 0.3, 0.3], "label": True}],
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 404
+
+
 def test_enqueue_requires_auth():
-    response = client.post("/jobs/sam3/predict", json={"frame_id": 1, "prompts": []})
+    response = client.post("/jobs/sam3/predict", json={"frame_id": 1, "label_id": 1, "prompts": []})
     assert response.status_code == 401

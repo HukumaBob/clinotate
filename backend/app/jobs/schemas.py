@@ -28,9 +28,11 @@ class PromptIn(BaseModel):
 
 class Sam3PredictRequest(BaseModel):
     frame_id: int
+    label_id: int
     prompts: list[PromptIn]
 
 
 class Sam3TrackRequest(BaseModel):
     sequence_id: int
+    label_id: int
     prompts: list[PromptIn]
