@@ -264,27 +264,32 @@ class Sam3Adapter:
 
             video_predictor.handle_request(add_prompt_request)
 
-            frame_masks: dict[int, np.ndarray] = {}
-            for propagation_event in video_predictor.handle_stream_request({
-                "type": "propagate_in_video",
-                "session_id": session_id,
-            }):
-                frame_index = propagation_event["frame_index"]
-                outputs = propagation_event["outputs"]
-                binary_masks = outputs["out_binary_masks"]
-                # out_binary_masks is shaped (num_objects, H, W); this adapter
-                # only ever prompts a single object (obj_id=1), so take that
-                # object's mask. An empty first dimension means SAM-3 found
-                # no mask for the tracked object on this frame -- surfaced as
-                # a per-frame all-zero mask rather than a raised error, since
-                # "the tracked object left/re-entered the frame" is expected
-                # propagation behavior, not a failure.
-                if binary_masks.shape[0] == 0:
-                    frame_masks[frame_index] = np.zeros(binary_masks.shape[-2:], dtype=bool)
-                else:
-                    frame_masks[frame_index] = binary_masks[0]
-
-            video_predictor.handle_request({"type": "close_session", "session_id": session_id})
+            try:
+                frame_masks: dict[int, np.ndarray] = {}
+                for propagation_event in video_predictor.handle_stream_request({
+                    "type": "propagate_in_video",
+                    "session_id": session_id,
+                }):
+                    frame_index = propagation_event["frame_index"]
+                    outputs = propagation_event["outputs"]
+                    binary_masks = outputs["out_binary_masks"]
+                    # out_binary_masks is shaped (num_objects, H, W); this adapter
+                    # only ever prompts a single object (obj_id=1), so take that
+                    # object's mask. An empty first dimension means SAM-3 found
+                    # no mask for the tracked object on this frame -- surfaced as
+                    # a per-frame all-zero mask rather than a raised error, since
+                    # "the tracked object left/re-entered the frame" is expected
+                    # propagation behavior, not a failure.
+                    if binary_masks.shape[0] == 0:
+                        frame_masks[frame_index] = np.zeros(binary_masks.shape[-2:], dtype=bool)
+                    else:
+                        frame_masks[frame_index] = binary_masks[0]
+            finally:
+                # Always close the session, even if propagation raises partway
+                # through, so a partial failure doesn't leak video-predictor
+                # GPU state -- VRAM is the tightest resource this adapter runs
+                # under (see .superpowers/sdd/task-7-fix2-report.md).
+                video_predictor.handle_request({"type": "close_session", "session_id": session_id})
 
             results = []
             for frame_index in range(len(frames)):
@@ -297,5 +302,12 @@ class Sam3Adapter:
                 mask_image = Image.fromarray(mask_array, mode="L")
                 buffer = io.BytesIO()
                 mask_image.save(buffer, format="PNG")
+                # NOTE: score is hardcoded to 1.0, not a real confidence value.
+                # out_probs' index alignment with out_binary_masks after SAM-3's
+                # internal object-filtering/reordering was not traced during
+                # implementation (risk of silently mismatching a mask to the
+                # wrong confidence value) -- see .superpowers/sdd/task-7-report.md
+                # "How the brief's field names were adjusted", item 5. Revisit
+                # once real per-object out_probs indexing is confirmed.
                 results.append(MaskResult(mask_png=buffer.getvalue(), score=1.0))
             return results
