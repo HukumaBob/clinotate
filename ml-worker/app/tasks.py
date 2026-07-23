@@ -179,6 +179,121 @@ def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
         session.close()
 
 
+@celery_app.task(name="sam2_predict")
+def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
+    session = SessionLocal()
+    storage = get_storage_service()
+    _evict_sam3_models()
+    resolved_adapter = adapter if adapter is not None else _get_default_sam2_adapter()
+
+    job = session.get(Job, job_id)
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime.now(timezone.utc)
+    session.commit()
+
+    try:
+        frame_id = job.payload["frame_id"]
+        label_id = job.payload["label_id"]
+        prompts = job.payload["prompts"]
+        frame = session.get(Frame, frame_id)
+        label = _load_label(session, label_id)
+
+        frame_bytes = storage.download(frame.storage_key)
+        result = resolved_adapter.predict(frame_bytes, prompts)
+
+        mask_key = f"masks/{frame_id}/{job_id}.png"
+        storage.upload(mask_key, result.mask_png, content_type="image/png")
+
+        annotation = Annotation(
+            frame_id=frame_id,
+            label_id=label.id,
+            taxonomy_version=label.taxonomy_version,
+            annotation_type=AnnotationType.MASK,
+            payload={"prompts": prompts, "score": result.score},
+            status=AnnotationStatus.DRAFT,
+            created_by_id=job.created_by_id,
+            storage_key=mask_key,
+        )
+        session.add(annotation)
+
+        job.status = JobStatus.SUCCEEDED
+        job.progress = 100
+        job.result_ref = mask_key
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        job = session.get(Job, job_id)
+        job.status = JobStatus.FAILED
+        job.error = str(exc)
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="sam2_track")
+def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
+    session = SessionLocal()
+    storage = get_storage_service()
+    _evict_sam3_models()
+    resolved_adapter = adapter if adapter is not None else _get_default_sam2_adapter()
+
+    job = session.get(Job, job_id)
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime.now(timezone.utc)
+    session.commit()
+
+    try:
+        sequence_id = job.payload["sequence_id"]
+        label_id = job.payload["label_id"]
+        prompts = job.payload["prompts"]
+        anchor_frame_id = job.payload["anchor_frame_id"]
+        backward = job.payload["backward"]
+        forward = job.payload["forward"]
+        frames = session.query(Frame).filter(Frame.sequence_id == sequence_id).order_by(Frame.frame_index).all()
+        label = _load_label(session, label_id)
+
+        anchor_index = next(i for i, f in enumerate(frames) if f.id == anchor_frame_id)
+        frame_bytes_list = [storage.download(f.storage_key) for f in frames]
+        results = resolved_adapter.track(frame_bytes_list, prompts, anchor_index, backward, forward)
+
+        tracked_frames = frames[max(0, anchor_index - backward):anchor_index + forward + 1]
+        for index, (frame, result) in enumerate(zip(tracked_frames, results)):
+            mask_key = f"masks/{frame.id}/{job_id}.png"
+            storage.upload(mask_key, result.mask_png, content_type="image/png")
+            annotation = Annotation(
+                frame_id=frame.id,
+                label_id=label.id,
+                taxonomy_version=label.taxonomy_version,
+                annotation_type=AnnotationType.MASK,
+                payload={"prompts": prompts, "score": result.score},
+                status=AnnotationStatus.DRAFT,
+                created_by_id=job.created_by_id,
+                storage_key=mask_key,
+            )
+            session.add(annotation)
+
+            job.progress = int(((index + 1) / len(tracked_frames)) * 100)
+            session.commit()
+
+        job.status = JobStatus.SUCCEEDED
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        job = session.get(Job, job_id)
+        job.status = JobStatus.FAILED
+        job.error = str(exc)
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
+        session.close()
+        _restart_worker_process_after_track_failure()
+        return
+    finally:
+        session.close()
+
+
 def _restart_worker_process_after_track_failure() -> None:
     """Exits this worker process immediately after any `run_sam3_track`
     failure, relying on the container's `restart: unless-stopped` policy
