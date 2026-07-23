@@ -21,9 +21,10 @@ class JobRead(BaseModel):
 
 
 class PromptIn(BaseModel):
-    type: Literal["point", "box"]
-    coords: list[float]
+    type: Literal["point", "box", "mask"]
+    coords: list[float] = []
     label: bool = True
+    mask_png: str | None = None
 
 
 class Sam3PredictRequest(BaseModel):

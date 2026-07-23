@@ -195,3 +195,13 @@ def test_enqueue_sam3_track_with_unknown_label_returns_404():
 def test_enqueue_requires_auth():
     response = client.post("/jobs/sam3/predict", json={"frame_id": 1, "label_id": 1, "prompts": []})
     assert response.status_code == 401
+
+
+def test_prompt_in_accepts_mask_type_with_base64_png():
+    from app.jobs.schemas import PromptIn
+
+    prompt = PromptIn(type="mask", mask_png="aGVsbG8=")
+
+    assert prompt.type == "mask"
+    assert prompt.mask_png == "aGVsbG8="
+    assert prompt.coords == []
