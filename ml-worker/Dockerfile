@@ -41,4 +41,9 @@ RUN uv pip install einops pycocotools psutil
 
 COPY app ./app
 
-CMD ["uv", "run", "celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
+# --pool=solo: the default prefork pool forks worker subprocesses per task,
+# and CUDA cannot be re-initialized inside a forked child process ("Cannot
+# re-initialize CUDA in forked subprocess" at runtime). There is one GPU to
+# share regardless, so a single-threaded solo pool is the correct fix, not a
+# workaround: https://docs.celeryq.dev/en/stable/userguide/concurrency/index.html
+CMD ["uv", "run", "celery", "-A", "app.celery_app", "worker", "--loglevel=info", "--pool=solo"]
