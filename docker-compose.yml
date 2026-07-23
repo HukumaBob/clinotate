@@ -40,6 +40,15 @@ services:
   ml-worker:
     build:
       context: ./ml-worker
+    restart: unless-stopped
+    volumes:
+      # Persists the downloaded SAM-3 checkpoint (~3GB) and other HF cache
+      # entries across container restarts -- this service now restarts
+      # itself after every failed track() call (see app/tasks.py's
+      # _restart_worker_process_after_track_failure), so re-downloading the
+      # checkpoint on every restart would make that recovery path
+      # unacceptably slow.
+      - ml_worker_hf_cache:/root/.cache/huggingface
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -68,3 +77,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  ml_worker_hf_cache:

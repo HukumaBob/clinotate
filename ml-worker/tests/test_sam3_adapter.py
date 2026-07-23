@@ -137,3 +137,132 @@ def test_video_predictor_threads_sam3_1_version_through():
         adapter._get_video_predictor()
 
     mock_builder.assert_called_once_with(version="sam3.1")
+
+
+def test_get_video_predictor_evicts_already_loaded_processor():
+    """Regression test for the memory-lifecycle bug documented in
+    .superpowers/sdd/predict-flakiness-report.md: this adapter is reused as
+    a module-level singleton across every task in a worker process
+    (app/tasks.py's `_adapter_singleton`), and the image model + video
+    predictor cannot coexist in this GPU's VRAM budget (see __init__'s
+    docstring). Building the video predictor while the image
+    model/processor is already loaded must release it first (and call
+    torch.cuda.empty_cache()) rather than leaving both resident, which is
+    exactly what caused jobs #84/#85 to OOM requesting a mere 12 MiB."""
+    with (
+        patch("app.sam3_adapter.build_sam3_image_model") as mock_image_builder,
+        patch("app.sam3_adapter.Sam3Processor") as mock_processor_cls,
+        patch("app.sam3_adapter.build_sam3_predictor") as mock_video_builder,
+        patch("app.sam3_adapter.torch.cuda.empty_cache") as mock_empty_cache,
+    ):
+        adapter = Sam3Adapter()
+        adapter._get_processor()
+        assert adapter._processor is not None
+        assert adapter._model is not None
+
+        adapter._get_video_predictor()
+
+    assert adapter._processor is None, "image processor must be released once the video predictor is requested"
+    assert adapter._model is None, "image model must be released once the video predictor is requested"
+    assert adapter._video_predictor is mock_video_builder.return_value
+    mock_empty_cache.assert_called_once()
+
+
+def test_get_processor_evicts_already_loaded_video_predictor():
+    """Mirror of test_get_video_predictor_evicts_already_loaded_processor:
+    the eviction must work in both directions, since either predict() or
+    track() can be called first on a long-lived singleton."""
+    with (
+        patch("app.sam3_adapter.build_sam3_predictor") as mock_video_builder,
+        patch("app.sam3_adapter.build_sam3_image_model") as mock_image_builder,
+        patch("app.sam3_adapter.Sam3Processor") as mock_processor_cls,
+        patch("app.sam3_adapter.torch.cuda.empty_cache") as mock_empty_cache,
+    ):
+        adapter = Sam3Adapter()
+        adapter._get_video_predictor()
+        assert adapter._video_predictor is not None
+
+        adapter._get_processor()
+
+    assert adapter._video_predictor is None, "video predictor must be released once the image processor is requested"
+    assert adapter._processor is mock_processor_cls.return_value
+    mock_empty_cache.assert_called_once()
+
+
+def test_get_processor_does_not_evict_when_already_loaded():
+    """Calling _get_processor() twice in a row (the common case: repeated
+    predict() calls with no intervening track()) must reuse the cached
+    processor without releasing anything -- eviction should only happen
+    when switching from one model to the other, not on every call."""
+    with (
+        patch("app.sam3_adapter.build_sam3_image_model") as mock_image_builder,
+        patch("app.sam3_adapter.Sam3Processor") as mock_processor_cls,
+        patch("app.sam3_adapter.torch.cuda.empty_cache") as mock_empty_cache,
+    ):
+        adapter = Sam3Adapter()
+        first = adapter._get_processor()
+        second = adapter._get_processor()
+
+    assert first is second
+    mock_image_builder.assert_called_once()
+    mock_empty_cache.assert_not_called()
+
+
+def test_predict_clears_cuda_cache_on_error_without_swallowing_exception():
+    """Regression test for the second half of the memory-lifecycle bug in
+    .superpowers/sdd/predict-flakiness-report.md: a CUDA OOM (or any other
+    exception) raised during set_image/add_geometric_prompt -- i.e. during
+    actual inference, not just model construction -- must still trigger
+    torch.cuda.empty_cache() before propagating, and the original exception
+    must not be swallowed. Confirmed necessary by a real production
+    reproduction: a track() call that OOM'd inside add_prompt (a known,
+    pre-existing hardware ceiling, not a new defect -- see
+    task-7-fix2-report.md) left ~6.3 GiB resident even after the task
+    finished, and the very next predict() call on the same, correctly
+    single-model adapter OOM'd too, purely from that leftover
+    fragmentation."""
+    from PIL import Image
+
+    fake_image = Image.new("RGB", (4, 4))
+    buffer_bytes = io_bytes(fake_image)
+
+    with (
+        patch("app.sam3_adapter.build_sam3_image_model"),
+        patch("app.sam3_adapter.Sam3Processor") as mock_processor_cls,
+        patch("app.sam3_adapter.torch.cuda.empty_cache") as mock_empty_cache,
+    ):
+        mock_processor_cls.return_value.set_image.side_effect = RuntimeError("CUDA out of memory")
+        adapter = Sam3Adapter()
+
+        with pytest.raises(RuntimeError, match="CUDA out of memory"):
+            adapter.predict(buffer_bytes, prompts=[{"type": "point", "coords": [0.5, 0.5], "label": True}])
+
+    mock_empty_cache.assert_called_once()
+
+
+def io_bytes(image) -> bytes:
+    import io
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_get_processor_releases_partial_state_on_build_failure():
+    """If build_sam3_image_model() raises partway through (e.g. a real
+    torch.OutOfMemoryError from an internal .to(device) call), the adapter
+    must not be left holding a half-built processor, and must clear the
+    CUDA cache so a failed build doesn't leave fragmented/unreturned
+    allocations for the next call -- see predict-flakiness-report.md for
+    the confirmed production mechanism this guards against."""
+    with (
+        patch("app.sam3_adapter.build_sam3_image_model", side_effect=RuntimeError("boom")),
+        patch("app.sam3_adapter.torch.cuda.empty_cache") as mock_empty_cache,
+    ):
+        adapter = Sam3Adapter()
+        with pytest.raises(RuntimeError, match="boom"):
+            adapter._get_processor()
+
+    assert adapter._processor is None
+    assert adapter._model is None
+    mock_empty_cache.assert_called_once()

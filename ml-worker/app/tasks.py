@@ -1,3 +1,5 @@
+import os
+import sys
 from datetime import datetime, timezone
 
 from app.celery_app import celery_app
@@ -135,5 +137,46 @@ def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
         job.error = str(exc)
         job.finished_at = datetime.now(timezone.utc)
         session.commit()
+        session.close()
+        _restart_worker_process_after_track_failure()
+        return
     finally:
         session.close()
+
+
+def _restart_worker_process_after_track_failure() -> None:
+    """Exits this worker process immediately after any `run_sam3_track`
+    failure, relying on the container's `restart: unless-stopped` policy
+    (see `docker-compose.yml`'s `ml-worker` service) to bring up a fresh
+    process for the next task.
+
+    Root cause this works around: a failed `track()` call (most commonly
+    this GPU's confirmed VRAM ceiling -- see
+    .superpowers/sdd/task-7-fix2-report.md, a known hardware limit, not a
+    bug) leaves this worker process's CUDA allocator state corrupted in a
+    way that `gc.collect()` + `torch.cuda.empty_cache()` (already applied
+    throughout `sam3_adapter.py`, see `_clear_cuda_cache_on_error`) does
+    NOT recover from -- confirmed empirically (see
+    .superpowers/sdd/predict-flakiness-report.md and the live verification
+    that followed it): every subsequent `predict()` call in the SAME
+    process then fails with the identical `CUDA out of memory` error,
+    indefinitely, even though a fresh process handling only predict() calls
+    is completely reliable. Rather than chase the exact PyTorch/CUDA
+    allocator internals responsible (a deep rabbit hole with no guaranteed
+    fix, given `sam3`'s video predictor holds complex internal state whose
+    exact reference graph isn't fully known to this adapter), this
+    deliberately sacrifices the one Celery worker process handling this
+    task in exchange for a guaranteed-clean process for every task after
+    it. `track()` failing on this hardware is already an accepted, logged
+    limitation (ROADMAP.md) -- what's NOT acceptable is that failure
+    poisoning unrelated, otherwise-working predict() calls for the rest of
+    the worker's lifetime.
+
+    `--pool=solo` means this worker process handles one task at a time, so
+    killing it here cannot orphan a task queued behind this one -- Celery's
+    broker (Redis) redelivers the message to whichever worker process picks
+    up the queue next, which is this same container once it restarts.
+    """
+    sys.stderr.flush()
+    sys.stdout.flush()
+    os._exit(1)

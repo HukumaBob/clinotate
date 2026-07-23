@@ -1,3 +1,5 @@
+import contextlib
+import gc
 import io
 import tempfile
 from dataclasses import dataclass
@@ -81,6 +83,47 @@ def _apply_sam3_bf16_dtype_patch() -> None:
 _apply_sam3_bf16_dtype_patch()
 
 
+@contextlib.contextmanager
+def _clear_cuda_cache_on_error():
+    """Wraps a block of GPU-bound work so that ANY exception raised inside
+    it (CUDA OOM in particular, but this is deliberately not narrowed to
+    torch.cuda.OutOfMemoryError -- a failure partway through a forward pass
+    can leave partially-computed tensors resident regardless of the raised
+    type) triggers torch.cuda.empty_cache() before propagating.
+
+    Root cause this guards against (see
+    .superpowers/sdd/predict-flakiness-report.md): PyTorch's CUDA caching
+    allocator does not return memory to the OS just because a Python
+    reference to a tensor goes out of scope after an exception -- an
+    aborted `.to(device)` or forward pass can leave the allocator holding
+    fragments that count as "in use" for every subsequent call in the same
+    worker process, even though no Python object references them anymore.
+    This was confirmed empirically: a `track()` call that OOM'd partway
+    through `add_prompt` (a known, pre-existing hardware ceiling on this
+    GPU -- see .superpowers/sdd/task-7-fix2-report.md, not a new defect)
+    left the process at ~6.3 GiB "in use" per nvidia-smi even after the
+    task finished and its job row was marked FAILED; the very next
+    predict() call on the same (correctly-evicted, single-model) adapter
+    then OOM'd too, purely from that leftover fragmentation -- not from a
+    second model being resident.
+
+    Used around predict()'s and track()'s bodies (not just the lazy-load
+    build methods, which already have their own narrower version of this
+    same pattern) since a GPU failure can happen at any point during
+    inference, not just while constructing the model.
+    """
+    try:
+        yield
+    except Exception:
+        # gc.collect() before empty_cache(): see _release_video_predictor's
+        # docstring for why relying on refcounting/empty_cache() alone was
+        # confirmed, empirically, to leave memory stuck "in use" long enough
+        # to fail the very next unrelated call.
+        gc.collect()
+        torch.cuda.empty_cache()
+        raise
+
+
 @dataclass
 class MaskResult:
     mask_png: bytes
@@ -140,13 +183,63 @@ class Sam3Adapter:
         # the video predictor on top of it. Building both eagerly here would
         # make every Sam3Adapter() construction OOM on this hardware even for
         # callers who only ever use one of predict()/track().
+        #
+        # IMPORTANT: this "only one at a time" constraint isn't just about
+        # __init__ -- it holds for the lifetime of this adapter instance.
+        # `_get_processor()`/`_get_video_predictor()` below evict whichever
+        # model *isn't* being requested before building the requested one,
+        # for exactly this reason: this adapter is a module-level singleton
+        # in app/tasks.py (`_adapter_singleton`, built once per worker
+        # process and reused across every task), so a worker that ever
+        # serves both a predict() and a track() call across its lifetime
+        # would otherwise accumulate both ~7 GiB models permanently resident
+        # -- see .superpowers/sdd/predict-flakiness-report.md for the
+        # confirmed production incident this caused (jobs #84/#85 OOM'd
+        # requesting a mere 12 MiB, immediately after a track() call had
+        # built the video predictor on top of an already-resident image
+        # model from an earlier predict() call).
         self._model = None
         self._processor = None
         self._video_predictor = None
         self._video_predictor_version = video_predictor_version
 
+    def _release_video_predictor(self) -> None:
+        """Drops the video predictor and frees its GPU memory back to the
+        allocator. Called before building the image model, since the two
+        can't coexist in this GPU's VRAM budget (see __init__'s docstring).
+
+        Calls gc.collect() before empty_cache(): dropping this adapter's own
+        reference isn't sufficient by itself if `sam3`'s internal predictor
+        object holds circular references (e.g. a session/cache dict that
+        references back into model state) -- Python's refcounting alone
+        won't collect a reference cycle immediately, and torch.cuda.
+        empty_cache() only returns memory the allocator has already marked
+        free, so a delayed collection would leave that memory "in use" from
+        CUDA's perspective for an indeterminate time. Confirmed necessary in
+        practice, not just theoretical caution: without this, a predict()
+        call issued immediately after a track() call still OOM'd building a
+        *brand new* image model from scratch, well below what fits in a
+        clean process -- see .superpowers/sdd/predict-flakiness-report.md.
+        """
+        if self._video_predictor is not None:
+            self._video_predictor = None
+            gc.collect()
+            torch.cuda.empty_cache()
+
+    def _release_processor(self) -> None:
+        """Drops the image model/processor and frees its GPU memory back to
+        the allocator. Called before building the video predictor, mirroring
+        `_release_video_predictor` -- see that method's docstring for why
+        gc.collect() runs before empty_cache()."""
+        if self._processor is not None:
+            self._processor = None
+            self._model = None
+            gc.collect()
+            torch.cuda.empty_cache()
+
     def _get_processor(self):
         if self._processor is None:
+            self._release_video_predictor()
             # The bf16/float32 dtype mismatch previously hit here (see
             # .superpowers/sdd/task-6-report.md and task-6-fix-report.md for
             # the two earlier investigation rounds, including a ruled-out
@@ -156,12 +249,31 @@ class Sam3Adapter:
             # root cause (a dtype-preservation bug in
             # `sam3.perflib.fused.addmm_act`, unrelated to autocast/Flash
             # Attention/GPU generation).
-            self._model = build_sam3_image_model()
-            self._processor = Sam3Processor(self._model)
+            try:
+                self._model = build_sam3_image_model()
+                self._processor = Sam3Processor(self._model)
+            except Exception:
+                # A build failure (e.g. OOM partway through the builder's
+                # internal `.to(device)`) can leave partially-transferred
+                # tensors resident in PyTorch's CUDA caching allocator even
+                # though `self._model`/`self._processor` never get assigned
+                # -- confirmed as the mechanism behind jobs #84/#85 in
+                # .superpowers/sdd/predict-flakiness-report.md, where a
+                # failed video-predictor build left ~7 GiB "in use" for
+                # every subsequent call in the same worker process, forever.
+                # Clearing the cache here can't recover memory genuinely
+                # still referenced elsewhere, but it does return whatever
+                # the failed build allocated and then abandoned.
+                self._model = None
+                self._processor = None
+                gc.collect()
+                torch.cuda.empty_cache()
+                raise
         return self._processor
 
     def _get_video_predictor(self):
         if self._video_predictor is None:
+            self._release_processor()
             # build_sam3_predictor(version=...) is `sam3`'s own explicit
             # version-dispatch entry point (model_builder.py:1243-1287):
             # version="sam3" delegates to build_sam3_video_predictor (this
@@ -170,17 +282,28 @@ class Sam3Adapter:
             # build_sam3_multiplex_video_predictor -- both return an object
             # with the same handle_request/handle_stream_request API track()
             # depends on.
-            self._video_predictor = build_sam3_predictor(version=self._video_predictor_version)
+            try:
+                self._video_predictor = build_sam3_predictor(version=self._video_predictor_version)
+            except Exception:
+                # See the matching comment in _get_processor(): a failed
+                # build can leave partially-transferred tensors resident in
+                # the CUDA caching allocator even though
+                # `self._video_predictor` never gets assigned.
+                self._video_predictor = None
+                gc.collect()
+                torch.cuda.empty_cache()
+                raise
         return self._video_predictor
 
     def predict(self, frame_bytes: bytes, prompts: list[dict]) -> MaskResult:
         processor = self._get_processor()
         image = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
-        state = processor.set_image(image)
 
-        for prompt in prompts:
-            box, label = _prompt_to_geometric_box(prompt)
-            state = processor.add_geometric_prompt(box=box, label=label, state=state)
+        with _clear_cuda_cache_on_error():
+            state = processor.set_image(image)
+            for prompt in prompts:
+                box, label = _prompt_to_geometric_box(prompt)
+                state = processor.add_geometric_prompt(box=box, label=label, state=state)
 
         masks = state["masks"]
         scores = state["scores"]
@@ -262,34 +385,35 @@ class Sam3Adapter:
             else:
                 raise ValueError(f"Unknown prompt type: {prompt['type']!r}")
 
-            video_predictor.handle_request(add_prompt_request)
+            with _clear_cuda_cache_on_error():
+                video_predictor.handle_request(add_prompt_request)
 
-            try:
-                frame_masks: dict[int, np.ndarray] = {}
-                for propagation_event in video_predictor.handle_stream_request({
-                    "type": "propagate_in_video",
-                    "session_id": session_id,
-                }):
-                    frame_index = propagation_event["frame_index"]
-                    outputs = propagation_event["outputs"]
-                    binary_masks = outputs["out_binary_masks"]
-                    # out_binary_masks is shaped (num_objects, H, W); this adapter
-                    # only ever prompts a single object (obj_id=1), so take that
-                    # object's mask. An empty first dimension means SAM-3 found
-                    # no mask for the tracked object on this frame -- surfaced as
-                    # a per-frame all-zero mask rather than a raised error, since
-                    # "the tracked object left/re-entered the frame" is expected
-                    # propagation behavior, not a failure.
-                    if binary_masks.shape[0] == 0:
-                        frame_masks[frame_index] = np.zeros(binary_masks.shape[-2:], dtype=bool)
-                    else:
-                        frame_masks[frame_index] = binary_masks[0]
-            finally:
-                # Always close the session, even if propagation raises partway
-                # through, so a partial failure doesn't leak video-predictor
-                # GPU state -- VRAM is the tightest resource this adapter runs
-                # under (see .superpowers/sdd/task-7-fix2-report.md).
-                video_predictor.handle_request({"type": "close_session", "session_id": session_id})
+                try:
+                    frame_masks: dict[int, np.ndarray] = {}
+                    for propagation_event in video_predictor.handle_stream_request({
+                        "type": "propagate_in_video",
+                        "session_id": session_id,
+                    }):
+                        frame_index = propagation_event["frame_index"]
+                        outputs = propagation_event["outputs"]
+                        binary_masks = outputs["out_binary_masks"]
+                        # out_binary_masks is shaped (num_objects, H, W); this adapter
+                        # only ever prompts a single object (obj_id=1), so take that
+                        # object's mask. An empty first dimension means SAM-3 found
+                        # no mask for the tracked object on this frame -- surfaced as
+                        # a per-frame all-zero mask rather than a raised error, since
+                        # "the tracked object left/re-entered the frame" is expected
+                        # propagation behavior, not a failure.
+                        if binary_masks.shape[0] == 0:
+                            frame_masks[frame_index] = np.zeros(binary_masks.shape[-2:], dtype=bool)
+                        else:
+                            frame_masks[frame_index] = binary_masks[0]
+                finally:
+                    # Always close the session, even if propagation raises partway
+                    # through, so a partial failure doesn't leak video-predictor
+                    # GPU state -- VRAM is the tightest resource this adapter runs
+                    # under (see .superpowers/sdd/task-7-fix2-report.md).
+                    video_predictor.handle_request({"type": "close_session", "session_id": session_id})
 
             results = []
             for frame_index in range(len(frames)):
