@@ -287,3 +287,55 @@ def test_enqueue_sam2_track_stores_anchor_and_direction_in_payload():
     assert job.payload["anchor_frame_id"] == frame_id
     assert job.payload["backward"] == 2
     assert job.payload["forward"] == 4
+
+
+def test_enqueue_sam2_predict_endpoint_creates_pending_job():
+    token = _register_and_login("sam2-endpoint1@example.com")
+    frame_id, _ = _create_frame(token)
+    label_id = _create_label()
+
+    response = client.post(
+        "/jobs/sam2/predict",
+        json={
+            "frame_id": frame_id,
+            "label_id": label_id,
+            "prompts": [{"type": "point", "coords": [0.5, 0.5], "label": True}],
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["job_type"] == "sam2_predict"
+    assert body["status"] == "pending"
+
+
+def test_enqueue_sam2_track_endpoint_creates_pending_job():
+    token = _register_and_login("sam2-endpoint2@example.com")
+    frame_id, sequence_id = _create_frame(token)
+    label_id = _create_label()
+
+    response = client.post(
+        "/jobs/sam2/track",
+        json={
+            "sequence_id": sequence_id,
+            "label_id": label_id,
+            "prompts": [{"type": "box", "coords": [0.1, 0.1, 0.3, 0.3], "label": True}],
+            "anchor_frame_id": frame_id,
+            "backward": 2,
+            "forward": 4,
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["job_type"] == "sam2_track"
+
+
+def test_enqueue_sam2_predict_endpoint_requires_auth():
+    response = client.post(
+        "/jobs/sam2/predict",
+        json={"frame_id": 1, "label_id": 1, "prompts": []},
+    )
+    assert response.status_code == 401
