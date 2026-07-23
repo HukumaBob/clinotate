@@ -12,6 +12,15 @@ Current status and phase history: [ROADMAP.md](ROADMAP.md).
 
 - Design spec (architecture, stack rationale, domain boundaries, explicit
   out-of-scope items): [docs/specs/2026-07-22-new-platform-design.md](docs/specs/2026-07-22-new-platform-design.md)
+- **UI/UX design (navigation, every top-level screen, the frame editor's
+  layout):** [docs/specs/2026-07-23-platform-ui-ux-design.md](docs/specs/2026-07-23-platform-ui-ux-design.md).
+  Read this before proposing *any* frontend change beyond a pure bugfix —
+  it exists because a one-off UI decision (which segmentation model to show
+  where) was almost made against a workspace layout that had never been
+  designed, one screen at a time, ad hoc. Don't repeat that: if a task
+  needs a screen or interaction this doc doesn't cover, that's a sign to
+  extend the spec (brainstorming skill) before writing components, not to
+  improvise in isolation.
 - Phase 1 plan (walking skeleton, done): [docs/plans/2026-07-22-walking-skeleton.md](docs/plans/2026-07-22-walking-skeleton.md)
 
 The sibling `/mnt/work-disk/Documents/Dev/segmentation` project is a

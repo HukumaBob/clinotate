@@ -184,6 +184,82 @@ weights) ahead of Phase 2b integrating them.
   `REDIS_URL` instead. Cosmetic; either wire it in or drop it from
   `.env.example`.
 
+### Phase 2a.1: Platform-wide UI/UX design — DONE (2026-07-23)
+
+Design-only phase, no code changed. Triggered by a request to add SAM 2.1 as
+a second segmentation adapter alongside SAM-3 (see Phase 2a's own deviation
+log above, "A SAM-2.1 lighter-weight adapter... is being considered as
+separate future work") — that turned out to require a real annotation
+workspace layout to slot the model choice into, and none existed: the
+design spec's `## Frontend` section only ever specified a directory layout
+(`src/features/annotation/`, etc.), never what a screen looks like or how a
+user moves between screens. Rather than bolt a model-switcher onto the
+current bare-bones `SegmentButton` (a single button + point-click on one
+frame, no navigation, no other section implemented), the whole platform's
+navigation and all six top-level screens were designed in one brainstorming
+session and written up in
+[docs/specs/2026-07-23-platform-ui-ux-design.md](docs/specs/2026-07-23-platform-ui-ux-design.md).
+
+The sibling `/mnt/work-disk/Documents/Dev/segmentation` Django project (see
+CLAUDE.md) was used as the domain-knowledge reference for *what workflows a
+working platform needs* (its templates were read directly, not from memory)
+— but several of its concrete layouts were reworked, not copied, based on
+real usability objections raised during the session. Most significant
+reversal: an early draft of the new design proposed a separate "Annotation"
+nav section distinct from "Sequences"; this was rejected because segmenting
+one frame and tracking it projects masks across the whole sequence, so
+"annotated" vs "not yet annotated" isn't a stable split two different
+screens could own — Sequences ended up being the single place both data
+management and the annotation workflow live, same as the old platform's own
+Sequences→Annotate flow, but reached independently rather than assumed from
+it.
+
+**Key decisions locked in by the spec** (see the spec itself for full
+detail on each):
+- Navigation: `Media → Sequences → Tags → Dataset → Train → Results`, no
+  separate Annotation section.
+- Media = raw file storage + "cut into frames"/"batch photos into a
+  Sequence" only; it does not do annotation. `Sequence.name` is a required,
+  auto-suggested (`Procedure + date + per-day ordinal`), freely-editable
+  text field.
+- A `Sequence`'s own screen is a full-viewport responsive frame grid (not a
+  small in-card preview) with masks rendered as real colored fills plus a
+  compact tag-name legend baked into each thumbnail — not an abstract
+  "masked/unmasked" status.
+- Clicking a frame **replaces the grid in place** with the frame editor
+  (not a modal, not a separate routed page) — a deliberate rejection of the
+  old platform's `frame_modal.html` pattern (explicitly called out as
+  looking bad) and of a separate-page alternative (rejected as unnecessary
+  navigation overhead for a very frequent action).
+- The frame editor gives the image all remaining space (fixed-width tools
+  panel, not a fixed ratio) and uses mouse gestures for point/box (no mode
+  toggle buttons — left-click/drag/Ctrl+click, matching what the old
+  platform already proved works), with an explicit Mask-mode button only
+  where a gesture alone would be ambiguous.
+- **SAM-3 and SAM 2.1 share one frame-editor UI**, differing only in that
+  SAM 2.1 adds a Mask prompt option; SAM 2.1 is the default tab. Tracking
+  is two explicit numeric Backward/Forward fields (never blank/unbounded —
+  see Phase 2a's own VRAM-ceiling deviation log entry above for why an
+  unbounded propagation request is a real hazard, not a hypothetical one)
+  behind one "Track" button.
+- Tag hierarchy is fixed at exactly two levels (parent → child via
+  `LabelRelation`), matching a three-select Category→Classification→Tag
+  picker used identically in both the Tags screen and the frame editor's
+  label picker.
+- Dataset/Train/Results screens were approved only at a rough/draft
+  structural level (user's own words: "правки по ходу") — expect these
+  three to be revisited during their own implementation planning, unlike
+  the Sequences/frame-editor section, which was iterated to a
+  detail-approved state.
+
+**Explicitly not decided by this phase** (left for the next
+brainstorming/planning pass): the SAM-3/SAM 2.1 selection mechanism at the
+API/backend level (single endpoint with a `model` field vs. parallel
+endpoints vs. parallel Celery task names — this was the original question
+that triggered the whole detour, still open), the exact GPU-memory cap
+enforced on the frame editor's Track inputs, and any backend/API contract
+changes at all — this phase is UI/UX only.
+
 ### Phase 2b: Detection adapters, datasets, training — NOT STARTED, NOT PLANNED
 
 Scope per the design spec: Ultralytics YOLO11/YOLO12/YOLO26 detection
