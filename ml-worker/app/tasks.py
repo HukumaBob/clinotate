@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from app.celery_app import celery_app
 from app.db import SessionLocal
 from app.models import Annotation, AnnotationStatus, AnnotationType, Frame, Job, JobStatus, Label
+from app.sam2_adapter import Sam2Adapter
 from app.sam3_adapter import Sam3Adapter
 from app.storage import get_storage_service
 
@@ -23,14 +24,46 @@ def _load_label(session, label_id: int) -> Label:
     return label
 
 
-_adapter_singleton: Sam3Adapter | None = None
+_sam3_adapter_singleton: Sam3Adapter | None = None
+_sam2_adapter_singleton: Sam2Adapter | None = None
 
 
-def _get_default_adapter() -> Sam3Adapter:
-    global _adapter_singleton
-    if _adapter_singleton is None:
-        _adapter_singleton = Sam3Adapter()
-    return _adapter_singleton
+def _get_default_sam3_adapter() -> Sam3Adapter:
+    global _sam3_adapter_singleton
+    if _sam3_adapter_singleton is None:
+        _sam3_adapter_singleton = Sam3Adapter()
+    return _sam3_adapter_singleton
+
+
+def _get_default_sam2_adapter() -> Sam2Adapter:
+    global _sam2_adapter_singleton
+    if _sam2_adapter_singleton is None:
+        _sam2_adapter_singleton = Sam2Adapter()
+    return _sam2_adapter_singleton
+
+
+def _evict_sam3_models() -> None:
+    """Releases both of the SAM-3 singleton's lazily-loaded models
+    (image processor and video predictor) if resident. Called before any
+    SAM 2.1 task runs its adapter's predict()/track(), since a prior
+    sam3_predict/sam3_track task in this same worker process may have left
+    one of them loaded -- with two adapter families now sharing this
+    process's ~7.6 GiB VRAM budget, eviction must span both families, not
+    just within one (each adapter already evicts its own sibling model,
+    see Sam3Adapter.__init__'s docstring; this function is the missing
+    cross-family half)."""
+    adapter = _get_default_sam3_adapter()
+    adapter._release_processor()
+    adapter._release_video_predictor()
+
+
+def _evict_sam2_models() -> None:
+    """Mirror of _evict_sam3_models: releases the SAM 2.1 singleton's
+    image predictor and video predictor if resident. Called before any
+    SAM-3 task runs, for the same cross-family VRAM-sharing reason."""
+    adapter = _get_default_sam2_adapter()
+    adapter._release_image_predictor()
+    adapter._release_video_predictor()
 
 
 @celery_app.task(name="sam3_predict")
@@ -40,7 +73,8 @@ def run_sam3_predict(job_id: int, adapter: Sam3Adapter | None = None) -> None:
     worker process, not once per plan-writing decision."""
     session = SessionLocal()
     storage = get_storage_service()
-    resolved_adapter = adapter if adapter is not None else _get_default_adapter()
+    _evict_sam2_models()
+    resolved_adapter = adapter if adapter is not None else _get_default_sam3_adapter()
 
     job = session.get(Job, job_id)
     job.status = JobStatus.RUNNING
@@ -92,7 +126,8 @@ def run_sam3_predict(job_id: int, adapter: Sam3Adapter | None = None) -> None:
 def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
     session = SessionLocal()
     storage = get_storage_service()
-    resolved_adapter = adapter if adapter is not None else _get_default_adapter()
+    _evict_sam2_models()
+    resolved_adapter = adapter if adapter is not None else _get_default_sam3_adapter()
 
     job = session.get(Job, job_id)
     job.status = JobStatus.RUNNING
