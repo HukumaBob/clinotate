@@ -29,6 +29,21 @@ describe("FrameAnnotationPage", () => {
       if (path === "/annotation/frames/{frame_id}/annotations") {
         return { data: [], error: undefined, response: new Response() };
       }
+      if (path === "/media/frames/{frame_id}") {
+        return {
+          data: {
+            id: 42,
+            sequence_id: 1,
+            storage_key: "frames/1/000042.jpg",
+            frame_index: 42,
+            width: 1920,
+            height: 1080,
+            image_url: "https://example.test/frames/1/000042.jpg",
+          },
+          error: undefined,
+          response: new Response(),
+        };
+      }
       return { data: undefined, error: "not mocked", response: new Response() };
     }) as never);
 
@@ -47,5 +62,26 @@ describe("FrameAnnotationPage", () => {
     await userEvent.click(screen.getByText("Polyp"));
 
     await waitFor(() => expect(apiClient.POST).toHaveBeenCalled());
+  });
+
+  it("renders the SegmentButton's frame image once the frame loads", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Segment with SAM-3" })).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Segment with SAM-3" }));
+
+    // The sidebar LabelPicker (unrelated to SegmentButton) renders its own
+    // "Polyp" button with the same accessible name, so scope the click to
+    // the label picker that SegmentButton itself renders below its trigger.
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Polyp" })).toHaveLength(2));
+    const [segmentButtonPolypOption] = screen.getAllByRole("button", { name: "Polyp" });
+    await userEvent.click(segmentButtonPolypOption);
+
+    const image = screen.getByTestId("segment-click-target") as HTMLImageElement;
+    expect(image).toBeInTheDocument();
+    expect(image.src).toBe("https://example.test/frames/1/000042.jpg");
   });
 });
