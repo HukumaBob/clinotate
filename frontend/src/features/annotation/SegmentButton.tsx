@@ -38,7 +38,7 @@ export function SegmentButton({ frameId, labels, onJobCreated }: SegmentButtonPr
   });
 
   function handleImageClick(event: MouseEvent<HTMLDivElement>) {
-    if (!isPicking || selectedLabelId === null) return;
+    if (!isPicking || selectedLabelId === null || createJob.isPending) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const normalizedX = (event.clientX - rect.left) / rect.width;
     const normalizedY = (event.clientY - rect.top) / rect.height;
@@ -67,7 +67,14 @@ export function SegmentButton({ frameId, labels, onJobCreated }: SegmentButtonPr
       )}
       {isPicking && selectedLabelId !== null && (
         <>
-          <p className="mt-2 text-sm text-gray-400">Click a point on the frame to segment</p>
+          <p className="mt-2 text-sm text-gray-400">
+            {createJob.isPending ? "Submitting..." : "Click a point on the frame to segment"}
+          </p>
+          {createJob.isError && (
+            <p className="mt-1 text-sm text-red-400">
+              Failed to create segmentation job. Please try again.
+            </p>
+          )}
           {/*
             Placeholder click surface: Task 10 replaces this with the real frame
             <img> once FrameAnnotationPage renders one. It must have a non-zero

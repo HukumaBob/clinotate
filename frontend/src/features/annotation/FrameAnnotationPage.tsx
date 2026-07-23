@@ -37,6 +37,11 @@ export function FrameAnnotationPage() {
         {jobQuery.data?.status === "failed" && (
           <p className="text-sm text-red-400">Segmentation failed: {jobQuery.data.error}</p>
         )}
+        {jobQuery.isError && (
+          <p className="text-sm text-red-400">
+            Lost connection while checking job status. Retrying...
+          </p>
+        )}
       </div>
       <aside className="border-l border-gray-800 p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">
