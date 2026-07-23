@@ -232,3 +232,10 @@ def test_sam2_track_request_accepts_full_payload():
     assert request.anchor_frame_id == 10
     assert request.backward == 3
     assert request.forward == 5
+
+
+def test_job_type_has_sam2_variants():
+    from app.jobs.models import JobType
+
+    assert JobType.SAM2_PREDICT == "sam2_predict"
+    assert JobType.SAM2_TRACK == "sam2_track"

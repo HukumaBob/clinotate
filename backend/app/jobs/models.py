@@ -10,6 +10,8 @@ from app.db import Base
 class JobType(str, enum.Enum):
     SAM3_PREDICT = "sam3_predict"
     SAM3_TRACK = "sam3_track"
+    SAM2_PREDICT = "sam2_predict"
+    SAM2_TRACK = "sam2_track"
 
 
 class JobStatus(str, enum.Enum):
