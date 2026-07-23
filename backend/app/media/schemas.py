@@ -30,3 +30,4 @@ class FrameRead(BaseModel):
     frame_index: int
     width: int
     height: int
+    image_url: str

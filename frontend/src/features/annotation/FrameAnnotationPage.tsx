@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { useAnnotations, useCreateAnnotation } from "../../entities/useAnnotations";
+import { useFrame } from "../../entities/useFrames";
 import { useJob } from "../../entities/useJobs";
 import { useLabels } from "../../entities/useLabels";
 import { LabelPicker } from "./LabelPicker";
@@ -13,6 +14,7 @@ export function FrameAnnotationPage() {
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
 
   const labelsQuery = useLabels();
+  const frameQuery = useFrame(frameIdNumber);
   const annotationsQuery = useAnnotations(frameIdNumber);
   const createAnnotation = useCreateAnnotation(frameIdNumber);
   const jobQuery = useJob(activeJobId);
@@ -21,11 +23,18 @@ export function FrameAnnotationPage() {
     <div className="grid min-h-screen grid-cols-[1fr_300px] bg-gray-950 text-gray-100">
       <div className="flex flex-col items-center justify-center gap-4 p-8">
         <p className="text-gray-400">Frame #{frameId}</p>
-        <SegmentButton
-          frameId={frameIdNumber}
-          labels={labelsQuery.data ?? []}
-          onJobCreated={setActiveJobId}
-        />
+        {frameQuery.isLoading && <p className="text-sm text-gray-500">Loading frame...</p>}
+        {frameQuery.isError && (
+          <p className="text-sm text-red-400">Failed to load frame image.</p>
+        )}
+        {frameQuery.data && (
+          <SegmentButton
+            frameId={frameIdNumber}
+            imageUrl={frameQuery.data.image_url}
+            labels={labelsQuery.data ?? []}
+            onJobCreated={setActiveJobId}
+          />
+        )}
         {jobQuery.data && (
           <p className="text-sm text-gray-400">
             SAM-3 job #{jobQuery.data.id}: {jobQuery.data.status} ({jobQuery.data.progress}%)

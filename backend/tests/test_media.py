@@ -69,3 +69,38 @@ def test_create_sequence_extracts_frames():
     frames = frames_response.json()
     assert len(frames) >= 1
     assert all("storage_key" in f for f in frames)
+    assert all(f["image_url"].startswith("http") for f in frames)
+
+
+def test_get_frame_returns_browser_loadable_image_url():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "Single frame source"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+
+    sequence_response = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"start_time": 0, "duration": 2},
+        headers=headers,
+    )
+    sequence_id = sequence_response.json()["id"]
+
+    frames = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+    frame_id = frames[0]["id"]
+
+    response = client.get(f"/media/frames/{frame_id}", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == frame_id
+    assert body["image_url"].startswith("http")
+
+
+def test_get_frame_404_for_missing_frame():
+    headers = _auth_headers()
+    response = client.get("/media/frames/999999999", headers=headers)
+    assert response.status_code == 404

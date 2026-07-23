@@ -70,6 +70,35 @@ def create_sequence(
     return sequence
 
 
+def _frame_read(frame: Frame, storage: StorageService) -> FrameRead:
+    return FrameRead(
+        id=frame.id,
+        sequence_id=frame.sequence_id,
+        storage_key=frame.storage_key,
+        frame_index=frame.frame_index,
+        width=frame.width,
+        height=frame.height,
+        image_url=storage.url_for(frame.storage_key),
+    )
+
+
 @router.get("/sequences/{sequence_id}/frames", response_model=list[FrameRead])
-def list_frames(sequence_id: int, session: Session = Depends(get_session)) -> list[Frame]:
-    return session.query(Frame).filter(Frame.sequence_id == sequence_id).order_by(Frame.frame_index).all()
+def list_frames(
+    sequence_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> list[FrameRead]:
+    frames = session.query(Frame).filter(Frame.sequence_id == sequence_id).order_by(Frame.frame_index).all()
+    return [_frame_read(frame, storage) for frame in frames]
+
+
+@router.get("/frames/{frame_id}", response_model=FrameRead)
+def get_frame(
+    frame_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> FrameRead:
+    frame = session.get(Frame, frame_id)
+    if frame is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
+    return _frame_read(frame, storage)

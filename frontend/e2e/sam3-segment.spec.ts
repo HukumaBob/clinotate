@@ -92,14 +92,24 @@ test("annotator can segment a frame with SAM-3 and see the resulting mask annota
   await expect(mainContent.getByRole("button", { name: labelName })).toBeVisible();
   await mainContent.getByRole("button", { name: labelName }).click();
 
-  // Click near the center of the click-target div: SegmentButton normalizes the click
-  // position against the div's own bounding box to a [0,1] fraction regardless of the
-  // target's actual pixel size, so a center click lands at ~(0.5, 0.5) on the uploaded
-  // frame -- exactly where sam3-segment.mp4's segmentable ellipse is centered.
+  // Click the center of the click-target image: SegmentButton normalizes the click
+  // position against the rendered image content to a [0,1] fraction, so a center
+  // click lands at (0.5, 0.5) on the uploaded frame -- exactly where
+  // sam3-segment.mp4's segmentable ellipse is centered.
+  //
+  // Deliberately NOT `click({ position: { x: box.width / 2, y: box.height / 2 } })`:
+  // when the element's rendered width/height is an odd number of CSS pixels,
+  // dividing by 2 and rounding through devicePixelRatio can land the actual
+  // click 1 device pixel off true center. On this fixture that 1px offset was
+  // enough to push SAM-3's mask confidence for the point prompt below the
+  // model's threshold (confirmed directly against the adapter: center-exact
+  // (0.5, 0.5) scores ~0.55, one pixel off scores 0 masks) -- a real, narrow
+  // margin in this fixture/model pairing, not a bug in SegmentButton. Plain
+  // `.click()` uses Playwright's own centered-click geometry, which does not
+  // exhibit this drift.
   const clickTarget = page.getByTestId("segment-click-target");
-  const box = await clickTarget.boundingBox();
-  if (!box) throw new Error("segment-click-target has no bounding box");
-  await clickTarget.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await clickTarget.waitFor({ state: "visible" });
+  await clickTarget.click();
 
   await expect(page.getByText(/SAM-3 job #\d+: succeeded/)).toBeVisible({ timeout: 60_000 });
 

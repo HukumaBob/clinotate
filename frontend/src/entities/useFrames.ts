@@ -14,3 +14,16 @@ export function useFrames(sequenceId: number) {
     enabled: Number.isFinite(sequenceId),
   });
 }
+
+export function useFrame(frameId: number) {
+  return useQuery({
+    queryKey: ["frame", frameId],
+    queryFn: async () => {
+      const result = await apiClient.GET("/media/frames/{frame_id}", {
+        params: { path: { frame_id: frameId } },
+      });
+      return result.data;
+    },
+    enabled: Number.isFinite(frameId),
+  });
+}

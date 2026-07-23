@@ -9,11 +9,12 @@ type Label = components["schemas"]["LabelRead"];
 
 interface SegmentButtonProps {
   frameId: number;
+  imageUrl: string;
   labels: Label[];
   onJobCreated: (jobId: number) => void;
 }
 
-export function SegmentButton({ frameId, labels, onJobCreated }: SegmentButtonProps) {
+export function SegmentButton({ frameId, imageUrl, labels, onJobCreated }: SegmentButtonProps) {
   const [isPicking, setIsPicking] = useState(false);
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
 
@@ -37,12 +38,29 @@ export function SegmentButton({ frameId, labels, onJobCreated }: SegmentButtonPr
     },
   });
 
-  function handleImageClick(event: MouseEvent<HTMLDivElement>) {
+  function handleImageClick(event: MouseEvent<HTMLImageElement>) {
     if (!isPicking || selectedLabelId === null || createJob.isPending) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const normalizedX = (event.clientX - rect.left) / rect.width;
-    const normalizedY = (event.clientY - rect.top) / rect.height;
-    createJob.mutate([normalizedX, normalizedY]);
+    const img = event.currentTarget;
+    const rect = img.getBoundingClientRect();
+
+    // The <img> is rendered with object-contain, so its own bounding box can
+    // be larger than the actual displayed picture (letterboxed to preserve
+    // aspect ratio) -- normalizing against the box directly would offset
+    // clicks away from the frame content they appear to land on. Compute the
+    // real content rect inside the box first, using the image's natural
+    // (pixel) dimensions, and normalize against that instead.
+    const naturalWidth = img.naturalWidth || rect.width;
+    const naturalHeight = img.naturalHeight || rect.height;
+    const scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
+    const renderedWidth = naturalWidth * scale;
+    const renderedHeight = naturalHeight * scale;
+    const offsetX = (rect.width - renderedWidth) / 2;
+    const offsetY = (rect.height - renderedHeight) / 2;
+
+    const normalizedX = (event.clientX - rect.left - offsetX) / renderedWidth;
+    const normalizedY = (event.clientY - rect.top - offsetY) / renderedHeight;
+    const clamp = (value: number) => Math.min(1, Math.max(0, value));
+    createJob.mutate([clamp(normalizedX), clamp(normalizedY)]);
   }
 
   function handleStart() {
@@ -76,21 +94,19 @@ export function SegmentButton({ frameId, labels, onJobCreated }: SegmentButtonPr
             </p>
           )}
           {/*
-            Placeholder click surface: Task 10 replaces this with the real frame
-            <img> once FrameAnnotationPage renders one. It must have a non-zero
-            layout box (not display:contents) so getBoundingClientRect() below
-            yields real dimensions instead of an all-zero DOMRect in a real
-            browser (division by a zero width/height produced Infinity/NaN
-            coords and a 422 from the backend — caught only by manual
-            real-browser verification, not the mocked-rect unit test).
+            Real frame image doubles as the click surface: click coordinates are
+            normalized to [0,1] fractions of the rendered image's own bounding
+            box (see handleImageClick), so the backend always receives a point
+            relative to the actual frame regardless of how large the browser
+            renders it.
           */}
-          <div
+          <img
             data-testid="segment-click-target"
+            src={imageUrl}
+            alt="Frame to segment"
             onClick={handleImageClick}
-            className="flex h-64 w-full max-w-md cursor-crosshair items-center justify-center rounded border border-dashed border-gray-700 bg-gray-900 text-xs text-gray-600"
-          >
-            Frame image placeholder — click to place a point
-          </div>
+            className="h-64 w-full max-w-md cursor-crosshair rounded border border-gray-700 bg-gray-900 object-contain"
+          />
         </>
       )}
     </div>

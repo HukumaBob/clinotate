@@ -572,6 +572,53 @@
         }
       }
     },
+    "/media/frames/{frame_id}": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Get Frame",
+        "operationId": "get_frame_media_frames__frame_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "frame_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Frame Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/annotation/frames/{frame_id}/annotations": {
       "post": {
         "tags": [
@@ -1039,6 +1086,10 @@
           "height": {
             "type": "integer",
             "title": "Height"
+          },
+          "image_url": {
+            "type": "string",
+            "title": "Image Url"
           }
         },
         "type": "object",
@@ -1048,7 +1099,8 @@
           "storage_key",
           "frame_index",
           "width",
-          "height"
+          "height",
+          "image_url"
         ],
         "title": "FrameRead"
       },
