@@ -20,9 +20,13 @@ selected, not as an afterthought once code lands (see ROADMAP.md).
   research performed using SAM Materials. Weights are gated on Hugging Face
   and require accepting this license there before download. Verify current
   terms before any commercial deployment or redistribution.
-  (SAM2, an earlier version previously evaluated for this project, is
-  Apache 2.0 licensed — https://github.com/facebookresearch/sam2 — but is
-  not the version this project uses.)
+
+- SAM 2.1 (Segment Anything Model 2.1) — Meta AI
+  https://github.com/facebookresearch/sam2
+  Model weights (facebook/sam2.1-hiera-large on Hugging Face) and code
+  licensed under the Apache License, Version 2.0 — unlike SAM-3's custom
+  SAM License above. Used as the default interactive segmentation adapter
+  (point/box/mask prompts, bidirectional video tracking) alongside SAM-3.
 
 - Ultralytics YOLO (YOLO11 / YOLO12 / YOLO26) — Ultralytics
   https://github.com/ultralytics/ultralytics
