@@ -735,6 +735,145 @@
         }
       }
     },
+    "/jobs/sam3/predict": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Create Sam3 Predict Job",
+        "operationId": "create_sam3_predict_job_jobs_sam3_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sam3PredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/jobs/sam3/track": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Create Sam3 Track Job",
+        "operationId": "create_sam3_track_job_jobs_sam3_track_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sam3TrackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job",
+        "operationId": "get_job_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -926,6 +1065,105 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "JobRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "job_type": {
+            "$ref": "#/components/schemas/JobType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          },
+          "result_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Ref"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_by_id": {
+            "type": "integer",
+            "title": "Created By Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "job_type",
+          "status",
+          "progress",
+          "result_ref",
+          "error",
+          "created_by_id",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "JobRead"
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed"
+        ],
+        "title": "JobStatus"
+      },
+      "JobType": {
+        "type": "string",
+        "enum": [
+          "sam3_predict",
+          "sam3_track"
+        ],
+        "title": "JobType"
+      },
       "LabelCreate": {
         "properties": {
           "name": {
@@ -1065,6 +1303,88 @@
           "name"
         ],
         "title": "ProcedureRead"
+      },
+      "PromptIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "point",
+              "box"
+            ],
+            "title": "Type"
+          },
+          "coords": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Coords"
+          },
+          "label": {
+            "type": "boolean",
+            "title": "Label",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "coords"
+        ],
+        "title": "PromptIn"
+      },
+      "Sam3PredictRequest": {
+        "properties": {
+          "frame_id": {
+            "type": "integer",
+            "title": "Frame Id"
+          },
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/PromptIn"
+            },
+            "type": "array",
+            "title": "Prompts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_id",
+          "label_id",
+          "prompts"
+        ],
+        "title": "Sam3PredictRequest"
+      },
+      "Sam3TrackRequest": {
+        "properties": {
+          "sequence_id": {
+            "type": "integer",
+            "title": "Sequence Id"
+          },
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/PromptIn"
+            },
+            "type": "array",
+            "title": "Prompts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence_id",
+          "label_id",
+          "prompts"
+        ],
+        "title": "Sam3TrackRequest"
       },
       "SequenceCreate": {
         "properties": {
