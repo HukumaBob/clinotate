@@ -14,8 +14,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pillow>=11.0.0",
     "pytest>=9.1.1",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = ["requires_sam3_weights: needs real SAM-3 weights and GPU, see conftest.py"]
