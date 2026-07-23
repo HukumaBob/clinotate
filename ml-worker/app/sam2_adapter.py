@@ -161,3 +161,83 @@ class Sam2Adapter:
         mask_image.save(buffer, format="PNG")
 
         return MaskResult(mask_png=buffer.getvalue(), score=float(scores[best_index]))
+
+    def _frames_to_video_dir(self, frames: list[bytes], tmp_dir: str) -> str:
+        for index, frame_data in enumerate(frames):
+            frame_path = Path(tmp_dir) / f"{index:05d}.png"
+            frame_path.write_bytes(frame_data)
+        return tmp_dir
+
+    def track(
+        self,
+        frames: list[bytes],
+        prompts: list[dict],
+        anchor_frame_index: int,
+        backward: int,
+        forward: int,
+    ) -> list[MaskResult]:
+        """Propagates the given prompt(s) (applied to anchor_frame_index)
+        both forward and backward from that anchor in a single video
+        session, using two sequential propagate_in_video() calls on the
+        same inference_state -- confirmed against the installed sam2
+        source (sam2/sam2_video_predictor.py) that propagate_in_video()
+        only walks one direction per call (`reverse` is a single bool),
+        so bidirectional tracking requires exactly this two-call pattern,
+        not a single call with both directions."""
+        video_predictor = self._get_video_predictor()
+        obj_id = 1
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self._frames_to_video_dir(frames, tmp_dir)
+
+            with _clear_cuda_cache_on_error():
+                inference_state = video_predictor.init_state(video_path=tmp_dir)
+
+                prompt = prompts[0]
+                if prompt["type"] == "mask":
+                    import base64
+
+                    mask = _mask_png_to_logits(base64.b64decode(prompt["mask_png"]))[0] > 0
+                    video_predictor.add_new_mask(
+                        inference_state, frame_idx=anchor_frame_index, obj_id=obj_id, mask=mask,
+                    )
+                elif prompt["type"] == "box":
+                    video_predictor.add_new_points_or_box(
+                        inference_state, frame_idx=anchor_frame_index, obj_id=obj_id,
+                        box=prompt["coords"],
+                    )
+                elif prompt["type"] == "point":
+                    x, y = prompt["coords"]
+                    video_predictor.add_new_points_or_box(
+                        inference_state, frame_idx=anchor_frame_index, obj_id=obj_id,
+                        points=[[x, y]], labels=[int(bool(prompt["label"]))],
+                    )
+                else:
+                    raise ValueError(f"Unknown prompt type: {prompt['type']!r}")
+
+                frame_masks: dict[int, np.ndarray] = {}
+                if forward > 0:
+                    for frame_index, _obj_ids, video_res_masks in video_predictor.propagate_in_video(
+                        inference_state, start_frame_idx=anchor_frame_index,
+                        max_frame_num_to_track=forward, reverse=False,
+                    ):
+                        frame_masks[frame_index] = video_res_masks[0, 0].cpu().numpy() > 0
+                if backward > 0:
+                    for frame_index, _obj_ids, video_res_masks in video_predictor.propagate_in_video(
+                        inference_state, start_frame_idx=anchor_frame_index,
+                        max_frame_num_to_track=backward, reverse=True,
+                    ):
+                        frame_masks[frame_index] = video_res_masks[0, 0].cpu().numpy() > 0
+                if forward == 0 and backward == 0:
+                    frame_masks[anchor_frame_index] = np.zeros(
+                        (frames and Image.open(io.BytesIO(frames[0])).size[::-1]) or (0, 0), dtype=bool
+                    )
+
+            results = []
+            for frame_index in sorted(frame_masks):
+                mask_array = frame_masks[frame_index].astype(np.uint8) * 255
+                mask_image = Image.fromarray(mask_array, mode="L")
+                buffer = io.BytesIO()
+                mask_image.save(buffer, format="PNG")
+                results.append(MaskResult(mask_png=buffer.getvalue(), score=1.0))
+            return results

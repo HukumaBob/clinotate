@@ -74,3 +74,60 @@ def test_unknown_prompt_type_raises():
 
     with pytest.raises(ValueError, match="Unknown prompt type"):
         _prompts_to_predict_kwargs([{"type": "exemplar", "coords": []}])
+
+
+@pytest.mark.requires_sam2_weights
+def test_track_propagates_bidirectionally_from_anchor():
+    adapter = Sam2Adapter()
+    fixture_path = Path(__file__).parent / "fixtures" / "sample_frame.png"
+    frame_bytes = fixture_path.read_bytes()
+    frames = [frame_bytes] * 5  # 5 identical frames; anchor at index 2
+
+    results = adapter.track(
+        frames,
+        prompts=[{"type": "point", "coords": [0.5, 0.5], "label": True}],
+        anchor_frame_index=2,
+        backward=1,
+        forward=1,
+    )
+
+    # anchor (2) + 1 backward (1) + 1 forward (3) = 3 frames tracked
+    assert len(results) == 3
+    for result in results:
+        assert isinstance(result.mask_png, bytes)
+        assert len(result.mask_png) > 0
+
+
+def test_track_skips_direction_with_zero_count():
+    """Regression test for the UI spec's '0 in either field means don't
+    track that direction' rule -- track() must not call propagate_in_video
+    for a direction whose count is 0."""
+    import torch
+
+    with (
+        patch("app.sam2_adapter.SAM2VideoPredictor") as mock_predictor_cls,
+        patch("app.sam2_adapter.tempfile.TemporaryDirectory"),
+    ):
+        mock_predictor = mock_predictor_cls.from_pretrained.return_value
+        mock_predictor.init_state.return_value = {"num_frames": 3}
+        # video_res_masks is a real (tiny) tensor here rather than a mock,
+        # because track() does video_res_masks[0, 0].cpu().numpy() > 0 on
+        # it -- a bare mock object doesn't support numeric comparisons and
+        # would blow up before the assertions below ever run.
+        mock_predictor.propagate_in_video.return_value = iter([
+            (1, [1], torch.zeros((1, 1, 2, 2))),
+        ])
+
+        adapter = Sam2Adapter()
+        with patch.object(adapter, "_frames_to_video_dir", return_value="/tmp/fake"):
+            adapter.track(
+                [b"frame0", b"frame1", b"frame2"],
+                prompts=[{"type": "point", "coords": [0.5, 0.5], "label": True}],
+                anchor_frame_index=1,
+                backward=0,
+                forward=1,
+            )
+
+    calls = mock_predictor.propagate_in_video.call_args_list
+    assert len(calls) == 1
+    assert calls[0].kwargs["reverse"] is False
