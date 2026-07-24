@@ -20,7 +20,7 @@ export function useCreateStandaloneSequence() {
   return useMutation({
     mutationFn: async (procedureId: number) => {
       const result = await apiClient.POST("/media/sequences", {
-        body: { procedure_id: procedureId },
+        body: { procedure_id: procedureId, start_time: 0, duration: 0 },
       });
       return result.data;
     },
