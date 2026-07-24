@@ -21,6 +21,7 @@ interface DragState {
 export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const strokePointsRef = useRef<[number, number][]>([]);
   const [frameImage, setFrameImage] = useState<HTMLImageElement | null>(null);
 
   const activeTool = useStore(store, (state) => state.activeTool);
@@ -72,6 +73,28 @@ export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
     if (event.ctrlKey) return; // remove-shape gesture, handled on mouseup below
     const [x, y] = toNormalized(event.clientX, event.clientY);
     dragRef.current = { startX: x, startY: y };
+    if (activeTool === "mask") {
+      strokePointsRef.current = [[x, y]];
+    }
+  }
+
+  function handleMouseMove(event: React.MouseEvent<HTMLCanvasElement>) {
+    if (activeTool !== "mask" || !dragRef.current) return;
+    const [x, y] = toNormalized(event.clientX, event.clientY);
+    strokePointsRef.current.push([x, y]);
+
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.strokeStyle = "rgba(34, 211, 238, 0.9)";
+    ctx.lineWidth = Math.max(2, canvas.width * 0.01);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    const points = strokePointsRef.current;
+    const [prevX, prevY] = points.length > 1 ? points[points.length - 2] : points[0];
+    ctx.moveTo(prevX * canvas.width, prevY * canvas.height);
+    ctx.lineTo(x * canvas.width, y * canvas.height);
+    ctx.stroke();
   }
 
   function handleMouseUp(event: React.MouseEvent<HTMLCanvasElement>) {
@@ -85,7 +108,19 @@ export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
       // selection + delete affordance, not by clicking the canvas.
       return;
     }
-    if (!drag || activeTool === "mask") return;
+
+    if (activeTool === "mask") {
+      const canvas = canvasRef.current;
+      if (canvas && strokePointsRef.current.length > 1) {
+        const dataUrl = canvas.toDataURL("image/png");
+        const base64 = dataUrl.split(",")[1] ?? "";
+        addPrompt({ type: "mask", coords: [], label: true, mask_png: base64 });
+      }
+      strokePointsRef.current = [];
+      return;
+    }
+
+    if (!drag) return;
 
     const [endX, endY] = toNormalized(event.clientX, event.clientY);
     const dx = Math.abs(endX - drag.startX);
@@ -113,6 +148,7 @@ export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
       ref={canvasRef}
       data-testid="frame-canvas"
       onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       className="h-full w-full cursor-crosshair bg-gray-900"
     />
