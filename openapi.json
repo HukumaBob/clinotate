@@ -339,6 +339,36 @@
         ]
       }
     },
+    "/taxonomy/labels/tree": {
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Label Tree",
+        "operationId": "label_tree_taxonomy_labels_tree_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LabelTreeNode"
+                  },
+                  "type": "array",
+                  "title": "Response Label Tree Taxonomy Labels Tree Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/taxonomy/labels/{label_id}/descendants": {
       "get": {
         "tags": [
@@ -519,6 +549,158 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "List Sequences For Video",
+        "operationId": "list_sequences_for_video_media_videos__video_id__sequences_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SequenceRead"
+                  },
+                  "title": "Response List Sequences For Video Media Videos  Video Id  Sequences Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/sequences": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Create Standalone Sequence",
+        "operationId": "create_standalone_sequence_media_sequences_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SequenceCreateStandalone"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/media/sequences/{sequence_id}/frames/upload": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Upload Standalone Frame",
+        "operationId": "upload_standalone_frame_media_sequences__sequence_id__frames_upload_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_standalone_frame_media_sequences__sequence_id__frames_upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/media/sequences/{sequence_id}/frames": {
@@ -555,6 +737,57 @@
                     "$ref": "#/components/schemas/FrameRead"
                   },
                   "title": "Response List Frames Media Sequences  Sequence Id  Frames Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/procedures/{procedure_id}/sequences": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "List Sequences For Procedure",
+        "operationId": "list_sequences_for_procedure_media_procedures__procedure_id__sequences_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procedure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Procedure Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SequenceRead"
+                  },
+                  "title": "Response List Sequences For Procedure Media Procedures  Procedure Id  Sequences Get"
                 }
               }
             }
@@ -874,6 +1107,98 @@
         ]
       }
     },
+    "/jobs/sam2/predict": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Create Sam2 Predict Job",
+        "operationId": "create_sam2_predict_job_jobs_sam2_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sam2PredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/jobs/sam2/track": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Create Sam2 Track Job",
+        "operationId": "create_sam2_track_job_jobs_sam2_track_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sam2TrackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/jobs/{job_id}": {
       "get": {
         "tags": [
@@ -997,6 +1322,17 @@
               }
             ],
             "title": "Reviewed By Id"
+          },
+          "mask_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Url"
           }
         },
         "type": "object",
@@ -1041,6 +1377,20 @@
           "bbox"
         ],
         "title": "AnnotationType"
+      },
+      "Body_upload_standalone_frame_media_sequences__sequence_id__frames_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_standalone_frame_media_sequences__sequence_id__frames_upload_post"
       },
       "Body_upload_video_media_videos_post": {
         "properties": {
@@ -1212,7 +1562,9 @@
         "type": "string",
         "enum": [
           "sam3_predict",
-          "sam3_track"
+          "sam3_track",
+          "sam2_predict",
+          "sam2_track"
         ],
         "title": "JobType"
       },
@@ -1316,6 +1668,26 @@
         ],
         "title": "LabelRelationCreate"
       },
+      "LabelTreeNode": {
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/LabelRead"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/LabelRead"
+            },
+            "type": "array",
+            "title": "Children"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "children"
+        ],
+        "title": "LabelTreeNode"
+      },
       "LabelType": {
         "type": "string",
         "enum": [
@@ -1362,7 +1734,8 @@
             "type": "string",
             "enum": [
               "point",
-              "box"
+              "box",
+              "mask"
             ],
             "title": "Type"
           },
@@ -1371,20 +1744,98 @@
               "type": "number"
             },
             "type": "array",
-            "title": "Coords"
+            "title": "Coords",
+            "default": []
           },
           "label": {
             "type": "boolean",
             "title": "Label",
             "default": true
+          },
+          "mask_png": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Png"
           }
         },
         "type": "object",
         "required": [
-          "type",
-          "coords"
+          "type"
         ],
         "title": "PromptIn"
+      },
+      "Sam2PredictRequest": {
+        "properties": {
+          "frame_id": {
+            "type": "integer",
+            "title": "Frame Id"
+          },
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/PromptIn"
+            },
+            "type": "array",
+            "title": "Prompts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_id",
+          "label_id",
+          "prompts"
+        ],
+        "title": "Sam2PredictRequest"
+      },
+      "Sam2TrackRequest": {
+        "properties": {
+          "sequence_id": {
+            "type": "integer",
+            "title": "Sequence Id"
+          },
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/PromptIn"
+            },
+            "type": "array",
+            "title": "Prompts"
+          },
+          "anchor_frame_id": {
+            "type": "integer",
+            "title": "Anchor Frame Id"
+          },
+          "backward": {
+            "type": "integer",
+            "title": "Backward"
+          },
+          "forward": {
+            "type": "integer",
+            "title": "Forward"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence_id",
+          "label_id",
+          "prompts",
+          "anchor_frame_id",
+          "backward",
+          "forward"
+        ],
+        "title": "Sam2TrackRequest"
       },
       "Sam3PredictRequest": {
         "properties": {
@@ -1456,6 +1907,29 @@
         ],
         "title": "SequenceCreate"
       },
+      "SequenceCreateStandalone": {
+        "properties": {
+          "procedure_id": {
+            "type": "integer",
+            "title": "Procedure Id"
+          },
+          "start_time": {
+            "type": "integer",
+            "title": "Start Time",
+            "default": 0
+          },
+          "duration": {
+            "type": "integer",
+            "title": "Duration",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "procedure_id"
+        ],
+        "title": "SequenceCreateStandalone"
+      },
       "SequenceRead": {
         "properties": {
           "id": {
@@ -1463,8 +1937,26 @@
             "title": "Id"
           },
           "video_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Video Id"
+          },
+          "procedure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Id"
           },
           "start_time": {
             "type": "integer",
@@ -1479,6 +1971,7 @@
         "required": [
           "id",
           "video_id",
+          "procedure_id",
           "start_time",
           "duration"
         ],
