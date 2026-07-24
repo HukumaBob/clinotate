@@ -25,9 +25,9 @@ export function FrameEditor({ frameId, onClose }: FrameEditorProps) {
 
   function handleAddMask() {
     const state = store.getState();
-    if (state.pendingPrompts.length === 0) return;
+    if (state.labelTagId === null || state.pendingPrompts.length === 0) return;
     predictMutation.mutate(
-      { frame_id: frameId, label_id: state.labelTagId ?? 0, prompts: state.pendingPrompts },
+      { frame_id: frameId, label_id: state.labelTagId, prompts: state.pendingPrompts },
       {
         onSuccess: (data) => {
           if (data) setActiveJobId(data.id);
@@ -39,10 +39,11 @@ export function FrameEditor({ frameId, onClose }: FrameEditorProps) {
 
   function handleTrack() {
     const state = store.getState();
+    if (state.labelTagId === null) return;
     trackMutation.mutate(
       {
         sequence_id: frameQuery.data?.sequence_id ?? 0,
-        label_id: state.labelTagId ?? 0,
+        label_id: state.labelTagId,
         prompts: state.pendingPrompts,
         anchor_frame_id: frameId,
         backward: state.backward,

@@ -6,7 +6,17 @@ import { describe, expect, it, vi } from "vitest";
 import { apiClient } from "../src/shared/api/client";
 import { FrameEditor } from "../src/features/annotation/FrameEditor";
 
+const LABEL_TREE = [
+  {
+    category: { id: 1, name: "lesion", label_type: "geometric", color: "#fff", procedure_id: null, taxonomy_version: 1 },
+    children: [
+      { id: 2, name: "0-Ip", label_type: "geometric", color: "#f00", procedure_id: null, taxonomy_version: 1 },
+    ],
+  },
+];
+
 function renderEditor(onClose = vi.fn()) {
+  vi.restoreAllMocks();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(apiClient, "GET").mockImplementation((async (path: string) => {
     if (path === "/media/frames/{frame_id}") {
@@ -20,7 +30,7 @@ function renderEditor(onClose = vi.fn()) {
       return { data: [], error: undefined, response: new Response() };
     }
     if (path === "/taxonomy/labels/tree") {
-      return { data: [], error: undefined, response: new Response() };
+      return { data: LABEL_TREE, error: undefined, response: new Response() };
     }
     return { data: undefined, error: "not mocked", response: new Response() };
   }) as never);
@@ -60,6 +70,10 @@ describe("FrameEditor", () => {
 
     await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
 
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
     const canvas = screen.getByTestId("frame-canvas");
     Object.defineProperty(canvas, "getBoundingClientRect", {
       value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
@@ -74,9 +88,31 @@ describe("FrameEditor", () => {
       expect(apiClient.POST).toHaveBeenCalledWith(
         "/jobs/sam2/predict",
         expect.objectContaining({
-          body: expect.objectContaining({ frame_id: 42, prompts: [{ type: "point", coords: [0.5, 0.5], label: true }] }),
+          body: expect.objectContaining({
+            frame_id: 42,
+            label_id: 2,
+            prompts: [{ type: "point", coords: [0.5, 0.5], label: true }],
+          }),
         }),
       ),
     );
+  });
+
+  it("does not submit a predict job when Add mask is clicked with no label selected", async () => {
+    renderEditor();
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+
+    const canvas = screen.getByTestId("frame-canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    });
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    await userEvent.click(screen.getByRole("button", { name: "Add mask" }));
+
+    expect(apiClient.POST).not.toHaveBeenCalledWith("/jobs/sam2/predict", expect.anything());
   });
 });
