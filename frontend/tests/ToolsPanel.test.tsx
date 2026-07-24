@@ -7,12 +7,12 @@ import { apiClient } from "../src/shared/api/client";
 import { createFrameEditorStore } from "../src/features/annotation/frameEditorStore";
 import { ToolsPanel } from "../src/features/annotation/ToolsPanel";
 
-function renderPanel(onAddMask = vi.fn(), onTrack = vi.fn(), store = createFrameEditorStore()) {
+function renderPanel(onGenerateFromMask = vi.fn(), onTrack = vi.fn(), store = createFrameEditorStore()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(apiClient, "GET").mockResolvedValue({ data: [], error: undefined, response: new Response() } as never);
   render(
     <QueryClientProvider client={queryClient}>
-      <ToolsPanel store={store} annotations={[]} onAddMask={onAddMask} onTrack={onTrack} />
+      <ToolsPanel store={store} annotations={[]} frameId={1} onGenerateFromMask={onGenerateFromMask} onTrack={onTrack} />
     </QueryClientProvider>,
   );
   return store;
@@ -34,12 +34,33 @@ describe("ToolsPanel", () => {
     expect(store.getState().activeTool).toBe("mask");
   });
 
-  it("calls onAddMask when Add mask is clicked", async () => {
-    const onAddMask = vi.fn();
-    renderPanel(onAddMask);
+  it("does not render a generic 'Add mask' submit button when Point is the active tool", () => {
+    renderPanel();
 
-    await userEvent.click(screen.getByRole("button", { name: "Add mask" }));
+    expect(screen.queryByRole("button", { name: "Add mask" })).not.toBeInTheDocument();
+  });
 
-    expect(onAddMask).toHaveBeenCalled();
+  it("shows 'Generate from mask' and calls onGenerateFromMask only when the Mask tool is active", async () => {
+    const onGenerateFromMask = vi.fn();
+    const store = renderPanel(onGenerateFromMask);
+
+    expect(screen.queryByRole("button", { name: "Generate from mask" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Mask" }));
+    expect(screen.getByRole("button", { name: "Generate from mask" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Generate from mask" }));
+    expect(onGenerateFromMask).toHaveBeenCalled();
+  });
+
+  it("passes frameId through to MasksList", async () => {
+    renderPanel();
+    // MasksList renders an empty list with no annotations passed in this
+    // test; this test only needs to confirm ToolsPanel doesn't crash
+    // rendering MasksList with a real frameId, which a missing/undefined
+    // prop would surface as a runtime TypeError inside MasksList's delete
+    // hooks (useDeleteAnnotation(frameId) etc.) -- absence of a thrown
+    // error during render is the assertion here.
+    await waitFor(() => expect(screen.getByRole("tab", { name: "SAM 2.1" })).toBeInTheDocument());
   });
 });

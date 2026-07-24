@@ -7,6 +7,9 @@ interface CascadingLabelPickerProps {
   store: FrameEditorStore;
 }
 
+const SELECT_CLASSES =
+  "mt-1 w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50";
+
 export function CascadingLabelPicker({ store }: CascadingLabelPickerProps) {
   const treeQuery = useLabelTree();
   const tree = treeQuery.data ?? [];
@@ -29,7 +32,7 @@ export function CascadingLabelPicker({ store }: CascadingLabelPickerProps) {
       <label className="block text-xs text-gray-400">
         Category
         <select
-          className="mt-1 w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
+          className={SELECT_CLASSES}
           value={labelCategoryId ?? ""}
           onChange={(event) =>
             setLabelSelection({
@@ -51,7 +54,7 @@ export function CascadingLabelPicker({ store }: CascadingLabelPickerProps) {
       <label className="block text-xs text-gray-400">
         Classification
         <select
-          className="mt-1 w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
+          className={SELECT_CLASSES}
           value={labelClassification ?? ""}
           disabled={!selectedCategory}
           onChange={(event) =>
@@ -73,7 +76,7 @@ export function CascadingLabelPicker({ store }: CascadingLabelPickerProps) {
       <label className="block text-xs text-gray-400">
         Tag
         <select
-          className="mt-1 w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
+          className={SELECT_CLASSES}
           value={labelTagId ?? ""}
           disabled={!selectedCategory}
           onChange={(event) =>

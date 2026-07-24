@@ -11,7 +11,8 @@ type Annotation = components["schemas"]["AnnotationRead"];
 interface ToolsPanelProps {
   store: FrameEditorStore;
   annotations: Annotation[];
-  onAddMask: () => void;
+  frameId: number;
+  onGenerateFromMask: () => void;
   onTrack: () => void;
 }
 
@@ -19,7 +20,7 @@ const PRESET_COLORS = ["#22d3ee", "#f87171", "#4ade80", "#facc15", "#a78bfa", "#
 const TOOLS: PromptType[] = ["point", "box", "mask"];
 const TOOL_LABELS: Record<PromptType, string> = { point: "Point", box: "Box", mask: "Mask" };
 
-export function ToolsPanel({ store, annotations, onAddMask, onTrack }: ToolsPanelProps) {
+export function ToolsPanel({ store, annotations, frameId, onGenerateFromMask, onTrack }: ToolsPanelProps) {
   const activeModel = useStore(store, (state) => state.activeModel);
   const activeTool = useStore(store, (state) => state.activeTool);
   const setActiveModel = useStore(store, (state) => state.setActiveModel);
@@ -28,77 +29,111 @@ export function ToolsPanel({ store, annotations, onAddMask, onTrack }: ToolsPane
   const setColor = useStore(store, (state) => state.setColor);
 
   return (
-    <aside className="flex w-[270px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-800 p-4">
-      <div role="tablist" className="flex gap-1 rounded border border-gray-800 p-1">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeModel === "sam2"}
-          onClick={() => setActiveModel("sam2")}
-          className={`flex-1 rounded px-2 py-1 text-sm ${activeModel === "sam2" ? "bg-blue-600 text-white" : "text-gray-300"}`}
-        >
-          SAM 2.1
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={false}
-          disabled
-          title="Needs more VRAM than this GPU has — available after hardware upgrade"
-          className="flex-1 cursor-not-allowed rounded px-2 py-1 text-sm text-gray-600"
-        >
-          SAM-3
-        </button>
-      </div>
-
-      <div className="flex gap-1 rounded border border-gray-800 p-1">
-        {TOOLS.map((tool) => (
+    <aside className="flex w-[280px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-800 bg-gray-950 p-4">
+      <section className="space-y-1">
+        <h2 className="text-[11px] font-medium text-gray-500">Model</h2>
+        <div role="tablist" className="flex gap-1 rounded-md border border-gray-800 bg-gray-900 p-1">
           <button
-            key={tool}
             type="button"
-            onClick={() => setActiveTool(tool)}
-            className={`flex-1 rounded px-2 py-1 text-sm ${activeTool === tool ? "bg-blue-600 text-white" : "text-gray-300"}`}
+            role="tab"
+            aria-selected={activeModel === "sam2"}
+            onClick={() => setActiveModel("sam2")}
+            className={`flex-1 rounded px-2 py-1.5 text-sm font-medium transition-colors ${
+              activeModel === "sam2" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+            }`}
           >
-            {TOOL_LABELS[tool]}
+            SAM 2.1
           </button>
-        ))}
-      </div>
-
-      <CascadingLabelPicker store={store} />
-
-      <div className="flex items-center gap-2">
-        <input
-          type="color"
-          value={color}
-          onChange={(event) => setColor(event.target.value)}
-          className="h-8 w-8 rounded border border-gray-700 bg-transparent"
-          aria-label="Color"
-        />
-        {PRESET_COLORS.map((preset) => (
           <button
-            key={preset}
             type="button"
-            onClick={() => setColor(preset)}
-            style={{ backgroundColor: preset }}
-            className="h-5 w-5 rounded-full border border-gray-700"
-            aria-label={`Preset color ${preset}`}
+            role="tab"
+            aria-selected={false}
+            disabled
+            title="Needs more VRAM than this GPU has — available after hardware upgrade"
+            className="flex-1 cursor-not-allowed rounded px-2 py-1.5 text-sm font-medium text-gray-700"
+          >
+            SAM-3
+          </button>
+        </div>
+      </section>
+
+      <section className="space-y-1">
+        <h2 className="text-[11px] font-medium text-gray-500">Tool</h2>
+        <div className="flex gap-1 rounded-md border border-gray-800 bg-gray-900 p-1">
+          {TOOLS.map((tool) => (
+            <button
+              key={tool}
+              type="button"
+              onClick={() => setActiveTool(tool)}
+              className={`flex-1 rounded px-2 py-1.5 text-sm font-medium transition-colors ${
+                activeTool === tool ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              {TOOL_LABELS[tool]}
+            </button>
+          ))}
+        </div>
+        {activeTool === "point" && (
+          <p className="pt-1 text-[11px] leading-snug text-gray-500">
+            Click = include · Shift+click = exclude · Drag = box · Ctrl+click a mask = remove
+          </p>
+        )}
+      </section>
+
+      <div className="border-t border-gray-800" />
+
+      <section className="space-y-1">
+        <h2 className="text-[11px] font-medium text-gray-500">Label</h2>
+        <CascadingLabelPicker store={store} />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-[11px] font-medium text-gray-500">Color</h2>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={color}
+            onChange={(event) => setColor(event.target.value)}
+            className="h-7 w-7 cursor-pointer rounded border border-gray-700 bg-transparent p-0.5"
+            aria-label="Color"
           />
-        ))}
-        <button
-          type="button"
-          onClick={onAddMask}
-          className="ml-auto rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-500"
-        >
-          Add mask
-        </button>
-      </div>
+          {PRESET_COLORS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => setColor(preset)}
+              style={{ backgroundColor: preset }}
+              className={`h-5 w-5 rounded-full border transition-transform ${
+                color === preset ? "scale-110 border-gray-200" : "border-gray-700"
+              }`}
+              aria-label={`Preset color ${preset}`}
+            />
+          ))}
+        </div>
+        {activeTool === "mask" && (
+          <button
+            type="button"
+            onClick={onGenerateFromMask}
+            className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-700"
+          >
+            Generate from mask
+          </button>
+        )}
+      </section>
 
-      <TrackControls store={store} onTrack={onTrack} />
+      <div className="border-t border-gray-800" />
 
-      <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Masks</h3>
-        <MasksList annotations={annotations} store={store} />
-      </div>
+      <section className="space-y-1">
+        <h2 className="text-[11px] font-medium text-gray-500">Track</h2>
+        <TrackControls store={store} onTrack={onTrack} />
+      </section>
+
+      <div className="border-t border-gray-800" />
+
+      <section className="space-y-1">
+        <h2 className="text-[11px] font-medium text-gray-500">Masks on this frame</h2>
+        <MasksList annotations={annotations} store={store} frameId={frameId} />
+      </section>
     </aside>
   );
 }
