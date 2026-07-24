@@ -23,6 +23,7 @@ def _annotation_read(annotation: Annotation, storage: StorageService) -> Annotat
         created_by_id=annotation.created_by_id,
         reviewed_by_id=annotation.reviewed_by_id,
         mask_url=storage.url_for(annotation.storage_key) if annotation.storage_key else None,
+        job_id=annotation.job_id,
     )
 
 
@@ -64,3 +65,34 @@ def update_status(
     session.commit()
     session.refresh(annotation)
     return annotation
+
+
+@router.delete("/annotations/{annotation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_annotation(
+    annotation_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> None:
+    annotation = session.get(Annotation, annotation_id)
+    if annotation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Annotation not found")
+    if annotation.storage_key:
+        storage.delete(annotation.storage_key)
+    session.delete(annotation)
+    session.commit()
+
+
+@router.delete("/jobs/{job_id}/annotations")
+def delete_job_annotations(
+    job_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> dict[str, list[int]]:
+    annotations = session.query(Annotation).filter(Annotation.job_id == job_id).all()
+    deleted_ids = [annotation.id for annotation in annotations]
+    for annotation in annotations:
+        if annotation.storage_key:
+            storage.delete(annotation.storage_key)
+        session.delete(annotation)
+    session.commit()
+    return {"deleted_ids": deleted_ids}

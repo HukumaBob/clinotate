@@ -193,3 +193,106 @@ def test_annotation_job_id_column_accepts_a_real_job_reference():
         assert annotation.job_id == job.id
     finally:
         session.close()
+
+
+def test_delete_single_annotation_removes_it_and_its_storage_object():
+    token = _register_and_login("annot8@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_label(token)
+
+    from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.storage import get_storage_service
+
+    storage = get_storage_service()
+    storage_key = "masks/delete-test/single.png"
+    storage.upload(storage_key, b"fake-png-bytes", content_type="image/png")
+
+    session = SessionLocal()
+    try:
+        user = session.query(User).filter(User.email == "annot8@example.com").one()
+        annotation = Annotation(
+            frame_id=frame_id,
+            label_id=label_id,
+            taxonomy_version=1,
+            annotation_type=AnnotationType.MASK,
+            status=AnnotationStatus.DRAFT,
+            created_by_id=user.id,
+            storage_key=storage_key,
+        )
+        session.add(annotation)
+        session.commit()
+        session.refresh(annotation)
+        annotation_id = annotation.id
+    finally:
+        session.close()
+
+    response = client.delete(f"/annotation/annotations/{annotation_id}", headers=_headers(token))
+    assert response.status_code == 204
+
+    list_response = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token))
+    assert all(a["id"] != annotation_id for a in list_response.json())
+
+
+def test_delete_single_annotation_404s_for_missing_annotation():
+    token = _register_and_login("annot9@example.com")
+
+    response = client.delete("/annotation/annotations/999999999", headers=_headers(token))
+    assert response.status_code == 404
+
+
+def test_delete_job_annotations_removes_only_that_jobs_annotations():
+    token = _register_and_login("annot10@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_label(token)
+
+    from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+
+    session = SessionLocal()
+    try:
+        user = session.query(User).filter(User.email == "annot10@example.com").one()
+
+        job_a = Job(job_type=JobType.SAM2_TRACK, status=JobStatus.SUCCEEDED, progress=100, payload={}, created_by_id=user.id)
+        job_b = Job(job_type=JobType.SAM2_TRACK, status=JobStatus.SUCCEEDED, progress=100, payload={}, created_by_id=user.id)
+        session.add_all([job_a, job_b])
+        session.commit()
+        session.refresh(job_a)
+        session.refresh(job_b)
+
+        annotation_a1 = Annotation(
+            frame_id=frame_id, label_id=label_id, taxonomy_version=1,
+            annotation_type=AnnotationType.MASK, status=AnnotationStatus.DRAFT,
+            created_by_id=user.id, storage_key="masks/bulk-test/a1.png", job_id=job_a.id,
+        )
+        annotation_a2 = Annotation(
+            frame_id=frame_id, label_id=label_id, taxonomy_version=1,
+            annotation_type=AnnotationType.MASK, status=AnnotationStatus.DRAFT,
+            created_by_id=user.id, storage_key="masks/bulk-test/a2.png", job_id=job_a.id,
+        )
+        annotation_b1 = Annotation(
+            frame_id=frame_id, label_id=label_id, taxonomy_version=1,
+            annotation_type=AnnotationType.MASK, status=AnnotationStatus.DRAFT,
+            created_by_id=user.id, storage_key="masks/bulk-test/b1.png", job_id=job_b.id,
+        )
+        session.add_all([annotation_a1, annotation_a2, annotation_b1])
+        session.commit()
+        session.refresh(annotation_a1)
+        session.refresh(annotation_a2)
+        session.refresh(annotation_b1)
+
+        job_a_id = job_a.id
+        annotation_b1_id = annotation_b1.id
+    finally:
+        session.close()
+
+    response = client.delete(f"/annotation/jobs/{job_a_id}/annotations", headers=_headers(token))
+    assert response.status_code == 200
+    assert len(response.json()["deleted_ids"]) == 2
+
+    list_response = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token))
+    remaining_ids = [a["id"] for a in list_response.json()]
+    assert annotation_b1_id in remaining_ids
