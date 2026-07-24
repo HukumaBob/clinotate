@@ -328,6 +328,32 @@ hardware — the opposite of SAM-3's confirmed instability, and consistent
 with the rationale already recorded in Phase 2a.1's UI spec for making
 SAM 2.1 the frame editor's default tab.
 
+**Final whole-branch review findings (2026-07-24, commit `28993dc`):** one
+Critical finding — a suspected normalized-vs-pixel coordinate mismatch in
+`Sam2Adapter` — was investigated live against the real installed `sam2` API
+and confirmed to be a **false positive**:
+`SAM2ImagePredictor.predict()`/`SAM2VideoPredictor.add_new_points_or_box()`
+both default to `normalize_coords=True`, which expects and correctly
+denormalizes `[0,1]` input — exactly this project's existing shared prompt
+convention (already used by SAM-3's `SegmentButton.tsx` and unchanged by
+this phase) — so no fix was needed. Two Important findings *were* real and
+fixed:
+- `PromptIn.mask_png` was unvalidated — a `type="mask"` prompt could omit
+  `mask_png` entirely (crashing on `base64.b64decode(None)`) or supply an
+  arbitrarily large string decoded/rasterized with no bound. Fixed with a
+  Pydantic `model_validator` on `PromptIn` (`backend/app/jobs/schemas.py`):
+  required when `type == "mask"`, capped at 10 MiB of base64 text.
+- `Sam2Adapter.predict()`/`track()` read `prompts[0]`/built kwargs from an
+  empty `prompts=[]` with no guard — `predict()` crashed opaquely inside
+  `sam2`; `track()` was worse, starting real GPU video-session
+  initialization before failing. Both now raise a clear `ValueError("at
+  least one prompt is required")` up front.
+
+All four fixes are TDD-covered (RED confirmed against the real installed
+`sam2` package inside the ml-worker container, not hand-traced); full
+regression suites re-run clean afterward: 44/44 backend tests, 26/26
+ml-worker non-GPU tests (up from 24, +2 new empty-prompt guard tests).
+
 ### Phase 2b: Detection adapters, datasets, training — NOT STARTED, NOT PLANNED
 
 Scope per the design spec: Ultralytics YOLO11/YOLO12/YOLO26 detection
