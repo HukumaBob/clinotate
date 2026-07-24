@@ -261,6 +261,9 @@ git commit -m "feat: make Sequence.video_id nullable, add procedure_id for video
 - Modify: `backend/app/media/schemas.py`
 - Modify: `backend/app/media/router.py`
 - Test: `backend/tests/test_media.py`
+- Fixture (already present, created during plan pre-flight review — do
+  not regenerate it): `backend/tests/fixtures/tiny_frame.png` (a real
+  4x4 RGB PNG, valid for `PIL.Image.open`)
 
 **Interfaces:**
 - Consumes: `Sequence.procedure_id`, `Sequence.video_id: int | None` (Task 1).
@@ -300,10 +303,7 @@ def test_upload_frame_to_standalone_sequence():
         "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
     ).json()["id"]
 
-    fixture = Path(__file__).parent / "fixtures" / "tiny.mp4"
-    # Reuse tiny.mp4's bytes as a stand-in binary payload; the endpoint
-    # doesn't validate image content in this pass, only stores it -- a real
-    # PNG fixture isn't required to prove the upload path works.
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
     with open(fixture, "rb") as f:
         response = client.post(
             f"/media/sequences/{sequence_id}/frames/upload",
