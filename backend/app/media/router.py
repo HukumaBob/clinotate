@@ -1,4 +1,7 @@
+import io
+
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -114,15 +117,19 @@ async def upload_standalone_frame(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
 
     data = await file.read()
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            width, height = img.size
+    except UnidentifiedImageError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Uploaded file is not a valid image",
+        )
+
     existing_count = session.query(Frame).filter(Frame.sequence_id == sequence_id).count()
     frame_index = existing_count
     storage_key = f"frames/{sequence_id}/{frame_index}.png"
     storage.upload(storage_key, data, content_type="image/png")
-
-    from PIL import Image
-    import io
-    with Image.open(io.BytesIO(data)) as img:
-        width, height = img.size
 
     frame = Frame(
         sequence_id=sequence_id,

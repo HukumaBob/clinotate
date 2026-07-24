@@ -168,6 +168,27 @@ def test_upload_frame_to_standalone_sequence():
     assert body["image_url"].startswith("http")
 
 
+def test_upload_invalid_image_to_standalone_sequence_returns_4xx():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Downloaded polyp set 3"}, headers=headers
+    ).json()["id"]
+    sequence_id = client.post(
+        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+    ).json()["id"]
+
+    response = client.post(
+        f"/media/sequences/{sequence_id}/frames/upload",
+        files={"file": ("not_an_image.png", b"not a real image", "image/png")},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+    frames = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+    assert frames == []
+
+
 def test_create_standalone_sequence_requires_procedure_id():
     headers = _auth_headers()
     response = client.post("/media/sequences", json={}, headers=headers)
