@@ -39,6 +39,46 @@ RUN uv pip install "sam3 @ git+https://github.com/facebookresearch/sam3.git@4695
 # pull them in automatically.
 RUN uv pip install einops pycocotools psutil
 
+# sam2 has no official PyPI package either -- same git-install pattern as
+# sam3 above. Pinned to a specific commit for the same reason sam3 is: an
+# unpinned git install could silently change behavior between builds with
+# no visible, reviewed diff. This is the confirmed `main` HEAD as of
+# 2026-07-23 (git ls-remote https://github.com/facebookresearch/sam2.git
+# main). Verify against https://github.com/facebookresearch/sam2/commits/main
+# before bumping.
+#
+# --no-deps is required: sam2's package name on git is "sam-2" (a hyphen,
+# confirmed via its setup.py's `NAME = "SAM-2"` -- `uv pip install "sam2 @
+# git+..."` fails outright with a metadata-name mismatch). More importantly,
+# sam2's dependency list (torch>=2.5.1, torchvision>=0.20.1) has no upper
+# bound, so without --no-deps uv's resolver ignores the already-installed,
+# already-compatible torch==2.7.1/torchvision==0.22.1 pair above and
+# resolves a completely new, unrelated torch==2.13.0/CUDA-13 stack instead
+# -- confirmed empirically (a `uv pip install --verbose` run showed exactly
+# this, re-downloading ~2-3GB of nvidia-cu13 packages before being killed).
+# sam2's own real runtime dependencies beyond torch/torchvision/numpy/pillow
+# (already satisfied by sam3's install above) are installed explicitly on
+# the next line, confirmed against the installed commit's real setup.py
+# (`REQUIRED_PACKAGES`), not guessed from a README.
+#
+# SAM2_BUILD_CUDA=0: sam2's setup.py builds an optional CUDA extension
+# (sam2._C, used only for post-processing, not core predict()/track())
+# by default. This base image is nvidia/cuda:12.6.0-*runtime*, not -devel
+# -- nvcc is not present (confirmed: `which nvcc` -> not found) -- so the
+# extension build cannot succeed here. Disabling it via this env var
+# (sam2's own documented escape hatch, see its setup.py) avoids attempting
+# a build that's guaranteed to fail on this base image; losing this
+# optional extension does not affect Sam2Adapter, which only uses
+# SAM2ImagePredictor/SAM2VideoPredictor's Python-level API, not sam2._C
+# directly. (The `uv pip install --no-deps` step below is separately slow
+# on a cold cache -- ~4-5 minutes for dependency resolution against a
+# single git package with no upper-bounded version constraints -- not
+# hung; a `--verbose` run during investigation confirmed real, if slow,
+# progress the whole time.)
+ENV SAM2_BUILD_CUDA=0
+RUN uv pip install --no-deps "sam-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4"
+RUN uv pip install "hydra-core>=1.3.2" "iopath>=0.1.10" "tqdm>=4.66.1"
+
 COPY app ./app
 
 # --pool=solo: the default prefork pool forks worker subprocesses per task,
