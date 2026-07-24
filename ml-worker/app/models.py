@@ -107,6 +107,12 @@ class AnnotationStatus(str, enum.Enum):
 
 
 class Annotation(Base):
+    """Minimal duplicate of backend/app/annotation/models.py's Annotation
+    — only the columns the ml-worker needs to create mask annotations.
+    Never read through this model for anything the backend owns
+    authoritatively; created rows are read back exclusively via the
+    backend's own API."""
+
     __tablename__ = "annotations"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -118,6 +124,10 @@ class Annotation(Base):
     status: Mapped[AnnotationStatus] = mapped_column(Enum(AnnotationStatus))
     created_by_id: Mapped[int] = mapped_column(Integer)
     storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Plain int, not a ForeignKey("jobs.id"): same reasoning as
+    # Label.procedure_id above — this module has no duplicate Job table
+    # mapping usable as an FK target within this process's metadata.
+    job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

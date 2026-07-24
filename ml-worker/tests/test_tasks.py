@@ -108,6 +108,26 @@ def test_run_sam3_predict_marks_job_succeeded_and_creates_mask_annotation():
     session.close()
 
 
+def test_run_sam3_predict_sets_job_id_on_created_annotation():
+    session = SessionLocal()
+    label_id, _ = _make_label(session)
+    job_id, frame_id = _make_pending_job_with_frame(session, label_id)
+    session.close()
+
+    fake_adapter = MagicMock()
+    fake_adapter.predict.return_value = MaskResult(mask_png=b"fake mask png bytes", score=0.91)
+
+    run_sam3_predict(job_id, adapter=fake_adapter)
+
+    session = SessionLocal()
+    from app.models import Annotation
+
+    annotation = session.query(Annotation).filter(Annotation.frame_id == frame_id).first()
+    assert annotation is not None
+    assert annotation.job_id == job_id
+    session.close()
+
+
 def test_run_sam3_predict_marks_job_failed_on_adapter_error():
     session = SessionLocal()
     label_id, _ = _make_label(session)
