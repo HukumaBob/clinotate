@@ -354,6 +354,71 @@ All four fixes are TDD-covered (RED confirmed against the real installed
 regression suites re-run clean afterward: 44/44 backend tests, 26/26
 ml-worker non-GPU tests (up from 24, +2 new empty-prompt guard tests).
 
+### Phase 2c: Frame editor (SAM 2.1 UI) — DONE (2026-07-24)
+
+Design: [docs/superpowers/specs/2026-07-24-frame-editor-design.md](docs/superpowers/specs/2026-07-24-frame-editor-design.md).
+Plan: [docs/superpowers/plans/2026-07-24-frame-editor.md](docs/superpowers/plans/2026-07-24-frame-editor.md).
+
+The platform's first real frame editor, replacing the Phase 2a
+`SegmentButton.tsx` placeholder: SAM 2.1 point/box/mask prompts (gesture-
+driven, no mode buttons for point/box per the UI spec), a Category →
+Classification → Tag cascading label picker, track controls (explicit
+Backward/Forward propagation, no unbounded default), a masks list with
+click-to-select/highlight/auto-fill, and a minimal sequence grid to reach
+it. SAM-3 tab renders but is disabled — current GPU VRAM is insufficient
+to run it usefully; re-enabling it once hardware allows is a follow-up,
+not a redesign, since the backend endpoints are untouched. 19 tasks,
+subagent-driven-development, task-scoped review + one final whole-branch
+review (Approved, no Critical/Important findings). Detailed per-task
+commit ranges: `.superpowers/sdd/progress.md`.
+
+**Backend additions found necessary during design, not anticipated by
+either the design spec or the UI/UX spec (see the design spec's own
+"Backend gaps found during design" section for full rationale):**
+video-less sequences (`Sequence.video_id` made nullable,
+`Sequence.procedure_id` added as an independent grouping root — mirrors a
+capability the sibling Django project's `Sequences.video` nullable field
+already had, for datasets built from standalone frame sets with no video
+source), sequences-by-video/procedure listing endpoints, a cascading
+label-tree endpoint (`GET /taxonomy/labels/tree`), and
+`AnnotationRead.mask_url` for rendering mask overlays.
+
+**Real bugs found only by real-browser end-to-end verification (real GPU,
+real running stack, no mocks) — invisible to every prior unit/integration
+test:**
+- The ml-worker container's own duplicate `JobType` enum
+  (`ml-worker/app/models.py`) was missing `SAM2_PREDICT`/`SAM2_TRACK` —
+  a gap dating back to when SAM 2.1 support first landed in Phase 2a.2,
+  never caught because no test suite exercises the real ml-worker
+  container's own model definitions against a real job. Fixed; requires a
+  Docker image rebuild to take effect (`docker compose build ml-worker`),
+  not just a restart, since the container has no source volume mount.
+- `FrameEditor` never invalidated the annotations query when a polled job
+  transitioned to `succeeded` — a newly created mask never appeared in
+  the masks list or canvas overlay without a full page reload. Fixed with
+  a `useEffect` invalidating `["annotations", frameId]` on that
+  transition; verified live with a second real SAM 2.1 job completing and
+  the masks list updating with no reload.
+
+**Known, deliberate simplification, not a bug:** the sequence grid route
+(`/videos/:videoId/sequences/:sequenceId`) has no in-app navigation entry
+point yet — it's reached directly by URL. This matches the UI/UX spec's
+"reached directly" framing for this session (no Sequences list/catalog
+screen was in scope), not an oversight.
+
+**Minor findings from the final review, left as-is (non-blocking):**
+`FrameEditor`'s `activeJobId`/job-polling state isn't reset when
+`frameId` changes (a stale job-status line could briefly show when
+switching frames, low real-world exposure given the editor's one-frame-
+at-a-time lifecycle); `get_label_tree` has no `ORDER BY`, so
+Category/Tag dropdown ordering isn't guaranteed stable across requests;
+`useSam2Track` sends whatever `pendingPrompts` the store currently holds,
+which `handleAddMask` clears on success — a track-after-predict click
+sends an empty prompts list (backend accepts this; worth confirming this
+is the intended anchor-frame-only track behavior once SAM 2.1 track gets
+real hardware testing, deferred since SAM 2.1 track itself is untested on
+this GPU per Phase 2a.2's own scope).
+
 ### Phase 2b: Detection adapters, datasets, training — NOT STARTED, NOT PLANNED
 
 Scope per the design spec: Ultralytics YOLO11/YOLO12/YOLO26 detection
