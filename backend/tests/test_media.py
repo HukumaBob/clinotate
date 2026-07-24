@@ -127,3 +127,48 @@ def test_get_frame_404_for_missing_frame():
     headers = _auth_headers()
     response = client.get("/media/frames/999999999", headers=headers)
     assert response.status_code == 404
+
+
+def test_create_standalone_sequence_without_video():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Downloaded polyp set"}, headers=headers
+    ).json()["id"]
+
+    response = client.post(
+        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["video_id"] is None
+    assert body["procedure_id"] == procedure_id
+
+
+def test_upload_frame_to_standalone_sequence():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Downloaded polyp set 2"}, headers=headers
+    ).json()["id"]
+    sequence_id = client.post(
+        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+    ).json()["id"]
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        response = client.post(
+            f"/media/sequences/{sequence_id}/frames/upload",
+            files={"file": ("frame_0.png", f, "image/png")},
+            headers=headers,
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["sequence_id"] == sequence_id
+    assert body["image_url"].startswith("http")
+
+
+def test_create_standalone_sequence_requires_procedure_id():
+    headers = _auth_headers()
+    response = client.post("/media/sequences", json={}, headers=headers)
+    assert response.status_code == 422

@@ -14,10 +14,17 @@ class SequenceCreate(BaseModel):
     duration: int
 
 
+class SequenceCreateStandalone(BaseModel):
+    procedure_id: int
+    start_time: int = 0
+    duration: int = 0
+
+
 class SequenceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    video_id: int
+    video_id: int | None
+    procedure_id: int | None
     start_time: int
     duration: int
 

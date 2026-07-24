@@ -4,9 +4,16 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.db import get_session
 from app.media.models import Frame, Sequence, Video
-from app.media.schemas import FrameRead, SequenceCreate, SequenceRead, VideoRead
+from app.media.schemas import (
+    FrameRead,
+    SequenceCreate,
+    SequenceCreateStandalone,
+    SequenceRead,
+    VideoRead,
+)
 from app.media.service import compute_checksum, extract_frames, probe_video
 from app.storage import StorageService, get_storage_service
+from app.taxonomy.models import Procedure
 
 router = APIRouter(prefix="/media", tags=["media"], dependencies=[Depends(get_current_user)])
 
@@ -68,6 +75,66 @@ def create_sequence(
         )
     session.commit()
     return sequence
+
+
+@router.post("/sequences", response_model=SequenceRead, status_code=status.HTTP_201_CREATED)
+def create_standalone_sequence(
+    payload: SequenceCreateStandalone,
+    session: Session = Depends(get_session),
+) -> Sequence:
+    procedure = session.get(Procedure, payload.procedure_id)
+    if procedure is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Procedure not found")
+
+    sequence = Sequence(
+        video_id=None,
+        procedure_id=payload.procedure_id,
+        start_time=payload.start_time,
+        duration=payload.duration,
+    )
+    session.add(sequence)
+    session.commit()
+    session.refresh(sequence)
+    return sequence
+
+
+@router.post(
+    "/sequences/{sequence_id}/frames/upload",
+    response_model=FrameRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_standalone_frame(
+    sequence_id: int,
+    file: UploadFile,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> FrameRead:
+    sequence = session.get(Sequence, sequence_id)
+    if sequence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
+
+    data = await file.read()
+    existing_count = session.query(Frame).filter(Frame.sequence_id == sequence_id).count()
+    frame_index = existing_count
+    storage_key = f"frames/{sequence_id}/{frame_index}.png"
+    storage.upload(storage_key, data, content_type="image/png")
+
+    from PIL import Image
+    import io
+    with Image.open(io.BytesIO(data)) as img:
+        width, height = img.size
+
+    frame = Frame(
+        sequence_id=sequence_id,
+        storage_key=storage_key,
+        frame_index=frame_index,
+        width=width,
+        height=height,
+    )
+    session.add(frame)
+    session.commit()
+    session.refresh(frame)
+    return _frame_read(frame, storage)
 
 
 def _frame_read(frame: Frame, storage: StorageService) -> FrameRead:
