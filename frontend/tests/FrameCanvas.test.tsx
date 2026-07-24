@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { createFrameEditorStore } from "../src/features/annotation/frameEditorStore";
@@ -187,5 +187,114 @@ describe("FrameCanvas", () => {
     expect(prompts).toHaveLength(1);
     expect(prompts[0].type).toBe("mask");
     expect(prompts[0].mask_png).toBe("ZmFrZS1wbmc=");
+  });
+
+  it("does not remove any annotation on ctrl+click while a topmost annotation's mask is still loading", () => {
+    // Regression test: previously, hitTestAnnotation would `continue` past
+    // any annotation with no cache entry yet (still loading its mask
+    // image) and fall through to test the next-topmost one instead. If a
+    // newer, still-loading annotation (A) overlapped an older, already-
+    // cached one (B) at the click point, B would get deleted instead of
+    // the correct, topmost A -- silently deleting the wrong mask. The fix
+    // requires ALL annotations to have a cache entry before hit-testing
+    // acts at all, so this must be a reliable no-op instead.
+    const realImage = window.Image;
+    const instances: FakeImage[] = [];
+
+    class FakeImage {
+      onload: (() => void) | null = null;
+      crossOrigin = "";
+      private _src = "";
+      width = 400;
+      height = 200;
+
+      constructor() {
+        instances.push(this);
+      }
+
+      set src(value: string) {
+        this._src = value;
+      }
+
+      get src() {
+        return this._src;
+      }
+    }
+
+    // @ts-expect-error -- test double replacing the global Image constructor
+    window.Image = FakeImage;
+
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    // jsdom has no real canvas backend, so stub getContext entirely (as the
+    // "rasterizes a freehand stroke" test above already does for this same
+    // reason). Every mask, when "drawn", is treated as fully opaque
+    // everywhere -- so if hit-testing ever reads annotation B's (the older,
+    // cached one's) data at the click point, it will report a hit.
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
+      const data = new Uint8ClampedArray(this.width * this.height * 4).fill(255);
+      return {
+        clearRect: () => {},
+        drawImage: () => {},
+        putImageData: () => {},
+        beginPath: () => {},
+        moveTo: () => {},
+        lineTo: () => {},
+        arc: () => {},
+        fill: () => {},
+        strokeRect: () => {},
+        stroke: () => {},
+        strokeStyle: "",
+        fillStyle: "",
+        lineWidth: 0,
+        lineCap: "round",
+        globalAlpha: 1,
+        getImageData: () => ({ data, width: this.width, height: this.height, colorSpace: "srgb" }) as ImageData,
+      } as never;
+    };
+
+    const store = createFrameEditorStore();
+    const onRemoveAnnotation = vi.fn();
+
+    const annotations = [
+      { id: 1, frame_id: 1, type: "mask", payload: {}, mask_url: "https://example.test/mask-1.png" },
+      { id: 2, frame_id: 1, type: "mask", payload: {}, mask_url: "https://example.test/mask-2.png" },
+    ];
+
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={annotations as never}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={onRemoveAnnotation}
+      />,
+    );
+
+    // Fire the frame image's onload so the mask-loading effect runs and
+    // constructs the two mask Image instances.
+    act(() => {
+      instances[0]?.onload?.();
+    });
+
+    // Find the mask Image instances (constructed after the frame image).
+    const maskImages = instances.slice(1);
+    expect(maskImages).toHaveLength(2);
+
+    // Older annotation (id 1, index 0) finishes loading -- gets a cache entry.
+    act(() => {
+      maskImages[0]?.onload?.();
+    });
+    // Newer/topmost annotation (id 2, index 1) is still loading -- no
+    // onload fired, so it never gets a cache entry.
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0, ctrlKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0, ctrlKey: true });
+
+    expect(onRemoveAnnotation).not.toHaveBeenCalled();
+
+    window.Image = realImage;
+    HTMLCanvasElement.prototype.getContext = originalGetContext;
   });
 });

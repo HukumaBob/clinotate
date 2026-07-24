@@ -123,11 +123,23 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
   function hitTestAnnotation(normX: number, normY: number): number | null {
     const canvas = canvasRef.current;
     if (!canvas) return null;
+
+    // Each annotation's alpha-channel cache is populated asynchronously,
+    // once its mask image's `onload` fires. If any annotation (not just
+    // the ones actually under the click point) is still loading, we can't
+    // yet tell whether it would have been the topmost hit -- testing only
+    // the ready ones risks hitting a lower, already-cached annotation
+    // while a newer, still-loading one on top of it at this exact pixel
+    // gets skipped entirely. Decline to act at all until every annotation
+    // has a cache entry, rather than silently testing a partial set.
+    const allCached = annotations.every((annotation) => maskImageDataCacheRef.current.has(annotation.id));
+    if (!allCached) return null;
+
     const pixelX = Math.floor(normX * canvas.width);
     const pixelY = Math.floor(normY * canvas.height);
 
-    // Topmost = last-rendered = last element of `annotations` that has
-    // cached image data and a nonzero alpha at this pixel.
+    // Topmost = last-rendered = last element of `annotations` with a
+    // nonzero alpha at this pixel.
     for (let i = annotations.length - 1; i >= 0; i -= 1) {
       const annotation = annotations[i];
       const imageData = maskImageDataCacheRef.current.get(annotation.id);
