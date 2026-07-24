@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import { FrameAnnotationPage } from "../features/annotation/FrameAnnotationPage";
+import { SequenceGridPage } from "../features/annotation/SequenceGridPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
 import { VideoListPage } from "../features/media/VideoListPage";
@@ -25,10 +25,10 @@ export function App() {
           }
         />
         <Route
-          path="/frames/:frameId"
+          path="/videos/:videoId/sequences/:sequenceId"
           element={
             <RequireAuth>
-              <FrameAnnotationPage />
+              <SequenceGridPage />
             </RequireAuth>
           }
         />

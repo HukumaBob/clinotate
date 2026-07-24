@@ -36,6 +36,16 @@ describe("SequenceGridPage", () => {
       if (path === "/annotation/frames/{frame_id}/annotations") {
         return { data: [], error: undefined, response: new Response() };
       }
+      if (path === "/media/frames/{frame_id}") {
+        return {
+          data: { id: 101, sequence_id: 9, storage_key: "frames/9/0.png", frame_index: 0, width: 100, height: 100, image_url: "https://example.test/f0.png" },
+          error: undefined,
+          response: new Response(),
+        };
+      }
+      if (path === "/taxonomy/labels/tree") {
+        return { data: [], error: undefined, response: new Response() };
+      }
       return { data: undefined, error: "not mocked", response: new Response() };
     }) as never);
   });
@@ -46,14 +56,13 @@ describe("SequenceGridPage", () => {
     await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(2));
   });
 
-  it("swaps the grid for the frame editor placeholder when a thumbnail is clicked", async () => {
+  it("swaps the grid for the frame editor when a thumbnail is clicked", async () => {
     renderPage();
 
     await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(2));
     await userEvent.click(screen.getAllByRole("img")[0]);
 
-    await waitFor(() => expect(screen.getByTestId("frame-editor-slot")).toBeInTheDocument());
-    expect(screen.queryAllByRole("img")).toHaveLength(0);
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
   });
 
   it("returns to the grid when Back to grid is clicked", async () => {
@@ -61,7 +70,7 @@ describe("SequenceGridPage", () => {
 
     await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(2));
     await userEvent.click(screen.getAllByRole("img")[0]);
-    await waitFor(() => expect(screen.getByTestId("frame-editor-slot")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole("button", { name: /back to grid/i }));
 

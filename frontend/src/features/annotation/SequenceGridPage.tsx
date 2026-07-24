@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { useFrames } from "../../entities/useFrames";
+import { FrameEditor } from "./FrameEditor";
 import { FrameThumbnail } from "./FrameThumbnail";
 
 export function SequenceGridPage() {
@@ -12,21 +13,7 @@ export function SequenceGridPage() {
   const framesQuery = useFrames(sequenceIdNumber);
 
   if (selectedFrameId !== null) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-gray-100">
-        <div className="border-b border-gray-800 p-3">
-          <button
-            type="button"
-            onClick={() => setSelectedFrameId(null)}
-            className="rounded border border-gray-700 px-3 py-1 text-sm text-gray-200 hover:bg-gray-800"
-          >
-            ✕ Back to grid
-          </button>
-        </div>
-        {/* Replaced with <FrameEditor frameId={selectedFrameId} /> once it exists (Task 14). */}
-        <div data-testid="frame-editor-slot" />
-      </div>
-    );
+    return <FrameEditor frameId={selectedFrameId} onClose={() => setSelectedFrameId(null)} />;
   }
 
   return (
