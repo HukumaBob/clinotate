@@ -104,3 +104,49 @@ def test_reviewer_can_change_status():
 
     assert response.status_code == 200
     assert response.json()["status"] == "reviewed"
+
+
+def test_list_annotations_includes_mask_url_when_storage_key_present():
+    token = _register_and_login("annot5@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_label(token)
+
+    from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
+    from app.auth.models import User
+    from app.db import SessionLocal
+
+    session = SessionLocal()
+    try:
+        user = session.query(User).filter(User.email == "annot5@example.com").one()
+        annotation = Annotation(
+            frame_id=frame_id,
+            label_id=label_id,
+            taxonomy_version=1,
+            annotation_type=AnnotationType.MASK,
+            status=AnnotationStatus.DRAFT,
+            created_by_id=user.id,
+            storage_key="masks/test-mask.png",
+        )
+        session.add(annotation)
+        session.commit()
+    finally:
+        session.close()
+
+    response = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token))
+
+    assert response.status_code == 200
+    mask_annotation = next(a for a in response.json() if a["annotation_type"] == "mask")
+    assert mask_annotation["mask_url"] is not None
+    assert mask_annotation["mask_url"].startswith("http")
+
+
+def test_annotation_mask_url_is_null_for_classification_annotations():
+    token = _register_and_login("annot6@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_label(token)
+    client.post(f"/annotation/frames/{frame_id}/annotations", json={"label_id": label_id}, headers=_headers(token))
+
+    response = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token))
+
+    assert response.status_code == 200
+    assert response.json()[0]["mask_url"] is None

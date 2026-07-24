@@ -7,8 +7,23 @@ from app.annotation.service import create_classification_annotation, require_rev
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import get_session
+from app.storage import StorageService, get_storage_service
 
 router = APIRouter(prefix="/annotation", tags=["annotation"], dependencies=[Depends(get_current_user)])
+
+
+def _annotation_read(annotation: Annotation, storage: StorageService) -> AnnotationRead:
+    return AnnotationRead(
+        id=annotation.id,
+        frame_id=annotation.frame_id,
+        label_id=annotation.label_id,
+        taxonomy_version=annotation.taxonomy_version,
+        annotation_type=annotation.annotation_type,
+        status=annotation.status,
+        created_by_id=annotation.created_by_id,
+        reviewed_by_id=annotation.reviewed_by_id,
+        mask_url=storage.url_for(annotation.storage_key) if annotation.storage_key else None,
+    )
 
 
 @router.post(
@@ -24,8 +39,13 @@ def create_annotation(
 
 
 @router.get("/frames/{frame_id}/annotations", response_model=list[AnnotationRead])
-def list_annotations(frame_id: int, session: Session = Depends(get_session)) -> list[Annotation]:
-    return session.query(Annotation).filter(Annotation.frame_id == frame_id).all()
+def list_annotations(
+    frame_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> list[AnnotationRead]:
+    annotations = session.query(Annotation).filter(Annotation.frame_id == frame_id).all()
+    return [_annotation_read(annotation, storage) for annotation in annotations]
 
 
 @router.patch("/annotations/{annotation_id}/status", response_model=AnnotationRead)

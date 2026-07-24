@@ -21,3 +21,4 @@ class AnnotationRead(BaseModel):
     status: AnnotationStatus
     created_by_id: int
     reviewed_by_id: int | None
+    mask_url: str | None = None
