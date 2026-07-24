@@ -77,13 +77,17 @@ export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
     if (activeTool === "mask") {
       strokePointsRef.current = [[x, y]];
 
-      const visibleCanvas = canvasRef.current;
       if (!maskCanvasRef.current) {
         maskCanvasRef.current = document.createElement("canvas");
       }
       const maskCanvas = maskCanvasRef.current;
-      maskCanvas.width = visibleCanvas?.width ?? frame.width;
-      maskCanvas.height = visibleCanvas?.height ?? frame.height;
+      // Always size from frame.width/frame.height, not the visible canvas's
+      // own .width/.height attributes -- those are only set once the
+      // rendering effect above has run (after frameImage finishes loading),
+      // so reading them here could race and pick up the browser's default
+      // 300x150 canvas size instead of the real frame resolution.
+      maskCanvas.width = frame.width;
+      maskCanvas.height = frame.height;
       const maskCtx = maskCanvas.getContext("2d");
       maskCtx?.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
     }
