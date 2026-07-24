@@ -193,3 +193,42 @@ def test_create_standalone_sequence_requires_procedure_id():
     headers = _auth_headers()
     response = client.post("/media/sequences", json={}, headers=headers)
     assert response.status_code == 422
+
+
+def test_list_sequences_for_video():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "Sequence listing source"},
+            headers=headers,
+        ).json()["id"]
+
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.get(f"/media/videos/{video_id}/sequences", headers=headers)
+
+    assert response.status_code == 200
+    ids = [s["id"] for s in response.json()]
+    assert sequence_id in ids
+
+
+def test_list_sequences_for_procedure():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Listing procedure"}, headers=headers
+    ).json()["id"]
+    sequence_id = client.post(
+        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+    ).json()["id"]
+
+    response = client.get(f"/media/procedures/{procedure_id}/sequences", headers=headers)
+
+    assert response.status_code == 200
+    ids = [s["id"] for s in response.json()]
+    assert sequence_id in ids

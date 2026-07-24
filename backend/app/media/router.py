@@ -166,6 +166,16 @@ def list_frames(
     return [_frame_read(frame, storage) for frame in frames]
 
 
+@router.get("/videos/{video_id}/sequences", response_model=list[SequenceRead])
+def list_sequences_for_video(video_id: int, session: Session = Depends(get_session)) -> list[Sequence]:
+    return session.query(Sequence).filter(Sequence.video_id == video_id).all()
+
+
+@router.get("/procedures/{procedure_id}/sequences", response_model=list[SequenceRead])
+def list_sequences_for_procedure(procedure_id: int, session: Session = Depends(get_session)) -> list[Sequence]:
+    return session.query(Sequence).filter(Sequence.procedure_id == procedure_id).all()
+
+
 @router.get("/frames/{frame_id}", response_model=FrameRead)
 def get_frame(
     frame_id: int,
