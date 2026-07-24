@@ -20,6 +20,7 @@ interface DragState {
 
 export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const strokePointsRef = useRef<[number, number][]>([]);
   const [frameImage, setFrameImage] = useState<HTMLImageElement | null>(null);
@@ -75,6 +76,16 @@ export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
     dragRef.current = { startX: x, startY: y };
     if (activeTool === "mask") {
       strokePointsRef.current = [[x, y]];
+
+      const visibleCanvas = canvasRef.current;
+      if (!maskCanvasRef.current) {
+        maskCanvasRef.current = document.createElement("canvas");
+      }
+      const maskCanvas = maskCanvasRef.current;
+      maskCanvas.width = visibleCanvas?.width ?? frame.width;
+      maskCanvas.height = visibleCanvas?.height ?? frame.height;
+      const maskCtx = maskCanvas.getContext("2d");
+      maskCtx?.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
     }
   }
 
@@ -86,15 +97,31 @@ export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    const points = strokePointsRef.current;
+    const [prevX, prevY] = points.length > 1 ? points[points.length - 2] : points[0];
+
     ctx.strokeStyle = "rgba(34, 211, 238, 0.9)";
     ctx.lineWidth = Math.max(2, canvas.width * 0.01);
     ctx.lineCap = "round";
     ctx.beginPath();
-    const points = strokePointsRef.current;
-    const [prevX, prevY] = points.length > 1 ? points[points.length - 2] : points[0];
     ctx.moveTo(prevX * canvas.width, prevY * canvas.height);
     ctx.lineTo(x * canvas.width, y * canvas.height);
     ctx.stroke();
+
+    // Mirror the stroke onto the offscreen mask-only canvas (transparent
+    // background, stroke only) so handleMouseUp can rasterize a clean
+    // mask instead of the composited photo+overlays visible canvas.
+    const maskCanvas = maskCanvasRef.current;
+    const maskCtx = maskCanvas?.getContext("2d");
+    if (maskCanvas && maskCtx) {
+      maskCtx.strokeStyle = "rgba(255, 255, 255, 1)";
+      maskCtx.lineWidth = Math.max(2, maskCanvas.width * 0.01);
+      maskCtx.lineCap = "round";
+      maskCtx.beginPath();
+      maskCtx.moveTo(prevX * maskCanvas.width, prevY * maskCanvas.height);
+      maskCtx.lineTo(x * maskCanvas.width, y * maskCanvas.height);
+      maskCtx.stroke();
+    }
   }
 
   function handleMouseUp(event: React.MouseEvent<HTMLCanvasElement>) {
@@ -110,9 +137,9 @@ export function FrameCanvas({ frame, annotations, store }: FrameCanvasProps) {
     }
 
     if (activeTool === "mask") {
-      const canvas = canvasRef.current;
-      if (canvas && strokePointsRef.current.length > 1) {
-        const dataUrl = canvas.toDataURL("image/png");
+      const maskCanvas = maskCanvasRef.current;
+      if (maskCanvas && strokePointsRef.current.length > 1) {
+        const dataUrl = maskCanvas.toDataURL("image/png");
         const base64 = dataUrl.split(",")[1] ?? "";
         addPrompt({ type: "mask", coords: [], label: true, mask_png: base64 });
       }

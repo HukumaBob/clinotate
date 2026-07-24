@@ -72,8 +72,13 @@ describe("FrameCanvas", () => {
     Object.defineProperty(canvas, "getBoundingClientRect", {
       value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
     });
-    canvas.getContext =
-      canvas.getContext ??
+    // Stub on the prototype (not just the queried `frame-canvas` element) so
+    // the offscreen mask-only canvas -- created internally via
+    // `document.createElement("canvas")` and never attached to the DOM --
+    // also gets a working getContext/toDataURL under jsdom, which has no
+    // real canvas 2D backend.
+    HTMLCanvasElement.prototype.getContext =
+      HTMLCanvasElement.prototype.getContext ??
       (() => ({
         clearRect: () => {},
         drawImage: () => {},
@@ -85,7 +90,7 @@ describe("FrameCanvas", () => {
         lineWidth: 0,
         lineCap: "round",
       }) as never);
-    canvas.toDataURL = () => "data:image/png;base64,ZmFrZS1wbmc=";
+    HTMLCanvasElement.prototype.toDataURL = () => "data:image/png;base64,ZmFrZS1wbmc=";
 
     fireEvent.mouseDown(canvas, { clientX: 100, clientY: 50, button: 0 });
     fireEvent.mouseMove(canvas, { clientX: 150, clientY: 80, button: 0 });
