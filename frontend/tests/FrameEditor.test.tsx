@@ -98,6 +98,69 @@ describe("FrameEditor", () => {
     );
   });
 
+  it("refetches annotations once the polled job succeeds", async () => {
+    let jobStatus: "pending" | "succeeded" = "pending";
+    let annotationsCallCount = 0;
+    vi.restoreAllMocks();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockImplementation((async (path: string) => {
+      if (path === "/media/frames/{frame_id}") {
+        return {
+          data: { id: 42, sequence_id: 9, storage_key: "frames/9/42.png", frame_index: 42, width: 400, height: 200, image_url: "https://example.test/f42.png" },
+          error: undefined,
+          response: new Response(),
+        };
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        annotationsCallCount += 1;
+        return { data: [], error: undefined, response: new Response() };
+      }
+      if (path === "/taxonomy/labels/tree") {
+        return { data: LABEL_TREE, error: undefined, response: new Response() };
+      }
+      if (path === "/jobs/{job_id}") {
+        return {
+          data: { id: 1, job_type: "sam2_predict", status: jobStatus, progress: jobStatus === "succeeded" ? 100 : 0, result_ref: null, error: null, created_by_id: 1, started_at: null, finished_at: null },
+          error: undefined,
+          response: new Response(),
+        };
+      }
+      return { data: undefined, error: "not mocked", response: new Response() };
+    }) as never);
+    vi.spyOn(apiClient, "POST").mockResolvedValue({
+      data: { id: 1, job_type: "sam2_predict", status: "pending", progress: 0, result_ref: null, error: null, created_by_id: 1, started_at: null, finished_at: null },
+      error: undefined,
+      response: new Response(),
+    } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <FrameEditor frameId={42} onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
+    const canvas = screen.getByTestId("frame-canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    });
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    await userEvent.click(screen.getByRole("button", { name: "Add mask" }));
+    await waitFor(() => expect(apiClient.POST).toHaveBeenCalledWith("/jobs/sam2/predict", expect.anything()));
+
+    const callsBeforeSuccess = annotationsCallCount;
+    jobStatus = "succeeded";
+
+    await waitFor(() => expect(annotationsCallCount).toBeGreaterThan(callsBeforeSuccess), { timeout: 3000 });
+  });
+
   it("does not submit a predict job when Add mask is clicked with no label selected", async () => {
     renderEditor();
 

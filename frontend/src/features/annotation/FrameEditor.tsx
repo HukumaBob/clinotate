@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useAnnotations } from "../../entities/useAnnotations";
 import { useFrame } from "../../entities/useFrames";
@@ -16,12 +17,19 @@ interface FrameEditorProps {
 export function FrameEditor({ frameId, onClose }: FrameEditorProps) {
   const store = useMemo(() => createFrameEditorStore(), [frameId]);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
 
   const frameQuery = useFrame(frameId);
   const annotationsQuery = useAnnotations(frameId);
   const jobQuery = useJob(activeJobId);
   const predictMutation = useSam2Predict();
   const trackMutation = useSam2Track();
+
+  useEffect(() => {
+    if (jobQuery.data?.status === "succeeded") {
+      queryClient.invalidateQueries({ queryKey: ["annotations", frameId] });
+    }
+  }, [jobQuery.data?.status, jobQuery.data?.id, frameId, queryClient]);
 
   function handleAddMask() {
     const state = store.getState();
