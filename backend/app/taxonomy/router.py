@@ -8,10 +8,11 @@ from app.taxonomy.schemas import (
     LabelCreate,
     LabelRead,
     LabelRelationCreate,
+    LabelTreeNode,
     ProcedureCreate,
     ProcedureRead,
 )
-from app.taxonomy.service import get_label_descendants
+from app.taxonomy.service import get_label_descendants, get_label_tree
 
 router = APIRouter(prefix="/taxonomy", tags=["taxonomy"], dependencies=[Depends(get_current_user)])
 
@@ -53,6 +54,11 @@ def create_label_relation(payload: LabelRelationCreate, session: Session = Depen
     session.add(relation)
     session.commit()
     return {"id": relation.id}
+
+
+@router.get("/labels/tree", response_model=list[LabelTreeNode])
+def label_tree(session: Session = Depends(get_session)) -> list[dict]:
+    return get_label_tree(session)
 
 
 @router.get("/labels/{label_id}/descendants", response_model=list[LabelRead])

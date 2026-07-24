@@ -34,3 +34,8 @@ class LabelRelationCreate(BaseModel):
     parent_id: int
     child_id: int
     confidence: float = 1.0
+
+
+class LabelTreeNode(BaseModel):
+    category: LabelRead
+    children: list[LabelRead]

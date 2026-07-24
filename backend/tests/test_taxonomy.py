@@ -78,3 +78,37 @@ def test_label_descendants_via_recursive_relation():
     assert response.status_code == 200
     descendant_ids = {label["id"] for label in response.json()}
     assert descendant_ids == {child["id"], grandchild["id"]}
+
+
+def test_label_tree_groups_children_under_root_labels():
+    token = _auth_headers(_register_and_login("tax4@example.com"))
+
+    lesion = client.post(
+        "/taxonomy/labels", json={"name": "lesion", "label_type": "geometric"}, headers=token
+    ).json()
+    polyp_shape = client.post(
+        "/taxonomy/labels", json={"name": "0-Ip", "label_type": "geometric"}, headers=token
+    ).json()
+    landmark = client.post(
+        "/taxonomy/labels", json={"name": "landmark", "label_type": "geometric"}, headers=token
+    ).json()
+
+    client.post(
+        "/taxonomy/labels/relations",
+        json={"parent_id": lesion["id"], "child_id": polyp_shape["id"], "confidence": 1.0},
+        headers=token,
+    )
+
+    response = client.get("/taxonomy/labels/tree", headers=token)
+
+    assert response.status_code == 200
+    tree = response.json()
+    lesion_node = next(node for node in tree if node["category"]["id"] == lesion["id"])
+    assert [child["id"] for child in lesion_node["children"]] == [polyp_shape["id"]]
+
+    landmark_node = next(node for node in tree if node["category"]["id"] == landmark["id"])
+    assert landmark_node["children"] == []
+
+    # polyp_shape is a child, not a root -- it must not appear as its own
+    # top-level category node.
+    assert all(node["category"]["id"] != polyp_shape["id"] for node in tree)
