@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useStore } from "zustand/react";
 
+import { useDeleteAnnotation, useDeleteJobAnnotations } from "../../entities/useAnnotations";
 import { useLabelTree } from "../../entities/useLabelTree";
 import type { components } from "../../shared/api/generated/schema";
 import type { FrameEditorStore } from "./frameEditorStore";
@@ -9,11 +11,17 @@ type Annotation = components["schemas"]["AnnotationRead"];
 interface MasksListProps {
   annotations: Annotation[];
   store: FrameEditorStore;
+  frameId: number;
 }
 
-export function MasksList({ annotations, store }: MasksListProps) {
+export function MasksList({ annotations, store, frameId }: MasksListProps) {
   const treeQuery = useLabelTree();
   const tree = treeQuery.data ?? [];
+  const deleteAnnotation = useDeleteAnnotation(frameId);
+  const deleteJobAnnotations = useDeleteJobAnnotations(frameId);
+
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [pendingBulkJobId, setPendingBulkJobId] = useState<number | null>(null);
 
   const selectedAnnotationId = useStore(store, (state) => state.selectedAnnotationId);
   const setSelectedAnnotation = useStore(store, (state) => state.setSelectedAnnotation);
@@ -48,18 +56,41 @@ export function MasksList({ annotations, store }: MasksListProps) {
     }
   }
 
+  function handleDeleteClick(annotationId: number) {
+    if (pendingDeleteId === annotationId) {
+      deleteAnnotation.mutate(annotationId);
+      setPendingDeleteId(null);
+    } else {
+      setPendingDeleteId(annotationId);
+      setPendingBulkJobId(null);
+    }
+  }
+
+  function handleBulkDeleteClick(jobId: number) {
+    if (pendingBulkJobId === jobId) {
+      deleteJobAnnotations.mutate(jobId);
+      setPendingBulkJobId(null);
+    } else {
+      setPendingBulkJobId(jobId);
+      setPendingDeleteId(null);
+    }
+  }
+
   return (
     <ul className="max-h-48 space-y-1 overflow-y-auto text-sm">
       {maskAnnotations.map((annotation) => {
         const resolved = resolveLabel(annotation.label_id);
         const categoryName = tree.find((node) => node.category.id === resolved?.categoryId)?.category.name;
         const tagName = resolved?.tag.name;
+        const isPendingDelete = pendingDeleteId === annotation.id;
+        const isPendingBulk = annotation.job_id !== null && pendingBulkJobId === annotation.job_id;
+
         return (
-          <li key={annotation.id}>
+          <li key={annotation.id} className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => handleSelect(annotation)}
-              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-gray-800 ${
+              className={`flex flex-1 items-center gap-2 rounded px-2 py-1 text-left hover:bg-gray-800 ${
                 annotation.id === selectedAnnotationId ? "bg-gray-800" : ""
               }`}
             >
@@ -68,6 +99,28 @@ export function MasksList({ annotations, store }: MasksListProps) {
                 style={{ backgroundColor: resolved?.tag.color ?? "#666" }}
               />
               {categoryName && tagName ? `${categoryName} / ${tagName}` : `label ${annotation.label_id}`}
+            </button>
+            {annotation.job_id !== null && (
+              <button
+                type="button"
+                aria-label={isPendingBulk ? "Confirm delete all" : "Delete all from this run"}
+                onClick={() => handleBulkDeleteClick(annotation.job_id as number)}
+                className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${
+                  isPendingBulk ? "bg-red-700 text-white" : "text-gray-500 hover:text-red-400"
+                }`}
+              >
+                {isPendingBulk ? "Confirm all" : "⊗"}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label={isPendingDelete ? "Confirm delete mask" : "Delete mask"}
+              onClick={() => handleDeleteClick(annotation.id)}
+              className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${
+                isPendingDelete ? "bg-red-700 text-white" : "text-gray-500 hover:text-red-400"
+              }`}
+            >
+              {isPendingDelete ? "Confirm" : "✕"}
             </button>
           </li>
         );

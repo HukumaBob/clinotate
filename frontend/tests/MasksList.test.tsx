@@ -1,11 +1,15 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../src/shared/api/client";
 import { createFrameEditorStore } from "../src/features/annotation/frameEditorStore";
 import { MasksList } from "../src/features/annotation/MasksList";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const TREE = [
   {
@@ -27,6 +31,7 @@ const ANNOTATIONS = [
     created_by_id: 1,
     reviewed_by_id: null,
     mask_url: "https://example.test/mask-55.png",
+    job_id: null,
   },
 ];
 
@@ -64,5 +69,97 @@ describe("MasksList", () => {
     expect(state.labelCategoryId).toBe(1);
     expect(state.labelTagId).toBe(2);
     expect(state.labelClassification).toBe("geometric");
+  });
+});
+
+describe("MasksList delete", () => {
+  it("shows a delete (x) control per row and calls the delete mutation with the annotation id when confirmed twice", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+    vi.spyOn(apiClient, "DELETE").mockResolvedValue({ data: undefined, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+
+    const deleteButton = screen.getByRole("button", { name: /delete mask/i });
+    await userEvent.click(deleteButton);
+    await userEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+
+    await waitFor(() =>
+      expect(apiClient.DELETE).toHaveBeenCalledWith(
+        "/annotation/annotations/{annotation_id}",
+        expect.objectContaining({ params: { path: { annotation_id: 55 } } }),
+      ),
+    );
+  });
+
+  it("does not delete on a single click, only after the confirm step", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+    vi.spyOn(apiClient, "DELETE").mockResolvedValue({ data: undefined, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /delete mask/i }));
+
+    expect(apiClient.DELETE).not.toHaveBeenCalled();
+  });
+
+  it("shows 'Delete all from this run' only for annotations with a job_id, and calls the bulk mutation when confirmed", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const annotationsWithJob = [{ ...ANNOTATIONS[0], job_id: 99 }];
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+    vi.spyOn(apiClient, "DELETE").mockResolvedValue({
+      data: { deleted_ids: [55] },
+      error: undefined,
+      response: new Response(),
+    } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={annotationsWithJob as never} store={store} frameId={1} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+
+    const bulkButton = screen.getByRole("button", { name: /delete all from this run/i });
+    await userEvent.click(bulkButton);
+    await userEvent.click(screen.getByRole("button", { name: /confirm delete all/i }));
+
+    await waitFor(() =>
+      expect(apiClient.DELETE).toHaveBeenCalledWith(
+        "/annotation/jobs/{job_id}/annotations",
+        expect.objectContaining({ params: { path: { job_id: 99 } } }),
+      ),
+    );
+  });
+
+  it("does not show 'Delete all from this run' for an annotation with no job_id", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /delete all from this run/i })).not.toBeInTheDocument();
   });
 });
