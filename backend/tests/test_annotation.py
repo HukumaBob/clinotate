@@ -150,3 +150,46 @@ def test_annotation_mask_url_is_null_for_classification_annotations():
 
     assert response.status_code == 200
     assert response.json()[0]["mask_url"] is None
+
+
+def test_annotation_job_id_column_accepts_a_real_job_reference():
+    token = _register_and_login("annot7@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_label(token)
+
+    from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+
+    session = SessionLocal()
+    try:
+        user = session.query(User).filter(User.email == "annot7@example.com").one()
+        job = Job(
+            job_type=JobType.SAM2_PREDICT,
+            status=JobStatus.SUCCEEDED,
+            progress=100,
+            payload={},
+            created_by_id=user.id,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+
+        annotation = Annotation(
+            frame_id=frame_id,
+            label_id=label_id,
+            taxonomy_version=1,
+            annotation_type=AnnotationType.MASK,
+            status=AnnotationStatus.DRAFT,
+            created_by_id=user.id,
+            storage_key="masks/test-job-id.png",
+            job_id=job.id,
+        )
+        session.add(annotation)
+        session.commit()
+        session.refresh(annotation)
+
+        assert annotation.job_id == job.id
+    finally:
+        session.close()

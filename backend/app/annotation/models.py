@@ -32,6 +32,7 @@ class Annotation(Base):
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
