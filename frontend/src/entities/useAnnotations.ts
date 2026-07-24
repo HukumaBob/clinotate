@@ -30,3 +30,32 @@ export function useCreateAnnotation(frameId: number) {
     },
   });
 }
+
+export function useDeleteAnnotation(frameId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (annotationId: number) => {
+      await apiClient.DELETE("/annotation/annotations/{annotation_id}", {
+        params: { path: { annotation_id: annotationId } },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["annotations", frameId] });
+    },
+  });
+}
+
+export function useDeleteJobAnnotations(frameId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (jobId: number) => {
+      const result = await apiClient.DELETE("/annotation/jobs/{job_id}/annotations", {
+        params: { path: { job_id: jobId } },
+      });
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["annotations", frameId] });
+    },
+  });
+}
