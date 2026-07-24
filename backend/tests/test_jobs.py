@@ -208,6 +208,25 @@ def test_prompt_in_accepts_mask_type_with_base64_png():
     assert prompt.coords == []
 
 
+def test_prompt_in_rejects_mask_type_without_mask_png():
+    from pydantic import ValidationError
+
+    from app.jobs.schemas import PromptIn
+
+    with pytest.raises(ValidationError, match="mask_png"):
+        PromptIn(type="mask")
+
+
+def test_prompt_in_rejects_oversized_mask_png():
+    from pydantic import ValidationError
+
+    from app.jobs.schemas import PromptIn
+
+    oversized = "A" * (10 * 1024 * 1024 + 1)
+    with pytest.raises(ValidationError, match="mask_png"):
+        PromptIn(type="mask", mask_png=oversized)
+
+
 def test_sam2_track_request_requires_anchor_and_direction_fields():
     from pydantic import ValidationError
 

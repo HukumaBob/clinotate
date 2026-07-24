@@ -76,6 +76,27 @@ def test_unknown_prompt_type_raises():
         _prompts_to_predict_kwargs([{"type": "exemplar", "coords": []}])
 
 
+def test_prompts_to_predict_kwargs_rejects_empty_list():
+    from app.sam2_adapter import _prompts_to_predict_kwargs
+
+    with pytest.raises(ValueError, match="at least one prompt"):
+        _prompts_to_predict_kwargs([])
+
+
+def test_track_rejects_empty_prompts_list():
+    from app.sam2_adapter import Sam2Adapter
+
+    adapter = Sam2Adapter()
+    with pytest.raises(ValueError, match="at least one prompt"):
+        adapter.track(
+            [b"frame0"],
+            prompts=[],
+            anchor_frame_index=0,
+            backward=0,
+            forward=0,
+        )
+
+
 @pytest.mark.requires_sam2_weights
 def test_track_propagates_bidirectionally_from_anchor():
     adapter = Sam2Adapter()

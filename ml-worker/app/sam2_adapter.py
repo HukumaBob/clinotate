@@ -61,6 +61,9 @@ def _prompts_to_predict_kwargs(prompts: list[dict]) -> dict:
     sam2/sam2_image_predictor.py's predict() and _prep_prompts() — points,
     box, and mask are independent optional arguments, not mutually
     exclusive types like SAM-3's box/text/point prompt forms)."""
+    if not prompts:
+        raise ValueError("at least one prompt is required")
+
     point_coords = []
     point_labels = []
     box = None
@@ -184,6 +187,9 @@ class Sam2Adapter:
         only walks one direction per call (`reverse` is a single bool),
         so bidirectional tracking requires exactly this two-call pattern,
         not a single call with both directions."""
+        if not prompts:
+            raise ValueError("at least one prompt is required")
+
         video_predictor = self._get_video_predictor()
         obj_id = 1
 
