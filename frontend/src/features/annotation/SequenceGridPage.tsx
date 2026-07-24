@@ -13,7 +13,14 @@ export function SequenceGridPage() {
   const framesQuery = useFrames(sequenceIdNumber);
 
   if (selectedFrameId !== null) {
-    return <FrameEditor frameId={selectedFrameId} onClose={() => setSelectedFrameId(null)} />;
+    return (
+      <FrameEditor
+        frameId={selectedFrameId}
+        frames={framesQuery.data ?? []}
+        onClose={() => setSelectedFrameId(null)}
+        onFrameChange={setSelectedFrameId}
+      />
+    );
   }
 
   return (
