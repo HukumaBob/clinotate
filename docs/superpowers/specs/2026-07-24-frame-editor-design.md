@@ -97,9 +97,10 @@ each module (`backend/tests/test_media.py`, `test_taxonomy.py`,
   editor). **No Select mode / bulk cleanup** (find-similar, rank-quality,
   bulk delete) — out of scope, per the UI spec's own "Select mode" being a
   separable sub-feature.
-- Frame editor itself, full UI spec fidelity: model tabs, gesture-driven
-  point/box/mask prompts, cascading label picker, color picker, track
-  controls, masks list with highlight-on-click.
+- Frame editor itself, full UI spec fidelity: model tabs (SAM 2.1 live,
+  SAM-3 rendered but disabled — see below), gesture-driven point/box/mask
+  prompts, cascading label picker, color picker, track controls, masks
+  list with highlight-on-click.
 - No Sequences list screen, no Tags screen, no Select mode — those stay
   unbuilt; the grid route is reached directly (`/videos/:videoId/sequences/:sequenceId`)
   rather than through a catalog screen that doesn't exist yet.
@@ -144,7 +145,8 @@ features/annotation/
                               CascadingLabelPicker, color picker + "Add
                               mask" button, TrackControls, MasksList — one
                               shared markup block per the spec, not
-                              duplicated per model tab
+                              duplicated per model tab. SAM-3 tab renders
+                              but is disabled (see below)
   CascadingLabelPicker.tsx    — Category → Classification → Tag, backed by
                               GET /taxonomy/labels/tree. Replaces the flat
                               LabelPicker for this use; the existing
@@ -164,6 +166,21 @@ Job submission reuses the existing `useJob` polling hook unchanged;
 `Sam2TrackRequest`'s extra fields (`anchor_frame_id`, `backward`,
 `forward`) come from the store's Backward/Forward inputs and the
 currently open frame.
+
+**SAM-3 tab is disabled in this session.** The current GPU doesn't have
+enough VRAM to run SAM-3 usefully — it's real, tested backend
+functionality (Phase 2a), but not practically usable on today's hardware,
+and won't be until a planned hardware upgrade. Building out live SAM-3
+interaction in the frontend now would be effort spent exercising a path
+nobody can actually use yet. The tab still renders (so the two-tab layout
+the UI spec describes is visible and the toggle exists structurally) but
+is `disabled` with a short inline note (e.g. "Needs more VRAM than this
+GPU has — available after hardware upgrade"), and `activeModel` in the
+store defaults to, and stays on, `'sam2'`. No SAM-3 job-submission wiring,
+prompt handling, or tab-specific tests are written this session — when
+the hardware upgrade lands, re-enabling the tab is a follow-up task, not
+a redesign, since `/jobs/sam3/predict`/`track` and their request shapes
+already exist unchanged.
 
 ### State management
 
@@ -194,7 +211,10 @@ TDD throughout, per CLAUDE.md:
 - Backend: failing test first for each of the 4 gaps, in the relevant
   module's existing test file.
 - Frontend: Vitest + Testing Library, following `FrameAnnotationPage.test.tsx`'s
-  existing style of mocking `apiClient`.
+  existing style of mocking `apiClient`. Covers the SAM 2.1 path only
+  (predict/track calls, prompt gestures, label picker, masks list); the
+  SAM-3 tab only needs a test that it renders disabled, not a job-flow
+  test, since it does no job submission this session.
 - After implementation: real-browser verification (`npm run dev`, actually
   click through grid → editor → point/box/mask prompts → track → masks
   list), per CLAUDE.md's "Testing philosophy" section — this project has
