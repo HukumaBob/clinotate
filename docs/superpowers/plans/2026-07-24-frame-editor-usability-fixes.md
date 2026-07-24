@@ -1843,6 +1843,12 @@ interface PendingBox {
   endY: number;
 }
 
+interface RecentPoint {
+  x: number;
+  y: number;
+  positive: boolean;
+}
+
 const POSITIVE_COLOR = "rgba(74, 222, 128, 0.95)";
 const NEGATIVE_COLOR = "rgba(248, 113, 113, 0.95)";
 const BOX_COLOR = "rgba(96, 165, 250, 0.95)";
@@ -1855,6 +1861,12 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
   const maskImageDataCacheRef = useRef<Map<number, ImageData>>(new Map());
   const [frameImage, setFrameImage] = useState<HTMLImageElement | null>(null);
   const [pendingBox, setPendingBox] = useState<PendingBox | null>(null);
+  // Points the user just placed, kept visible until the next annotations
+  // refetch replaces them with a real mask overlay (or, for a rejected/
+  // failed job, until cleared manually) -- without this, a submitted point
+  // is invisible for the full round trip to SAM 2.1, which is exactly the
+  // "invisible gesture" complaint this rewrite exists to fix.
+  const [recentPoints, setRecentPoints] = useState<RecentPoint[]>([]);
 
   const activeTool = useStore(store, (state) => state.activeTool);
   const addPrompt = useStore(store, (state) => state.addPrompt);
@@ -1905,6 +1917,14 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
       };
       maskImg.src = annotation.mask_url;
     }
+
+    // A fresh `annotations` array means the parent's query refetched --
+    // either a submitted prompt turned into a real mask, or the frame
+    // changed. Either way, any placeholder point markers are now stale
+    // (superseded by a real overlay, or no longer relevant to this frame),
+    // so clear them rather than leaving a phantom marker with nothing
+    // underneath it once the real mask has rendered.
+    setRecentPoints([]);
   }, [frameImage, frame.width, frame.height, annotations, selectedAnnotationId]);
 
   function toNormalized(clientX: number, clientY: number): [number, number] {
@@ -1959,7 +1979,7 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
     }
   }
 
-  function drawPendingOverlay(box: PendingBox | null) {
+  function drawPendingOverlay(box: PendingBox | null, points: RecentPoint[] = recentPoints) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx || !frameImage) return;
@@ -1972,6 +1992,14 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
       ctx.globalAlpha = annotation.id === selectedAnnotationId ? 0.85 : 0.5;
       ctx.putImageData(imageData, 0, 0);
       ctx.globalAlpha = 1;
+    }
+
+    const pointRadius = Math.max(4, canvas.width * 0.008);
+    for (const point of points) {
+      ctx.fillStyle = point.positive ? POSITIVE_COLOR : NEGATIVE_COLOR;
+      ctx.beginPath();
+      ctx.arc(point.x * canvas.width, point.y * canvas.height, pointRadius, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     if (box) {
@@ -2032,6 +2060,12 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
   function submitPointOrBox(prompt: PromptDraft) {
     addPrompt(prompt);
     onPointOrBoxSubmit(prompt);
+    if (prompt.type === "point") {
+      const [x, y] = prompt.coords;
+      const updated = [...recentPoints, { x, y, positive: prompt.label }];
+      setRecentPoints(updated);
+      drawPendingOverlay(null, updated);
+    }
   }
 
   function handleMouseUp(event: React.MouseEvent<HTMLCanvasElement>) {
@@ -2120,17 +2154,18 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
 }
 ```
 
-Note the positive/negative point colors (`POSITIVE_COLOR`/
-`NEGATIVE_COLOR`) are declared but the point-rendering `useEffect` in
-this step only redraws masks + the pending box outline, not individual
-pending points — this is intentional for this task: since point/box now
-submit *immediately* (design decision 1), a point's visible lifetime
-before the annotation refetch replaces it with a real mask overlay is
-sub-second, and the color constants exist for Task 9's wiring to use if
-a future task adds a brief "confirmed" flash. If test review flags the
-declared-but-unused constants, that's expected — leave them, they're
-consumed by nothing in this task by design, not dead code left by
-mistake (documented here so a reviewer doesn't file it as a defect).
+`recentPoints` is the mechanism satisfying the design spec's "every point
+in `pendingPrompts`... is drawn as a small filled circle... colored by
+its `label`" requirement (spec section 2): `submitPointOrBox` appends the
+just-placed point immediately (positive → green `POSITIVE_COLOR`,
+negative → red `NEGATIVE_COLOR`) and redraws, so the marker is visible
+the instant the gesture completes — not only after the SAM 2.1 round
+trip. The main rendering `useEffect` clears `recentPoints` whenever
+`annotations` changes (new mask arrived or the frame changed), so a
+placeholder marker never lingers after the real mask overlay supersedes
+it. This closes the loop between "gesture happened" (marker appears
+instantly) and "SAM 2.1 responded" (marker is replaced by the real mask)
+without requiring a separate loading-state UI.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -2696,11 +2731,16 @@ experience was unusable — only this manual pass catches that gap.
   SAM-3 re-enablement, custom dropdown component library) — correctly
   absent from every task.
 
-**Placeholder scan:** no TBD/TODO markers remain. The one judgment call
-flagged inline (Task 8's unused point-color constants) is explicitly
-justified as an intentional forward-compatible declaration, not a
-placeholder — a reviewer is told exactly why it's there rather than left
-to guess.
+**Placeholder scan:** no TBD/TODO markers remain. An earlier draft of
+Task 8 declared `POSITIVE_COLOR`/`NEGATIVE_COLOR` without using them,
+rationalized as "for a future task" — caught during this plan's own
+pre-flight review as a real, unimplemented spec requirement (design spec
+section 2: "every point in `pendingPrompts`... is drawn as a small
+filled circle... colored by its `label`"), not an acceptable deferral.
+Fixed by adding `recentPoints` state that actually renders positive/
+negative point markers immediately on submission and clears them once
+the real annotation refetch supersedes them — both color constants are
+now live, load-bearing code.
 
 **Type consistency:** `PromptDraft` (from `frameEditorStore.ts`, unchanged
 by this plan) is used identically across Tasks 8-9.
