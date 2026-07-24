@@ -314,13 +314,19 @@ Task 6 onward, across both this phase and Phase 2a, had used a stub since
 `sam2` wasn't installed yet) — all 24 passed, zero API-assumption
 discrepancies found between the adapter code and the real package.
 
-**Known gap carried forward, not fixed (explicit call, not an oversight):**
-- The manual VRAM-instability check specified in the plan (repeating a
-  point-prompt predict with 1-2px jitter on a real lesion image, mirroring
-  the test that caught SAM-3's mask instability — see Phase 2a's own
-  deviation log and `.superpowers/sdd/task-6-report.md`) has not yet been
-  run against real weights/GPU; still open per the plan's own "Manual
-  Verification" section.
+**Manual verification result (completed 2026-07-24, real GPU + real
+`facebook/sam2.1-hiera-large` weights):** the plan's micro-jitter stability
+check — the same test that caught SAM-3's mask instability in Phase 2a (see
+that phase's own deviation log and `.superpowers/sdd/task-6-report.md`) —
+was run against `Sam2Adapter.predict()`: 25 point prompts on
+`/home/hukuma/Pictures/references/High_Grade_Displasia_Stomach01.jpg`, a 5x5
+grid spanning ±2px in each axis around a fixed base point. Result: **all 25
+predictions produced byte-identical masks** (mask area 24108px, score
+0.7346 in every case; coefficient of variation across mask area = 0.0000).
+SAM 2.1's `predict()` is fully stable to 1-2px coordinate jitter on this
+hardware — the opposite of SAM-3's confirmed instability, and consistent
+with the rationale already recorded in Phase 2a.1's UI spec for making
+SAM 2.1 the frame editor's default tab.
 
 ### Phase 2b: Detection adapters, datasets, training — NOT STARTED, NOT PLANNED
 
