@@ -260,6 +260,68 @@ that triggered the whole detour, still open), the exact GPU-memory cap
 enforced on the frame editor's Track inputs, and any backend/API contract
 changes at all — this phase is UI/UX only.
 
+### Phase 2a.2: SAM 2.1 adapter — DONE (2026-07-24)
+
+Design: [docs/specs/2026-07-23-sam2.1-adapter-design.md](docs/specs/2026-07-23-sam2.1-adapter-design.md).
+Plan: [docs/superpowers/plans/2026-07-23-sam2.1-adapter.md](docs/superpowers/plans/2026-07-23-sam2.1-adapter.md).
+
+Adds SAM 2.1 as a second, parallel segmentation adapter alongside SAM-3
+(per Phase 2a.1's UI decision that both share one frame-editor UI, SAM 2.1
+adding a Mask prompt option SAM-3 doesn't have). Parallel `/jobs/sam2/predict`/
+`/jobs/sam2/track` API endpoints (`JobType.SAM2_PREDICT`/`SAM2_TRACK`,
+`Sam2PredictRequest`/`Sam2TrackRequest`, `enqueue_sam2_predict`/
+`enqueue_sam2_track`), symmetric to the existing SAM-3 endpoints rather than
+a single model-switch endpoint — resolving the open question Phase 2a.1 left
+unresolved in favor of the parallel-endpoints option. `Sam2Adapter`
+(`ml-worker/app/sam2_adapter.py`) implements `predict()` (point/box/mask
+prompts, mask-prompt via a raw PNG the frontend sends, converted to SAM2's
+mask-logit format) and `track()` (bidirectional propagation via two
+sequential `propagate_in_video()` calls on one `inference_state`, per the
+real confirmed sam2 API — a single call only walks one direction). Both
+`sam2_predict`/`sam2_track` Celery tasks wired up in `ml-worker/app/tasks.py`,
+mirroring `sam3_predict`/`sam3_track`, with cross-adapter GPU eviction: SAM-3
+and SAM 2.1 tasks now each evict the *other* family's resident models before
+running, since a single worker process can only fit one large model family
+in this GPU's ~7.6 GiB VRAM. `NOTICE` updated to add SAM 2.1
+(facebook/sam2.1-hiera-large, Apache 2.0) as a new in-use entry alongside the
+existing SAM-3 entry, not replacing it.
+
+**Deviations from the plan, decided during execution:**
+- The real `sam2` package's git install has a different pip name than
+  expected: `sam-2` (hyphen), not `sam2`. `--no-deps` was required on
+  install because sam2's unbounded `torch>=2.5.1` constraint made the
+  resolver pull an unrelated `torch==2.13.0`/CUDA-13 stack over the
+  already-pinned `torch==2.7.1`. `SAM2_BUILD_CUDA=0` was required because
+  the base image is `nvidia/cuda:12.6.0-*runtime*` (no `nvcc`), so sam2's
+  optional CUDA post-processing extension can't build there. All three
+  fixed in `ml-worker/Dockerfile`.
+- The plan's own Task 9 test fixture (`test_track_skips_direction_with_zero_count`)
+  used a bare `unittest.mock.MagicMock()` where a real tensor was needed
+  (`MagicMock` doesn't support `__gt__` by default) — found and fixed
+  during Task 9's execution, verified independently by the task reviewer.
+
+**Confirmed during this phase (previously only a prior session's
+source-read hypothesis, now verified against the real installed
+packages):** the real `sam3` package has no mask-prompt support anywhere
+(image or video path). SAM 2.1's real `SAM2ImagePredictor.predict()` does
+accept a `mask_input` (a low-res logit array, a refinement input layered on
+point/box, not standalone) — confirming the UI spec's "SAM 2.1 adds a Mask
+prompt-input SAM-3 doesn't have" was correct as stated.
+
+This was also the first time the full 24-test ml-worker suite ran against
+the real `sam2` package rather than a throwaway stub (every task from
+Task 6 onward, across both this phase and Phase 2a, had used a stub since
+`sam2` wasn't installed yet) — all 24 passed, zero API-assumption
+discrepancies found between the adapter code and the real package.
+
+**Known gap carried forward, not fixed (explicit call, not an oversight):**
+- The manual VRAM-instability check specified in the plan (repeating a
+  point-prompt predict with 1-2px jitter on a real lesion image, mirroring
+  the test that caught SAM-3's mask instability — see Phase 2a's own
+  deviation log and `.superpowers/sdd/task-6-report.md`) has not yet been
+  run against real weights/GPU; still open per the plan's own "Manual
+  Verification" section.
+
 ### Phase 2b: Detection adapters, datasets, training — NOT STARTED, NOT PLANNED
 
 Scope per the design spec: Ultralytics YOLO11/YOLO12/YOLO26 detection
