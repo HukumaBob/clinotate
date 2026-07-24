@@ -72,6 +72,29 @@ def test_create_sequence_extracts_frames():
     assert all(f["image_url"].startswith("http") for f in frames)
 
 
+def test_sequence_can_be_created_without_a_video():
+    headers = _auth_headers()
+    procedure_response = client.post(
+        "/taxonomy/procedures", json={"name": "Standalone import"}, headers=headers
+    )
+    procedure_id = procedure_response.json()["id"]
+
+    from app.db import SessionLocal
+    from app.media.models import Sequence
+
+    session = SessionLocal()
+    try:
+        sequence = Sequence(video_id=None, procedure_id=procedure_id, start_time=0, duration=0)
+        session.add(sequence)
+        session.commit()
+        session.refresh(sequence)
+        assert sequence.id > 0
+        assert sequence.video_id is None
+        assert sequence.procedure_id == procedure_id
+    finally:
+        session.close()
+
+
 def test_get_frame_returns_browser_loadable_image_url():
     headers = _auth_headers()
     with open(FIXTURE_VIDEO, "rb") as f:

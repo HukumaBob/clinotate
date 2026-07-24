@@ -24,7 +24,8 @@ class Sequence(Base):
     __tablename__ = "sequences"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    video_id: Mapped[int] = mapped_column(ForeignKey("videos.id"))
+    video_id: Mapped[int | None] = mapped_column(ForeignKey("videos.id"), nullable=True)
+    procedure_id: Mapped[int | None] = mapped_column(ForeignKey("procedures.id"), nullable=True)
     start_time: Mapped[int] = mapped_column(Integer, default=0)
     duration: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
