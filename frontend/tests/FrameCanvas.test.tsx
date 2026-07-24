@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createFrameEditorStore } from "../src/features/annotation/frameEditorStore";
 import { FrameCanvas } from "../src/features/annotation/FrameCanvas";
@@ -14,31 +14,78 @@ const FRAME = {
   image_url: "https://example.test/frame.png",
 };
 
+function setBoundingRect(canvas: Element) {
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    configurable: true,
+  });
+}
+
 describe("FrameCanvas", () => {
-  it("adds a point prompt to the store on left click", () => {
+  it("adds a positive point prompt and calls onPointOrBoxSubmit on a plain left click", () => {
     const store = createFrameEditorStore();
-    render(<FrameCanvas frame={FRAME} annotations={[]} store={store} />);
+    const onPointOrBoxSubmit = vi.fn();
+    const onRemoveAnnotation = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={onRemoveAnnotation}
+      />,
+    );
 
     const canvas = screen.getByTestId("frame-canvas");
-    Object.defineProperty(canvas, "getBoundingClientRect", {
-      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
-    });
+    setBoundingRect(canvas);
     fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
     fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
 
     const prompts = store.getState().pendingPrompts;
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toEqual({ type: "point", coords: [0.5, 0.5], label: true });
+    expect(onPointOrBoxSubmit).toHaveBeenCalledWith({ type: "point", coords: [0.5, 0.5], label: true });
   });
 
-  it("adds a box prompt to the store on left-click-drag", () => {
+  it("adds a negative point prompt on a shift+left click", () => {
     const store = createFrameEditorStore();
-    render(<FrameCanvas frame={FRAME} annotations={[]} store={store} />);
+    const onPointOrBoxSubmit = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
 
     const canvas = screen.getByTestId("frame-canvas");
-    Object.defineProperty(canvas, "getBoundingClientRect", {
-      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
-    });
+    setBoundingRect(canvas);
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0, shiftKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0, shiftKey: true });
+
+    const prompts = store.getState().pendingPrompts;
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toEqual({ type: "point", coords: [0.5, 0.5], label: false });
+    expect(onPointOrBoxSubmit).toHaveBeenCalledWith({ type: "point", coords: [0.5, 0.5], label: false });
+  });
+
+  it("adds a box prompt and calls onPointOrBoxSubmit on left-click-drag", () => {
+    const store = createFrameEditorStore();
+    const onPointOrBoxSubmit = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
     fireEvent.mouseDown(canvas, { clientX: 40, clientY: 20, button: 0 });
     fireEvent.mouseMove(canvas, { clientX: 200, clientY: 100, button: 0 });
     fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
@@ -47,16 +94,50 @@ describe("FrameCanvas", () => {
     expect(prompts).toHaveLength(1);
     expect(prompts[0].type).toBe("box");
     expect(prompts[0].coords).toEqual([0.1, 0.1, 0.5, 0.5]);
+    expect(onPointOrBoxSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "box", coords: [0.1, 0.1, 0.5, 0.5] }),
+    );
   });
 
-  it("does not add a prompt for a plain click when ctrl is held (remove gesture, no shape under cursor)", () => {
+  it("cancels an in-progress box without submitting when its cancel (x) is clicked before mouseup", () => {
     const store = createFrameEditorStore();
-    render(<FrameCanvas frame={FRAME} annotations={[]} store={store} />);
+    const onPointOrBoxSubmit = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
 
     const canvas = screen.getByTestId("frame-canvas");
-    Object.defineProperty(canvas, "getBoundingClientRect", {
-      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
-    });
+    setBoundingRect(canvas);
+    fireEvent.mouseDown(canvas, { clientX: 40, clientY: 20, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    const cancelButton = screen.getByRole("button", { name: /cancel box/i });
+    fireEvent.click(cancelButton);
+
+    expect(store.getState().pendingPrompts).toHaveLength(0);
+    expect(onPointOrBoxSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not add a prompt for a plain click when ctrl is held and no annotation is under the cursor", () => {
+    const store = createFrameEditorStore();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
     fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0, ctrlKey: true });
     fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0, ctrlKey: true });
 
@@ -66,17 +147,18 @@ describe("FrameCanvas", () => {
   it("rasterizes a freehand stroke to mask_png when activeTool is mask", () => {
     const store = createFrameEditorStore();
     store.getState().setActiveTool("mask");
-    render(<FrameCanvas frame={FRAME} annotations={[]} store={store} />);
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
 
     const canvas = screen.getByTestId("frame-canvas") as HTMLCanvasElement;
-    Object.defineProperty(canvas, "getBoundingClientRect", {
-      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
-    });
-    // Stub on the prototype (not just the queried `frame-canvas` element) so
-    // the offscreen mask-only canvas -- created internally via
-    // `document.createElement("canvas")` and never attached to the DOM --
-    // also gets a working getContext/toDataURL under jsdom, which has no
-    // real canvas 2D backend.
+    setBoundingRect(canvas);
     HTMLCanvasElement.prototype.getContext =
       HTMLCanvasElement.prototype.getContext ??
       (() => ({
@@ -85,10 +167,15 @@ describe("FrameCanvas", () => {
         beginPath: () => {},
         moveTo: () => {},
         lineTo: () => {},
+        arc: () => {},
+        fill: () => {},
+        strokeRect: () => {},
         stroke: () => {},
         strokeStyle: "",
+        fillStyle: "",
         lineWidth: 0,
         lineCap: "round",
+        getImageData: () => ({ data: new Uint8ClampedArray(4) }),
       }) as never);
     HTMLCanvasElement.prototype.toDataURL = () => "data:image/png;base64,ZmFrZS1wbmc=";
 
