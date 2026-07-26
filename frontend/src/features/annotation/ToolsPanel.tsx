@@ -12,7 +12,6 @@ interface ToolsPanelProps {
   store: FrameEditorStore;
   annotations: Annotation[];
   frameId: number;
-  onGenerateFromMask: () => void;
   onTrack: () => void;
 }
 
@@ -20,7 +19,7 @@ const PRESET_COLORS = ["#22d3ee", "#f87171", "#4ade80", "#facc15", "#a78bfa", "#
 const TOOLS: PromptType[] = ["point", "box", "mask"];
 const TOOL_LABELS: Record<PromptType, string> = { point: "Point", box: "Box", mask: "Mask" };
 
-export function ToolsPanel({ store, annotations, frameId, onGenerateFromMask, onTrack }: ToolsPanelProps) {
+export function ToolsPanel({ store, annotations, frameId, onTrack }: ToolsPanelProps) {
   const activeModel = useStore(store, (state) => state.activeModel);
   const activeTool = useStore(store, (state) => state.activeTool);
   const setActiveModel = useStore(store, (state) => state.setActiveModel);
@@ -78,6 +77,11 @@ export function ToolsPanel({ store, annotations, frameId, onGenerateFromMask, on
             Click = include · Shift+click = exclude · Drag = box · Ctrl+click a mask = remove
           </p>
         )}
+        {activeTool === "mask" && (
+          <p className="pt-1 text-[11px] leading-snug text-gray-500">
+            Trace an outline and release to predict · trace another to refine
+          </p>
+        )}
       </section>
 
       <div className="border-t border-gray-800" />
@@ -110,15 +114,6 @@ export function ToolsPanel({ store, annotations, frameId, onGenerateFromMask, on
             />
           ))}
         </div>
-        {activeTool === "mask" && (
-          <button
-            type="button"
-            onClick={onGenerateFromMask}
-            className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-700"
-          >
-            Generate from mask
-          </button>
-        )}
       </section>
 
       <div className="border-t border-gray-800" />

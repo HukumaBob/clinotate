@@ -7,12 +7,12 @@ import { apiClient } from "../src/shared/api/client";
 import { createFrameEditorStore } from "../src/features/annotation/frameEditorStore";
 import { ToolsPanel } from "../src/features/annotation/ToolsPanel";
 
-function renderPanel(onGenerateFromMask = vi.fn(), onTrack = vi.fn(), store = createFrameEditorStore()) {
+function renderPanel(onTrack = vi.fn(), store = createFrameEditorStore()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(apiClient, "GET").mockResolvedValue({ data: [], error: undefined, response: new Response() } as never);
   render(
     <QueryClientProvider client={queryClient}>
-      <ToolsPanel store={store} annotations={[]} frameId={1} onGenerateFromMask={onGenerateFromMask} onTrack={onTrack} />
+      <ToolsPanel store={store} annotations={[]} frameId={1} onTrack={onTrack} />
     </QueryClientProvider>,
   );
   return store;
@@ -40,17 +40,11 @@ describe("ToolsPanel", () => {
     expect(screen.queryByRole("button", { name: "Add mask" })).not.toBeInTheDocument();
   });
 
-  it("shows 'Generate from mask' and calls onGenerateFromMask only when the Mask tool is active", async () => {
-    const onGenerateFromMask = vi.fn();
-    const store = renderPanel(onGenerateFromMask);
-
-    expect(screen.queryByRole("button", { name: "Generate from mask" })).not.toBeInTheDocument();
+  it("does not render a 'Generate from mask' button -- tracing and closing an outline predicts immediately", async () => {
+    renderPanel();
 
     await userEvent.click(screen.getByRole("button", { name: "Mask" }));
-    expect(screen.getByRole("button", { name: "Generate from mask" })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Generate from mask" }));
-    expect(onGenerateFromMask).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Generate from mask" })).not.toBeInTheDocument();
   });
 
   it("passes frameId through to MasksList", async () => {

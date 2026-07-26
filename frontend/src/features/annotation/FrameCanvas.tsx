@@ -426,6 +426,11 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
         const dataUrl = maskCanvas.toDataURL("image/png");
         const base64 = dataUrl.split(",")[1] ?? "";
         setMaskPrompt(base64);
+        // Submit immediately, same as point/box -- a closed, filled stroke
+        // is already a complete prompt the instant the mouse is released,
+        // so there's no separate "confirm" step needed (an explicit
+        // Generate button was redundant with the gesture itself).
+        onPointOrBoxSubmit(store.getState().pendingPrompts);
       }
       strokePointsRef.current = [];
       return;

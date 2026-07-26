@@ -106,11 +106,6 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
     refinePredict(prompts);
   }
 
-  function handleGenerateFromMask() {
-    refinePredict(store.getState().pendingPrompts);
-    store.getState().clearPrompts();
-  }
-
   // Deleting the mask that's currently being refined (the draft) must also
   // drop its accumulated point/box markers -- otherwise the points stay on
   // screen pointing at a mask that no longer exists.
@@ -195,8 +190,6 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
               aspectRatio: `${frameQuery.data.width} / ${frameQuery.data.height}`,
               maxWidth: "100%",
               maxHeight: "100%",
-              width: "100%",
-              height: "100%",
             }}
           >
             <FrameCanvas
@@ -212,7 +205,6 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
           store={store}
           annotations={annotationsQuery.data ?? []}
           frameId={frameId}
-          onGenerateFromMask={handleGenerateFromMask}
           onTrack={handleTrack}
         />
       </div>

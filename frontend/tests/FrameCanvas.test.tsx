@@ -235,15 +235,16 @@ describe("FrameCanvas", () => {
     expect(store.getState().pendingPrompts).toHaveLength(0);
   });
 
-  it("rasterizes a freehand stroke to mask_png when activeTool is mask", () => {
+  it("rasterizes a freehand stroke to mask_png and submits immediately on mouseup, no separate confirm step", () => {
     const store = createFrameEditorStore();
     store.getState().setActiveTool("mask");
+    const onPointOrBoxSubmit = vi.fn();
     render(
       <FrameCanvas
         frame={FRAME}
         annotations={[]}
         store={store}
-        onPointOrBoxSubmit={vi.fn()}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
         onRemoveAnnotation={vi.fn()}
       />,
     );
@@ -281,6 +282,13 @@ describe("FrameCanvas", () => {
     expect(prompts).toHaveLength(1);
     expect(prompts[0].type).toBe("mask");
     expect(prompts[0].mask_png).toBe("ZmFrZS1wbmc=");
+
+    // No "Generate from mask" button exists anymore -- closing the traced
+    // outline on mouseup must submit the prompt set immediately, same as
+    // point/box.
+    expect(onPointOrBoxSubmit).toHaveBeenCalledWith([
+      expect.objectContaining({ type: "mask", mask_png: "ZmFrZS1wbmc=" }),
+    ]);
   });
 
   it("does not remove any annotation on ctrl+click while a topmost annotation's mask is still loading", () => {
