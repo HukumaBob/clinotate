@@ -44,7 +44,7 @@ describe("FrameCanvas", () => {
     const prompts = store.getState().pendingPrompts;
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toEqual({ type: "point", coords: [0.5, 0.5], label: true });
-    expect(onPointOrBoxSubmit).toHaveBeenCalledWith({ type: "point", coords: [0.5, 0.5], label: true });
+    expect(onPointOrBoxSubmit).toHaveBeenCalledWith([{ type: "point", coords: [0.5, 0.5], label: true }]);
   });
 
   it("adds a negative point prompt on a shift+left click", () => {
@@ -68,7 +68,98 @@ describe("FrameCanvas", () => {
     const prompts = store.getState().pendingPrompts;
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toEqual({ type: "point", coords: [0.5, 0.5], label: false });
-    expect(onPointOrBoxSubmit).toHaveBeenCalledWith({ type: "point", coords: [0.5, 0.5], label: false });
+    expect(onPointOrBoxSubmit).toHaveBeenCalledWith([{ type: "point", coords: [0.5, 0.5], label: false }]);
+  });
+
+  it("accumulates a second refinement point instead of replacing the first, and submits the full set", () => {
+    const store = createFrameEditorStore();
+    const onPointOrBoxSubmit = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
+
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    fireEvent.mouseDown(canvas, { clientX: 40, clientY: 20, button: 0, shiftKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 40, clientY: 20, button: 0, shiftKey: true });
+
+    const prompts = store.getState().pendingPrompts;
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toEqual({ type: "point", coords: [0.5, 0.5], label: true });
+    expect(prompts[1]).toEqual({ type: "point", coords: [0.1, 0.1], label: false });
+
+    expect(onPointOrBoxSubmit).toHaveBeenLastCalledWith([
+      { type: "point", coords: [0.5, 0.5], label: true },
+      { type: "point", coords: [0.1, 0.1], label: false },
+    ]);
+  });
+
+  it("clicking an existing point marker removes it and resubmits the remaining prompts", () => {
+    const store = createFrameEditorStore();
+    const onPointOrBoxSubmit = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
+
+    // Place two points.
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseDown(canvas, { clientX: 40, clientY: 20, button: 0, shiftKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 40, clientY: 20, button: 0, shiftKey: true });
+    expect(store.getState().pendingPrompts).toHaveLength(2);
+
+    // Click back on the first point's marker (same coords) to remove it.
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    const prompts = store.getState().pendingPrompts;
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toEqual({ type: "point", coords: [0.1, 0.1], label: false });
+    expect(onPointOrBoxSubmit).toHaveBeenLastCalledWith([{ type: "point", coords: [0.1, 0.1], label: false }]);
+  });
+
+  it("clicking the last remaining point marker removes it and submits an empty prompt list", () => {
+    const store = createFrameEditorStore();
+    const onPointOrBoxSubmit = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
+
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    expect(store.getState().pendingPrompts).toHaveLength(0);
+    expect(onPointOrBoxSubmit).toHaveBeenLastCalledWith([]);
   });
 
   it("adds a box prompt and calls onPointOrBoxSubmit on left-click-drag", () => {
@@ -94,9 +185,9 @@ describe("FrameCanvas", () => {
     expect(prompts).toHaveLength(1);
     expect(prompts[0].type).toBe("box");
     expect(prompts[0].coords).toEqual([0.1, 0.1, 0.5, 0.5]);
-    expect(onPointOrBoxSubmit).toHaveBeenCalledWith(
+    expect(onPointOrBoxSubmit).toHaveBeenCalledWith([
       expect.objectContaining({ type: "box", coords: [0.1, 0.1, 0.5, 0.5] }),
-    );
+    ]);
   });
 
   it("cancels an in-progress box without submitting when its cancel (x) is clicked before mouseup", () => {
@@ -159,24 +250,27 @@ describe("FrameCanvas", () => {
 
     const canvas = screen.getByTestId("frame-canvas") as HTMLCanvasElement;
     setBoundingRect(canvas);
-    HTMLCanvasElement.prototype.getContext =
-      HTMLCanvasElement.prototype.getContext ??
-      (() => ({
-        clearRect: () => {},
-        drawImage: () => {},
-        beginPath: () => {},
-        moveTo: () => {},
-        lineTo: () => {},
-        arc: () => {},
-        fill: () => {},
-        strokeRect: () => {},
-        stroke: () => {},
-        strokeStyle: "",
-        fillStyle: "",
-        lineWidth: 0,
-        lineCap: "round",
-        getImageData: () => ({ data: new Uint8ClampedArray(4) }),
-      }) as never);
+    // jsdom's real getContext() is a genuine function (never null/undefined
+    // itself, only its RETURN value is null), so a `?? fallback` here would
+    // never actually install this mock -- it must be an unconditional
+    // assignment.
+    HTMLCanvasElement.prototype.getContext = (() => ({
+      clearRect: () => {},
+      drawImage: () => {},
+      beginPath: () => {},
+      closePath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      arc: () => {},
+      fill: () => {},
+      strokeRect: () => {},
+      stroke: () => {},
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      lineCap: "round",
+      getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+    })) as never;
     HTMLCanvasElement.prototype.toDataURL = () => "data:image/png;base64,ZmFrZS1wbmc=";
 
     fireEvent.mouseDown(canvas, { clientX: 100, clientY: 50, button: 0 });
@@ -237,6 +331,7 @@ describe("FrameCanvas", () => {
         drawImage: () => {},
         putImageData: () => {},
         beginPath: () => {},
+        closePath: () => {},
         moveTo: () => {},
         lineTo: () => {},
         arc: () => {},
@@ -293,6 +388,103 @@ describe("FrameCanvas", () => {
     fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0, ctrlKey: true });
 
     expect(onRemoveAnnotation).not.toHaveBeenCalled();
+
+    window.Image = realImage;
+    HTMLCanvasElement.prototype.getContext = originalGetContext;
+  });
+
+  it("redraws pending point markers after a mask image finishes loading, instead of leaving them clobbered", () => {
+    // Regression test: a mask annotation's Image.onload draws straight onto
+    // the shared visible canvas (ctx.drawImage), which previously wiped out
+    // any point markers already painted there. In practice this meant a
+    // refinement point was visible for a moment after being placed, then
+    // vanished the instant its own predict result's mask image finished
+    // loading -- even though the point was still part of pendingPrompts.
+    const realImage = window.Image;
+    const instances: FakeImage[] = [];
+
+    class FakeImage {
+      onload: (() => void) | null = null;
+      crossOrigin = "";
+      private _src = "";
+      width = 400;
+      height = 200;
+
+      constructor() {
+        instances.push(this);
+      }
+
+      set src(value: string) {
+        this._src = value;
+      }
+
+      get src() {
+        return this._src;
+      }
+    }
+
+    // @ts-expect-error -- test double replacing the global Image constructor
+    window.Image = FakeImage;
+
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    const calls: string[] = [];
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
+      const data = new Uint8ClampedArray(this.width * this.height * 4);
+      return {
+        clearRect: () => {},
+        drawImage: () => calls.push("drawImage"),
+        putImageData: () => {},
+        beginPath: () => {},
+        moveTo: () => {},
+        lineTo: () => {},
+        arc: () => calls.push("arc"),
+        fill: () => calls.push("fill"),
+        strokeRect: () => {},
+        stroke: () => {},
+        strokeStyle: "",
+        fillStyle: "",
+        lineWidth: 0,
+        lineCap: "round",
+        globalAlpha: 1,
+        getImageData: () => ({ data, width: this.width, height: this.height, colorSpace: "srgb" }) as ImageData,
+      } as never;
+    };
+
+    const store = createFrameEditorStore();
+    store.getState().addPrompt({ type: "point", coords: [0.5, 0.5], label: true });
+
+    const annotations = [
+      { id: 1, frame_id: 1, type: "mask", payload: {}, mask_url: "https://example.test/mask-1.png" },
+    ];
+
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={annotations as never}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      instances[0]?.onload?.();
+    });
+    const maskImage = instances[1];
+    expect(maskImage).toBeDefined();
+
+    calls.length = 0;
+    act(() => {
+      maskImage?.onload?.();
+    });
+
+    // The mask's own drawImage happens first, then the point marker (arc +
+    // fill) must be drawn AFTER it, so the point ends up on top.
+    const drawImageIndex = calls.indexOf("drawImage");
+    const arcIndex = calls.indexOf("arc");
+    expect(drawImageIndex).toBeGreaterThanOrEqual(0);
+    expect(arcIndex).toBeGreaterThan(drawImageIndex);
+    expect(calls).toContain("fill");
 
     window.Image = realImage;
     HTMLCanvasElement.prototype.getContext = originalGetContext;

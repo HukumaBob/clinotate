@@ -56,9 +56,21 @@ export function MasksList({ annotations, store, frameId }: MasksListProps) {
     }
   }
 
+  // Deleting the mask currently being refined (the draft) must also drop
+  // its accumulated point/box markers -- otherwise the points stay on
+  // screen pointing at a mask that no longer exists (mirrors the same
+  // check in FrameEditor's own handleRemoveAnnotation, for the ctrl-click-
+  // on-canvas delete path).
+  function clearPromptsIfDraft(annotationId: number) {
+    if (store.getState().draftAnnotationId === annotationId) {
+      store.getState().clearPrompts();
+    }
+  }
+
   function handleDeleteClick(annotationId: number) {
     if (pendingDeleteId === annotationId) {
       deleteAnnotation.mutate(annotationId);
+      clearPromptsIfDraft(annotationId);
       setPendingDeleteId(null);
     } else {
       setPendingDeleteId(annotationId);
@@ -68,7 +80,12 @@ export function MasksList({ annotations, store, frameId }: MasksListProps) {
 
   function handleBulkDeleteClick(jobId: number) {
     if (pendingBulkJobId === jobId) {
+      const draftId = store.getState().draftAnnotationId;
+      const draftAnnotation = maskAnnotations.find((a) => a.id === draftId);
       deleteJobAnnotations.mutate(jobId);
+      if (draftAnnotation?.job_id === jobId) {
+        store.getState().clearPrompts();
+      }
       setPendingBulkJobId(null);
     } else {
       setPendingBulkJobId(jobId);

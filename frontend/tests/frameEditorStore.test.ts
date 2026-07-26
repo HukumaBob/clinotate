@@ -21,6 +21,27 @@ describe("frameEditorStore", () => {
     expect(store.getState().pendingPrompts).toHaveLength(0);
   });
 
+  it("clearPrompts also clears the draft annotation id", () => {
+    const store = createFrameEditorStore();
+    store.getState().setDraftAnnotationId(9);
+    store.getState().clearPrompts();
+    expect(store.getState().draftAnnotationId).toBeNull();
+  });
+
+  it("removePromptAt removes only the prompt at that index", () => {
+    const store = createFrameEditorStore();
+    store.getState().addPrompt({ type: "point", coords: [0.1, 0.1], label: true });
+    store.getState().addPrompt({ type: "point", coords: [0.2, 0.2], label: false });
+    store.getState().addPrompt({ type: "point", coords: [0.3, 0.3], label: true });
+
+    store.getState().removePromptAt(1);
+
+    const prompts = store.getState().pendingPrompts;
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0].coords).toEqual([0.1, 0.1]);
+    expect(prompts[1].coords).toEqual([0.3, 0.3]);
+  });
+
   it("selecting an annotation fills the label selection from setLabelSelection", () => {
     const store = createFrameEditorStore();
     store.getState().setSelectedAnnotation(7);

@@ -148,6 +148,50 @@ describe("MasksList delete", () => {
     );
   });
 
+  it("clears pendingPrompts when the deleted annotation is the current draft", async () => {
+    const store = createFrameEditorStore();
+    store.getState().addPrompt({ type: "point", coords: [0.5, 0.5], label: true });
+    store.getState().setDraftAnnotationId(55);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+    vi.spyOn(apiClient, "DELETE").mockResolvedValue({ data: undefined, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /delete mask/i }));
+    await userEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+
+    await waitFor(() => expect(apiClient.DELETE).toHaveBeenCalled());
+    expect(store.getState().pendingPrompts).toHaveLength(0);
+  });
+
+  it("does NOT clear pendingPrompts when the deleted annotation is not the current draft", async () => {
+    const store = createFrameEditorStore();
+    store.getState().addPrompt({ type: "point", coords: [0.5, 0.5], label: true });
+    store.getState().setDraftAnnotationId(999); // a different, unrelated draft
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+    vi.spyOn(apiClient, "DELETE").mockResolvedValue({ data: undefined, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /delete mask/i }));
+    await userEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+
+    await waitFor(() => expect(apiClient.DELETE).toHaveBeenCalled());
+    expect(store.getState().pendingPrompts).toHaveLength(1);
+  });
+
   it("does not show 'Delete all from this run' for an annotation with no job_id", async () => {
     const store = createFrameEditorStore();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

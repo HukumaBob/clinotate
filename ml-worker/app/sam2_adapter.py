@@ -54,13 +54,21 @@ def _mask_png_to_logits(mask_png_bytes: bytes) -> np.ndarray:
     return logits[None, :, :]
 
 
-def _prompts_to_predict_kwargs(prompts: list[dict]) -> dict:
+def _prompts_to_predict_kwargs(prompts: list[dict], image_width: int, image_height: int) -> dict:
     """Splits this project's point/box/mask prompt dicts into the separate
     point_coords/point_labels/box/mask_input kwargs SAM2ImagePredictor.predict()
     accepts together in one call (confirmed by reading
     sam2/sam2_image_predictor.py's predict() and _prep_prompts() — points,
     box, and mask are independent optional arguments, not mutually
-    exclusive types like SAM-3's box/text/point prompt forms)."""
+    exclusive types like SAM-3's box/text/point prompt forms).
+
+    point_coords/box are denormalized from this platform's [0,1]-normalized
+    coordinate convention into pixel space here, because
+    SAM2ImagePredictor.predict() is called with its default
+    normalize_coords=True, which expects PIXEL coordinates and normalizes
+    them itself (see SAM2Transforms.transform_coords in the installed sam2
+    package) — passing already-[0,1] values through unchanged causes double
+    normalization, collapsing every click toward (0,0)."""
     if not prompts:
         raise ValueError("at least one prompt is required")
 
@@ -71,10 +79,12 @@ def _prompts_to_predict_kwargs(prompts: list[dict]) -> dict:
 
     for prompt in prompts:
         if prompt["type"] == "point":
-            point_coords.append(prompt["coords"])
+            x, y = prompt["coords"]
+            point_coords.append([x * image_width, y * image_height])
             point_labels.append(int(bool(prompt["label"])))
         elif prompt["type"] == "box":
-            box = prompt["coords"]
+            x1, y1, x2, y2 = prompt["coords"]
+            box = [x1 * image_width, y1 * image_height, x2 * image_width, y2 * image_height]
         elif prompt["type"] == "mask":
             import base64
 
@@ -147,7 +157,7 @@ class Sam2Adapter:
     def predict(self, frame_bytes: bytes, prompts: list[dict]) -> MaskResult:
         predictor = self._get_image_predictor()
         image = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
-        kwargs = _prompts_to_predict_kwargs(prompts)
+        kwargs = _prompts_to_predict_kwargs(prompts, image_width=image.width, image_height=image.height)
 
         with _clear_cuda_cache_on_error():
             predictor.set_image(np.array(image))
@@ -166,9 +176,17 @@ class Sam2Adapter:
         return MaskResult(mask_png=buffer.getvalue(), score=float(scores[best_index]))
 
     def _frames_to_video_dir(self, frames: list[bytes], tmp_dir: str) -> str:
+        # SAM2VideoPredictor.init_state() -> load_video_frames_from_jpg_images()
+        # only scans for *.jpg/*.jpeg files (confirmed by reading the
+        # installed sam2 source) and silently ignores anything else, so
+        # this frame's bytes -- which this platform stores as PNG in MinIO
+        # -- must be RE-ENCODED to actual JPEG here, not just written under
+        # a renamed extension (a mismatched format/extension would fail to
+        # decode inside SAM2's own loader).
         for index, frame_data in enumerate(frames):
-            frame_path = Path(tmp_dir) / f"{index:05d}.png"
-            frame_path.write_bytes(frame_data)
+            image = Image.open(io.BytesIO(frame_data)).convert("RGB")
+            frame_path = Path(tmp_dir) / f"{index:05d}.jpg"
+            image.save(frame_path, format="JPEG", quality=95)
         return tmp_dir
 
     def track(
@@ -192,6 +210,7 @@ class Sam2Adapter:
 
         video_predictor = self._get_video_predictor()
         obj_id = 1
+        image_width, image_height = Image.open(io.BytesIO(frames[0])).size
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             self._frames_to_video_dir(frames, tmp_dir)
@@ -199,27 +218,50 @@ class Sam2Adapter:
             with _clear_cuda_cache_on_error():
                 inference_state = video_predictor.init_state(video_path=tmp_dir)
 
-                prompt = prompts[0]
-                if prompt["type"] == "mask":
+                # Unlike predict()'s single-call point_coords/box/mask_input
+                # combination, add_new_points_or_box() takes points AND box
+                # together but add_new_mask() is a separate, exclusive call
+                # (confirmed against the installed sam2 source) -- so a mask
+                # prompt is applied alone, while ALL point prompts (not just
+                # the first) plus at most one box are collected and applied
+                # in a single add_new_points_or_box() call. Using only
+                # prompts[0] here previously dropped every refinement point
+                # after the first, silently ignoring negative points used to
+                # narrow the mask before tracking.
+                mask_prompt = next((p for p in prompts if p["type"] == "mask"), None)
+                if mask_prompt is not None:
                     import base64
 
-                    mask = _mask_png_to_logits(base64.b64decode(prompt["mask_png"]))[0] > 0
+                    mask = _mask_png_to_logits(base64.b64decode(mask_prompt["mask_png"]))[0] > 0
                     video_predictor.add_new_mask(
                         inference_state, frame_idx=anchor_frame_index, obj_id=obj_id, mask=mask,
                     )
-                elif prompt["type"] == "box":
-                    video_predictor.add_new_points_or_box(
-                        inference_state, frame_idx=anchor_frame_index, obj_id=obj_id,
-                        box=prompt["coords"],
-                    )
-                elif prompt["type"] == "point":
-                    x, y = prompt["coords"]
-                    video_predictor.add_new_points_or_box(
-                        inference_state, frame_idx=anchor_frame_index, obj_id=obj_id,
-                        points=[[x, y]], labels=[int(bool(prompt["label"]))],
-                    )
                 else:
-                    raise ValueError(f"Unknown prompt type: {prompt['type']!r}")
+                    point_coords = []
+                    point_labels = []
+                    box = None
+                    for prompt in prompts:
+                        if prompt["type"] == "point":
+                            x, y = prompt["coords"]
+                            point_coords.append([x * image_width, y * image_height])
+                            point_labels.append(int(bool(prompt["label"])))
+                        elif prompt["type"] == "box":
+                            x1, y1, x2, y2 = prompt["coords"]
+                            box = np.array(
+                                [x1 * image_width, y1 * image_height, x2 * image_width, y2 * image_height]
+                            )
+                        else:
+                            raise ValueError(f"Unknown prompt type: {prompt['type']!r}")
+
+                    kwargs = {}
+                    if point_coords:
+                        kwargs["points"] = point_coords
+                        kwargs["labels"] = point_labels
+                    if box is not None:
+                        kwargs["box"] = box
+                    video_predictor.add_new_points_or_box(
+                        inference_state, frame_idx=anchor_frame_index, obj_id=obj_id, **kwargs,
+                    )
 
                 frame_masks: dict[int, np.ndarray] = {}
                 if forward > 0:

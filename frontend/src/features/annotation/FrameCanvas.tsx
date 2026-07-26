@@ -11,7 +11,7 @@ interface FrameCanvasProps {
   frame: Frame;
   annotations: Annotation[];
   store: FrameEditorStore;
-  onPointOrBoxSubmit: (prompt: PromptDraft) => void;
+  onPointOrBoxSubmit: (prompts: PromptDraft[]) => void;
   onRemoveAnnotation: (annotationId: number) => void;
 }
 
@@ -27,12 +27,6 @@ interface PendingBox {
   endY: number;
 }
 
-interface RecentPoint {
-  x: number;
-  y: number;
-  positive: boolean;
-}
-
 const POSITIVE_COLOR = "rgba(74, 222, 128, 0.95)";
 const NEGATIVE_COLOR = "rgba(248, 113, 113, 0.95)";
 const BOX_COLOR = "rgba(96, 165, 250, 0.95)";
@@ -40,20 +34,31 @@ const BOX_COLOR = "rgba(96, 165, 250, 0.95)";
 export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onRemoveAnnotation }: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const maskTintCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const strokePointsRef = useRef<[number, number][]>([]);
   const maskImageDataCacheRef = useRef<Map<number, ImageData>>(new Map());
   const [frameImage, setFrameImage] = useState<HTMLImageElement | null>(null);
   const [pendingBox, setPendingBox] = useState<PendingBox | null>(null);
-  // Points the user just placed, kept visible until the next annotations
-  // refetch replaces them with a real mask overlay (or, for a rejected/
-  // failed job, until cleared manually) -- without this, a submitted point
-  // is invisible for the full round trip to SAM 2.1, which is exactly the
-  // "invisible gesture" complaint this rewrite exists to fix.
-  const [recentPoints, setRecentPoints] = useState<RecentPoint[]>([]);
+  // A submitted rough-mask stroke only ever existed as pixels drawn
+  // directly on the visible canvas -- not as reusable data -- so the very
+  // next full redraw (triggered by pendingPrompts changing, which addPrompt
+  // itself causes) wiped it out with nothing to redraw. Decoding it back
+  // into an Image here makes it part of the same overlay every other
+  // pending prompt already draws from, so it survives redraws until
+  // "Generate from mask" clears pendingPrompts.
+  const [pendingMaskStrokeImage, setPendingMaskStrokeImage] = useState<HTMLImageElement | null>(null);
 
   const activeTool = useStore(store, (state) => state.activeTool);
   const addPrompt = useStore(store, (state) => state.addPrompt);
+  const setMaskPrompt = useStore(store, (state) => state.setMaskPrompt);
+  // Points the user has placed for the object currently being refined --
+  // read straight from the store (not a local echo) so they stay visible
+  // for as long as they're actually part of the prompt set, through every
+  // annotations refetch, instead of vanishing the moment the first draft
+  // mask arrives.
+  const pendingPrompts = useStore(store, (state) => state.pendingPrompts);
+  const removePromptAt = useStore(store, (state) => state.removePromptAt);
   const selectedAnnotationId = useStore(store, (state) => state.selectedAnnotationId);
 
   useEffect(() => {
@@ -73,6 +78,12 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
     canvas.height = frame.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(frameImage, 0, 0, canvas.width, canvas.height);
+    // Draw pending point markers immediately, before any mask image has had
+    // a chance to load -- otherwise there's a visible gap (bare frame, no
+    // points, no mask) between this redraw firing and the async mask
+    // image(s) finishing, which happens on every annotations refetch (e.g.
+    // right after submitting a refinement point).
+    drawPendingPoints();
 
     maskImageDataCacheRef.current = new Map();
 
@@ -98,18 +109,51 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
           offCtx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
           maskImageDataCacheRef.current.set(annotation.id, offCtx.getImageData(0, 0, canvas.width, canvas.height));
         }
+
+        // A mask image's onload draws straight onto the visible canvas,
+        // stomping over any point markers drawn there previously -- redraw
+        // them on top so a refinement point never visually disappears the
+        // instant its own predict result lands (they're still part of
+        // pendingPrompts; only the rendering was clobbered).
+        drawPendingPoints();
       };
       maskImg.src = annotation.mask_url;
     }
 
-    // A fresh `annotations` array means the parent's query refetched --
-    // either a submitted prompt turned into a real mask, or the frame
-    // changed. Either way, any placeholder point markers are now stale
-    // (superseded by a real overlay, or no longer relevant to this frame),
-    // so clear them rather than leaving a phantom marker with nothing
-    // underneath it once the real mask has rendered.
-    setRecentPoints([]);
   }, [frameImage, frame.width, frame.height, annotations, selectedAnnotationId]);
+
+  // Decode the current mask prompt's mask_png (if any) into an Image so
+  // drawPendingOverlay can redraw the rough-mask stroke on every redraw,
+  // the same way it redraws point markers -- instead of the stroke living
+  // only as pixels on the visible canvas, gone the instant anything forces
+  // a redraw.
+  useEffect(() => {
+    // The backend keeps only the LAST mask prompt if several are present
+    // (each overwrites mask_input in _prompts_to_predict_kwargs's loop), so
+    // the preview must match that -- show the most recent stroke, not the
+    // first.
+    const maskPrompt = [...pendingPrompts].reverse().find((p) => p.type === "mask");
+    if (!maskPrompt?.mask_png) {
+      setPendingMaskStrokeImage(null);
+      // The mask prompt is gone (object finished via Generate from mask, or
+      // pendingPrompts was cleared) -- discard the accumulation canvas too,
+      // so the NEXT rough-mask object starts from a blank canvas instead of
+      // painting on top of the previous object's leftover strokes.
+      maskCanvasRef.current = null;
+      return;
+    }
+    const img = new Image();
+    img.onload = () => setPendingMaskStrokeImage(img);
+    img.src = `data:image/png;base64,${maskPrompt.mask_png}`;
+  }, [pendingPrompts]);
+
+  // Re-draw the point markers whenever the accumulated prompt set changes
+  // (a point added or removed) so they track pendingPrompts live, on top
+  // of whatever draft mask is currently rendered underneath.
+  useEffect(() => {
+    drawPendingOverlay(pendingBox);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPrompts, pendingMaskStrokeImage]);
 
   function toNormalized(clientX: number, clientY: number): [number, number] {
     const canvas = canvasRef.current;
@@ -151,6 +195,27 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
     return null;
   }
 
+  // Finds the index of the nearest pending point prompt within click range
+  // of (normX, normY), so a click can remove a mis-placed refinement point
+  // instead of only ever being able to add more.
+  function hitTestPendingPoint(normX: number, normY: number): number | null {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const radiusNorm = pointMarkerRadius(canvas) / canvas.width;
+    let closestIndex: number | null = null;
+    let closestDistance = Infinity;
+    pendingPrompts.forEach((prompt, index) => {
+      if (prompt.type !== "point") return;
+      const [px, py] = prompt.coords;
+      const distance = Math.hypot(px - normX, py - normY);
+      if (distance <= radiusNorm * 2.5 && distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    return closestIndex;
+  }
+
   function handleMouseDown(event: React.MouseEvent<HTMLCanvasElement>) {
     if (event.button !== 0) return;
     const [x, y] = toNormalized(event.clientX, event.clientY);
@@ -161,21 +226,61 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
       return;
     }
 
+    if (!event.shiftKey) {
+      const pointIndex = hitTestPendingPoint(x, y);
+      if (pointIndex !== null) {
+        removePromptAt(pointIndex);
+        const remaining = store.getState().pendingPrompts;
+        onPointOrBoxSubmit(remaining);
+        return;
+      }
+    }
+
     dragRef.current = { startX: x, startY: y };
     if (activeTool === "mask") {
       strokePointsRef.current = [[x, y]];
+      // Lazily create the offscreen accumulation canvas ONCE per frame and
+      // never reset its width/height (or clearRect it) on a later stroke --
+      // setting .width/.height on a canvas wipes its buffer even when the
+      // value is unchanged, and this used to run on every single stroke,
+      // erasing every previous brush stroke the instant a new one started.
+      // Rough-mask painting is a multi-stroke gesture (the whole point of
+      // a brush tool), so strokes must accumulate on this canvas until
+      // "Generate from mask" is clicked.
       if (!maskCanvasRef.current) {
-        maskCanvasRef.current = document.createElement("canvas");
+        const maskCanvas = document.createElement("canvas");
+        maskCanvas.width = frame.width;
+        maskCanvas.height = frame.height;
+        maskCanvasRef.current = maskCanvas;
       }
-      const maskCanvas = maskCanvasRef.current;
-      maskCanvas.width = frame.width;
-      maskCanvas.height = frame.height;
-      const maskCtx = maskCanvas.getContext("2d");
-      maskCtx?.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
     }
   }
 
-  function drawPendingOverlay(box: PendingBox | null, points: RecentPoint[] = recentPoints) {
+  function pointMarkerRadius(canvas: HTMLCanvasElement): number {
+    return Math.max(4, canvas.width * 0.008);
+  }
+
+  // Draws the current pendingPrompts' point markers on top of whatever is
+  // already on the canvas, WITHOUT clearing it first -- used both by the
+  // full-redraw path (drawPendingOverlay) and by each mask image's onload,
+  // which draws straight onto the visible canvas and would otherwise paint
+  // over any markers already there.
+  function drawPendingPoints() {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const pointRadius = pointMarkerRadius(canvas);
+    for (const prompt of store.getState().pendingPrompts) {
+      if (prompt.type !== "point") continue;
+      const [x, y] = prompt.coords;
+      ctx.fillStyle = prompt.label ? POSITIVE_COLOR : NEGATIVE_COLOR;
+      ctx.beginPath();
+      ctx.arc(x * canvas.width, y * canvas.height, pointRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawPendingOverlay(box: PendingBox | null) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx || !frameImage) return;
@@ -190,13 +295,37 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
       ctx.globalAlpha = 1;
     }
 
-    const pointRadius = Math.max(4, canvas.width * 0.008);
-    for (const point of points) {
-      ctx.fillStyle = point.positive ? POSITIVE_COLOR : NEGATIVE_COLOR;
-      ctx.beginPath();
-      ctx.arc(point.x * canvas.width, point.y * canvas.height, pointRadius, 0, Math.PI * 2);
-      ctx.fill();
+    if (pendingMaskStrokeImage) {
+      // pendingMaskStrokeImage is the RAW rough-mask data sent to SAM2 -- a
+      // white stroke on a transparent/white canvas (see handleMouseMove's
+      // maskCtx below), never meant to be shown to the user as-is (it's
+      // invisible against a white/light frame). Recolor it to the same
+      // visible brush color used while actively drawing, using the raw
+      // mask as an alpha stencil via 'source-in' -- this reproduces
+      // exactly the stroke the user drew, nothing more.
+      const canvasW = canvas.width;
+      const canvasH = canvas.height;
+      let tintCanvas = maskTintCanvasRef.current;
+      if (!tintCanvas) {
+        tintCanvas = document.createElement("canvas");
+        maskTintCanvasRef.current = tintCanvas;
+      }
+      tintCanvas.width = canvasW;
+      tintCanvas.height = canvasH;
+      const tintCtx = tintCanvas.getContext("2d");
+      if (tintCtx) {
+        tintCtx.clearRect(0, 0, canvasW, canvasH);
+        tintCtx.drawImage(pendingMaskStrokeImage, 0, 0, canvasW, canvasH);
+        tintCtx.globalCompositeOperation = "source-in";
+        tintCtx.fillStyle = "rgba(34, 211, 238, 0.9)";
+        tintCtx.fillRect(0, 0, canvasW, canvasH);
+        tintCtx.globalCompositeOperation = "source-over";
+
+        ctx.drawImage(tintCanvas, 0, 0, canvasW, canvasH);
+      }
     }
+
+    drawPendingPoints();
 
     if (box) {
       const x = Math.min(box.startX, box.endX) * canvas.width;
@@ -254,14 +383,15 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
   }
 
   function submitPointOrBox(prompt: PromptDraft) {
+    // Points/boxes accumulate as refinement prompts for the SAME in-progress
+    // object -- each new gesture re-predicts using the FULL accumulated set
+    // (not just the latest gesture), matching how SAM's own point-refinement
+    // model works (a lone negative point elsewhere narrows the same mask; it
+    // does not start a new object). The prompt list is only cleared when the
+    // object is finished (Track / Generate from mask), not on every click.
     addPrompt(prompt);
-    onPointOrBoxSubmit(prompt);
-    if (prompt.type === "point") {
-      const [x, y] = prompt.coords;
-      const updated = [...recentPoints, { x, y, positive: prompt.label }];
-      setRecentPoints(updated);
-      drawPendingOverlay(null, updated);
-    }
+    const updatedPrompts = [...store.getState().pendingPrompts];
+    onPointOrBoxSubmit(updatedPrompts);
   }
 
   function handleMouseUp(event: React.MouseEvent<HTMLCanvasElement>) {
@@ -273,10 +403,29 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
 
     if (activeTool === "mask") {
       const maskCanvas = maskCanvasRef.current;
-      if (maskCanvas && strokePointsRef.current.length > 1) {
+      const maskCtx = maskCanvas?.getContext("2d");
+      if (maskCanvas && maskCtx && strokePointsRef.current.length > 1) {
+        // SAM2's mask_input is the model's belief about which pixels ARE
+        // the object -- so it needs the FILLED interior of what the user
+        // traced, not just the thin outline stroke itself. Submitting only
+        // the outline (as this used to do) gives the model a ~3%-coverage
+        // sliver instead of the actual rough-mask region, producing a
+        // noticeably worse result than even a plain box prompt. Close the
+        // traced path back to its start point and fill it solid before
+        // reading back the canvas.
+        const points = strokePointsRef.current;
+        maskCtx.fillStyle = "rgba(255, 255, 255, 1)";
+        maskCtx.beginPath();
+        maskCtx.moveTo(points[0][0] * maskCanvas.width, points[0][1] * maskCanvas.height);
+        for (const [px, py] of points.slice(1)) {
+          maskCtx.lineTo(px * maskCanvas.width, py * maskCanvas.height);
+        }
+        maskCtx.closePath();
+        maskCtx.fill();
+
         const dataUrl = maskCanvas.toDataURL("image/png");
         const base64 = dataUrl.split(",")[1] ?? "";
-        addPrompt({ type: "mask", coords: [], label: true, mask_png: base64 });
+        setMaskPrompt(base64);
       }
       strokePointsRef.current = [];
       return;

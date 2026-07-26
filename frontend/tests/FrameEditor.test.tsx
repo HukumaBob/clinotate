@@ -150,4 +150,70 @@ describe("FrameEditor", () => {
 
     expect(apiClient.POST).not.toHaveBeenCalledWith("/jobs/sam2/predict", expect.anything());
   });
+
+  it("submits the full accumulated prompt set (not just the latest gesture) on a second refinement click", async () => {
+    renderEditor();
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
+    const canvas = screen.getByTestId("frame-canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    });
+
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseDown(canvas, { clientX: 40, clientY: 20, button: 0, shiftKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 40, clientY: 20, button: 0, shiftKey: true });
+
+    await waitFor(() =>
+      expect(apiClient.POST).toHaveBeenLastCalledWith(
+        "/jobs/sam2/predict",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            prompts: [
+              { type: "point", coords: [0.5, 0.5], label: true },
+              { type: "point", coords: [0.1, 0.1], label: false },
+            ],
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("Track submits the accumulated pendingPrompts, not an empty list, after prior point clicks", async () => {
+    renderEditor();
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
+    const canvas = screen.getByTestId("frame-canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    });
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    await waitFor(() =>
+      expect(apiClient.POST).toHaveBeenCalledWith("/jobs/sam2/predict", expect.anything()),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^track$/i }));
+
+    await waitFor(() =>
+      expect(apiClient.POST).toHaveBeenCalledWith(
+        "/jobs/sam2/track",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            prompts: [{ type: "point", coords: [0.5, 0.5], label: true }],
+          }),
+        }),
+      ),
+    );
+  });
 });

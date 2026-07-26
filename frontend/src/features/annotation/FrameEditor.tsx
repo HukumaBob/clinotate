@@ -55,35 +55,75 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [prevFrame, nextFrame, onFrameChange]);
 
-  function submitPredict(prompts: PromptDraft[]) {
+  // Re-predicts using the FULL accumulated prompt set for the in-progress
+  // object and replaces the previous draft mask (if any) with the new one,
+  // so refining one object via several point/box gestures never leaves a
+  // trail of stale draft Annotation rows behind -- only the latest guess
+  // for the object being worked on exists at any time. Does NOT clear
+  // pendingPrompts: the object stays in progress until Track/Generate from
+  // mask explicitly finishes it.
+  function refinePredict(prompts: PromptDraft[]) {
     const state = store.getState();
-    if (state.labelTagId === null || prompts.length === 0) return;
+    if (state.labelTagId === null) return;
+    const previousDraftId = state.draftAnnotationId;
+
+    // The last remaining refinement point was just removed -- nothing left
+    // to predict from, so just drop the now-orphaned draft mask instead of
+    // firing a predict call with an empty prompt list.
+    if (prompts.length === 0) {
+      if (previousDraftId !== null) {
+        deleteAnnotation.mutate(previousDraftId);
+        store.getState().setDraftAnnotationId(null);
+      }
+      return;
+    }
+
     predictMutation.mutate(
       { frame_id: frameId, label_id: state.labelTagId, prompts },
       {
         onSuccess: (data) => {
-          if (data) setActiveJobId(data.id);
-          store.getState().clearPrompts();
+          if (!data) return;
+          setActiveJobId(data.id);
+          if (previousDraftId !== null) {
+            deleteAnnotation.mutate(previousDraftId);
+          }
         },
       },
     );
   }
 
-  function handlePointOrBoxSubmit(prompt: PromptDraft) {
-    submitPredict([prompt]);
+  // A predict job's new Annotation becomes the current draft once the job
+  // succeeds -- recorded here (not at submit time) since the Annotation id
+  // isn't known until the job result is read back and annotations refetch.
+  useEffect(() => {
+    if (jobQuery.data?.status === "succeeded" && jobQuery.data.job_type === "sam2_predict") {
+      const created = annotationsQuery.data?.find((a) => a.job_id === jobQuery.data?.id);
+      if (created) store.getState().setDraftAnnotationId(created.id);
+    }
+  }, [jobQuery.data?.status, jobQuery.data?.id, jobQuery.data?.job_type, annotationsQuery.data, store]);
+
+  function handlePointOrBoxSubmit(prompts: PromptDraft[]) {
+    refinePredict(prompts);
   }
 
   function handleGenerateFromMask() {
-    submitPredict(store.getState().pendingPrompts);
+    refinePredict(store.getState().pendingPrompts);
+    store.getState().clearPrompts();
   }
 
+  // Deleting the mask that's currently being refined (the draft) must also
+  // drop its accumulated point/box markers -- otherwise the points stay on
+  // screen pointing at a mask that no longer exists.
   function handleRemoveAnnotation(annotationId: number) {
     deleteAnnotation.mutate(annotationId);
+    if (store.getState().draftAnnotationId === annotationId) {
+      store.getState().clearPrompts();
+    }
   }
 
   function handleTrack() {
     const state = store.getState();
-    if (state.labelTagId === null) return;
+    if (state.labelTagId === null || state.pendingPrompts.length === 0) return;
     trackMutation.mutate(
       {
         sequence_id: frameQuery.data?.sequence_id ?? 0,
@@ -96,6 +136,9 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
       {
         onSuccess: (data) => {
           if (data) setActiveJobId(data.id);
+          const draftId = store.getState().draftAnnotationId;
+          if (draftId !== null) deleteAnnotation.mutate(draftId);
+          store.getState().clearPrompts();
         },
       },
     );
