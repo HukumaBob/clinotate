@@ -31,6 +31,36 @@ const POSITIVE_COLOR = "rgba(74, 222, 128, 0.95)";
 const NEGATIVE_COLOR = "rgba(248, 113, 113, 0.95)";
 const BOX_COLOR = "rgba(96, 165, 250, 0.95)";
 
+function isHighlighted(annotationId: number, selectedId: number | null, hoveredId: number | null): boolean {
+  return annotationId === selectedId || annotationId === hoveredId;
+}
+
+// Strokes a dashed bounding box around the mask's opaque region so a draft
+// (still-being-refined) annotation reads as visually distinct from a
+// committed one at a glance. A precise silhouette trace is unnecessary here
+// -- masks are usually a single blob, and a bounding-box outline is cheap
+// and unambiguous.
+function traceAlphaOutline(ctx: CanvasRenderingContext2D, imageData: ImageData, width: number, height: number): void {
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  const { data } = imageData;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = data[(y * width + x) * 4 + 3];
+      if (alpha > 0) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return;
+  ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+}
+
 export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onRemoveAnnotation }: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -60,6 +90,8 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
   const pendingPrompts = useStore(store, (state) => state.pendingPrompts);
   const removePromptAt = useStore(store, (state) => state.removePromptAt);
   const selectedAnnotationId = useStore(store, (state) => state.selectedAnnotationId);
+  const hoveredAnnotationId = useStore(store, (state) => state.hoveredAnnotationId);
+  const draftAnnotationId = useStore(store, (state) => state.draftAnnotationId);
 
   useEffect(() => {
     const img = new Image();
@@ -92,7 +124,7 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
       const maskImg = new Image();
       maskImg.crossOrigin = "anonymous";
       maskImg.onload = () => {
-        ctx.globalAlpha = annotation.id === selectedAnnotationId ? 0.85 : 0.5;
+        ctx.globalAlpha = isHighlighted(annotation.id, selectedAnnotationId, hoveredAnnotationId) ? 0.85 : 0.5;
         ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
         ctx.globalAlpha = 1;
 
@@ -120,7 +152,7 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
       maskImg.src = annotation.mask_url;
     }
 
-  }, [frameImage, frame.width, frame.height, annotations, selectedAnnotationId]);
+  }, [frameImage, frame.width, frame.height, annotations, selectedAnnotationId, hoveredAnnotationId]);
 
   // Decode the current mask prompt's mask_png (if any) into an Image so
   // drawPendingOverlay can redraw the rough-mask stroke on every redraw,
@@ -153,7 +185,7 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
   useEffect(() => {
     drawPendingOverlay(pendingBox);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPrompts, pendingMaskStrokeImage]);
+  }, [pendingPrompts, pendingMaskStrokeImage, draftAnnotationId]);
 
   function toNormalized(clientX: number, clientY: number): [number, number] {
     const canvas = canvasRef.current;
@@ -290,9 +322,21 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
     for (const annotation of annotations) {
       const imageData = maskImageDataCacheRef.current.get(annotation.id);
       if (!imageData) continue;
-      ctx.globalAlpha = annotation.id === selectedAnnotationId ? 0.85 : 0.5;
+      ctx.globalAlpha = isHighlighted(annotation.id, selectedAnnotationId, hoveredAnnotationId) ? 0.85 : 0.5;
       ctx.putImageData(imageData, 0, 0);
       ctx.globalAlpha = 1;
+
+      if (annotation.id === draftAnnotationId) {
+        // The draft (still-being-refined) mask gets a dashed outline drawn
+        // on top of its fill, so it reads as visually distinct from a
+        // committed mask without needing a second decode of the mask image.
+        ctx.save();
+        ctx.setLineDash([4, 3]);
+        ctx.lineWidth = Math.max(2, canvas.width * 0.003);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+        traceAlphaOutline(ctx, imageData, canvas.width, canvas.height);
+        ctx.restore();
+      }
     }
 
     if (pendingMaskStrokeImage) {

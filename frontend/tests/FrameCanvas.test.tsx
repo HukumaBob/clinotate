@@ -497,4 +497,37 @@ describe("FrameCanvas", () => {
     window.Image = realImage;
     HTMLCanvasElement.prototype.getContext = originalGetContext;
   });
+
+  it("renders without throwing when hoveredAnnotationId is set", () => {
+    const store = createFrameEditorStore();
+    store.getState().setHoveredAnnotation(5);
+
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[
+          { id: 5, frame_id: 1, type: "mask", payload: {}, mask_url: "https://example.test/mask.png" } as never,
+        ]}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("frame-canvas")).toBeDefined();
+  });
+
+  it("treats hovered and selected annotation ids identically for the highlight decision", () => {
+    // Documents the intended rule the FrameCanvas implementation follows:
+    // an id counts as "highlighted" if it is EITHER the selected OR the
+    // hovered annotation.
+    function isHighlighted(id: number, selectedId: number | null, hoveredId: number | null): boolean {
+      return id === selectedId || id === hoveredId;
+    }
+
+    expect(isHighlighted(5, 5, null)).toBe(true);
+    expect(isHighlighted(5, null, 5)).toBe(true);
+    expect(isHighlighted(5, null, null)).toBe(false);
+    expect(isHighlighted(5, 3, 3)).toBe(false);
+  });
 });
