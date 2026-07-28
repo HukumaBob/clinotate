@@ -17,3 +17,4 @@ frontend/src/shared/api/generated/
 
 # Superpowers brainstorming companion mockups (working artifacts, not committed)
 .superpowers/
+.logs/
