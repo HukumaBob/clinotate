@@ -23,6 +23,7 @@ export interface FrameEditorState {
   // Track or Generate from mask.
   draftAnnotationId: number | null;
   selectedAnnotationId: number | null;
+  hoveredAnnotationId: number | null;
   labelCategoryId: number | null;
   labelClassification: LabelClassification | null;
   labelTagId: number | null;
@@ -37,6 +38,7 @@ export interface FrameEditorState {
   clearPrompts: () => void;
   setDraftAnnotationId: (id: number | null) => void;
   setSelectedAnnotation: (id: number | null) => void;
+  setHoveredAnnotation: (id: number | null) => void;
   setLabelSelection: (partial: Partial<{
     labelCategoryId: number | null;
     labelClassification: LabelClassification | null;
@@ -59,6 +61,7 @@ export function createFrameEditorStore() {
     pendingPrompts: [],
     draftAnnotationId: null,
     selectedAnnotationId: null,
+    hoveredAnnotationId: null,
     labelCategoryId: null,
     labelClassification: null,
     labelTagId: null,
@@ -85,6 +88,7 @@ export function createFrameEditorStore() {
     clearPrompts: () => set({ pendingPrompts: [], draftAnnotationId: null }),
     setDraftAnnotationId: (id) => set({ draftAnnotationId: id }),
     setSelectedAnnotation: (id) => set({ selectedAnnotationId: id }),
+    setHoveredAnnotation: (id) => set({ hoveredAnnotationId: id }),
     setLabelSelection: (partial) => set(partial),
     setColor: (color) => set({ color }),
     setBackward: (value) => set({ backward: value }),
@@ -95,6 +99,7 @@ export function createFrameEditorStore() {
         pendingPrompts: [],
         draftAnnotationId: null,
         selectedAnnotationId: null,
+        hoveredAnnotationId: null,
         labelCategoryId: null,
         labelClassification: null,
         labelTagId: null,

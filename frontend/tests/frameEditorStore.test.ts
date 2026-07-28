@@ -67,4 +67,26 @@ describe("frameEditorStore", () => {
     expect(state.selectedAnnotationId).toBeNull();
     expect(state.activeTool).toBe("point");
   });
+
+  it("defaults to null and can be set and cleared", () => {
+    const store = createFrameEditorStore();
+
+    expect(store.getState().hoveredAnnotationId).toBeNull();
+
+    store.getState().setHoveredAnnotation(42);
+    expect(store.getState().hoveredAnnotationId).toBe(42);
+
+    store.getState().setHoveredAnnotation(null);
+    expect(store.getState().hoveredAnnotationId).toBeNull();
+  });
+
+  it("is independent of selectedAnnotationId", () => {
+    const store = createFrameEditorStore();
+
+    store.getState().setSelectedAnnotation(7);
+    store.getState().setHoveredAnnotation(9);
+
+    expect(store.getState().selectedAnnotationId).toBe(7);
+    expect(store.getState().hoveredAnnotationId).toBe(9);
+  });
 });
