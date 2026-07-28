@@ -12,10 +12,19 @@ class VideoRead(BaseModel):
     size_bytes: int
 
 
+class CropBox(BaseModel):
+    left: float = 0
+    right: float = 0
+    top: float = 0
+    bottom: float = 0
+
+
 class SequenceCreate(BaseModel):
     name: str
     start_time: int
     duration: int
+    fps: float = 1.0
+    crop: CropBox | None = None
 
 
 class SequenceCreateStandalone(BaseModel):

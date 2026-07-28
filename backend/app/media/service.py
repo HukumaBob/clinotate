@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.media.models import Sequence
+from app.media.schemas import CropBox
 from app.taxonomy.models import Procedure
 
 
@@ -39,7 +40,20 @@ def probe_video(video_bytes: bytes) -> tuple[float, float]:
     return fps, duration
 
 
-def extract_frames(video_bytes: bytes, sample_fps: float = 1.0) -> list[tuple[int, bytes, int, int]]:
+def _apply_crop(frame, crop: "CropBox | None"):
+    if crop is None:
+        return frame
+    height, width = frame.shape[:2]
+    left_px = int(width * crop.left / 100)
+    right_px = int(width * crop.right / 100)
+    top_px = int(height * crop.top / 100)
+    bottom_px = int(height * crop.bottom / 100)
+    return frame[top_px : height - bottom_px, left_px : width - right_px]
+
+
+def extract_frames(
+    video_bytes: bytes, sample_fps: float = 1.0, crop: "CropBox | None" = None
+) -> list[tuple[int, bytes, int, int]]:
     """Extracts frames at `sample_fps`, returns (frame_index, png_bytes, width, height)."""
     results: list[tuple[int, bytes, int, int]] = []
     with tempfile.NamedTemporaryFile(suffix=".mp4") as tmp:
@@ -56,6 +70,7 @@ def extract_frames(video_bytes: bytes, sample_fps: float = 1.0) -> list[tuple[in
             if not success:
                 break
             if source_frame_number % step == 0:
+                frame = _apply_crop(frame, crop)
                 height, width = frame.shape[:2]
                 success_encode, buffer = cv2.imencode(".png", frame)
                 if success_encode:

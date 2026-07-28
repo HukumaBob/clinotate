@@ -322,6 +322,39 @@ def test_suggest_sequence_name_increments_same_day_ordinal():
     assert second_response.json()["name"].endswith("#2")
 
 
+def test_extract_frames_applies_crop_box_as_percentage_insets():
+    from app.media.schemas import CropBox
+    from app.media.service import extract_frames
+
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_bytes = f.read()
+
+    uncropped = extract_frames(video_bytes, sample_fps=1.0)
+    original_width, original_height = uncropped[0][2], uncropped[0][3]
+
+    crop = CropBox(left=10, right=10, top=20, bottom=20)
+    cropped = extract_frames(video_bytes, sample_fps=1.0, crop=crop)
+
+    expected_width = original_width - int(original_width * 0.10) - int(original_width * 0.10)
+    expected_height = original_height - int(original_height * 0.20) - int(original_height * 0.20)
+    assert cropped[0][2] == expected_width
+    assert cropped[0][3] == expected_height
+
+
+def test_extract_frames_all_zero_crop_is_a_no_op():
+    from app.media.schemas import CropBox
+    from app.media.service import extract_frames
+
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_bytes = f.read()
+
+    uncropped = extract_frames(video_bytes, sample_fps=1.0)
+    zero_cropped = extract_frames(video_bytes, sample_fps=1.0, crop=CropBox())
+
+    assert zero_cropped[0][2] == uncropped[0][2]
+    assert zero_cropped[0][3] == uncropped[0][3]
+
+
 def test_create_standalone_sequence_requires_name():
     headers = _auth_headers()
     procedure_id = client.post(

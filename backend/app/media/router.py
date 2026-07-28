@@ -77,7 +77,7 @@ def create_sequence(
     session.refresh(sequence)
 
     video_bytes = storage.download(video.storage_key)
-    extracted = extract_frames(video_bytes, sample_fps=1.0)
+    extracted = extract_frames(video_bytes, sample_fps=payload.fps, crop=payload.crop)
     for frame_index, png_bytes, width, height in extracted:
         storage_key = f"frames/{sequence.id}/{frame_index}.png"
         storage.upload(storage_key, png_bytes, content_type="image/png")
