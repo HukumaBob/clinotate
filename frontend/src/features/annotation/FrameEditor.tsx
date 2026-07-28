@@ -4,10 +4,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAnnotations, useDeleteAnnotation } from "../../entities/useAnnotations";
 import { useFrame } from "../../entities/useFrames";
 import { useJob } from "../../entities/useJobs";
+import { useLabelTree } from "../../entities/useLabelTree";
 import { useSam2Predict, useSam2Track } from "../../entities/useSegmentation";
 import { createFrameEditorStore, type PromptDraft } from "./frameEditorStore";
 import { FrameCanvas } from "./FrameCanvas";
 import { JobErrorNotice } from "./JobErrorNotice";
+import { buildLabelColorMap } from "./labelColors";
 import { ToolsPanel } from "./ToolsPanel";
 import type { components } from "../../shared/api/generated/schema";
 
@@ -44,9 +46,12 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   const frameQuery = useFrame(frameId);
   const annotationsQuery = useAnnotations(frameId);
   const jobQuery = useJob(activeJobId);
+  const labelTreeQuery = useLabelTree();
   const predictMutation = useSam2Predict();
   const trackMutation = useSam2Track();
   const deleteAnnotation = useDeleteAnnotation(frameId);
+
+  const labelColorById = useMemo(() => buildLabelColorMap(labelTreeQuery.data ?? []), [labelTreeQuery.data]);
 
   const orderedFrames = [...frames].sort((a, b) => a.frame_index - b.frame_index);
   const currentIndex = orderedFrames.findIndex((f) => f.id === frameId);
@@ -266,6 +271,7 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
               store={store}
               onPointOrBoxSubmit={handlePointOrBoxSubmit}
               onRemoveAnnotation={handleRemoveAnnotation}
+              labelColorById={labelColorById}
             />
           </div>
         </div>

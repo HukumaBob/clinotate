@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { useStore } from "zustand/react";
 
 import type { components } from "../../shared/api/generated/schema";
@@ -13,6 +13,7 @@ interface FrameCanvasProps {
   store: FrameEditorStore;
   onPointOrBoxSubmit: (prompts: PromptDraft[]) => void;
   onRemoveAnnotation: (annotationId: number) => void;
+  labelColorById?: Map<number, string>;
 }
 
 interface DragState {
@@ -35,36 +36,130 @@ function isHighlighted(annotationId: number, selectedId: number | null, hoveredI
   return annotationId === selectedId || annotationId === hoveredId;
 }
 
-// Strokes a dashed bounding box around the mask's opaque region so a draft
-// (still-being-refined) annotation reads as visually distinct from a
-// committed one at a glance. A precise silhouette trace is unnecessary here
-// -- masks are usually a single blob, and a bounding-box outline is cheap
-// and unambiguous.
-function traceAlphaOutline(ctx: CanvasRenderingContext2D, imageData: ImageData, width: number, height: number): void {
-  let minX = width;
-  let minY = height;
-  let maxX = -1;
-  let maxY = -1;
+const MASK_FILL_ALPHA = 0.35;
+const MASK_FILL_ALPHA_HIGHLIGHTED = 0.55;
+const MASK_OUTLINE_COLOR = "rgba(255, 255, 255, 0.95)";
+const DEFAULT_MASK_COLOR = "#22d3ee";
+
+// Stored mask PNGs (see ml-worker's sam2_adapter.py/sam3_adapter.py,
+// Image.fromarray(mask_array, mode="L")) are plain opaque grayscale --
+// white (255) pixels are inside the mask, black (0) pixels are outside,
+// and the alpha channel itself is 255 everywhere (no per-pixel
+// transparency at all). Decoding such a PNG via drawImage+getImageData
+// therefore yields alpha=255 across the WHOLE canvas, not a silhouette --
+// treating that raw alpha as "is this pixel part of the mask" (as every
+// consumer of maskImageDataCacheRef used to) makes every mask cover its
+// entire bounding canvas. This converts the grayscale luminance into a
+// real alpha channel in place, using the same >=128 threshold the
+// backend already uses when converting a rough-mask PNG back into SAM2
+// logits (_mask_png_to_logits), so silhouette tracing, hit-testing, and
+// the tinted fill all operate on genuine transparency.
+function luminanceToAlphaMask(imageData: ImageData): void {
   const { data } = imageData;
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const alpha = data[(y * width + x) * 4 + 3];
-      if (alpha > 0) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
+  for (let i = 0; i < data.length; i += 4) {
+    data[i + 3] = data[i] >= 128 ? 255 : 0;
   }
-  if (maxX < minX || maxY < minY) return;
-  ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
 }
 
-export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onRemoveAnnotation }: FrameCanvasProps) {
+function hexToRgb(hex: string): [number, number, number] {
+  const normalized = hex.replace("#", "");
+  const full =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : normalized;
+  const value = Number.parseInt(full, 16);
+  if (Number.isNaN(value) || full.length !== 6) return [34, 211, 238];
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+// Traces the actual silhouette of a mask's opaque region, pixel by pixel:
+// an opaque pixel counts as a boundary pixel if any of its 4-connected
+// neighbors (or the image edge) is transparent. This is a real per-pixel
+// outline (not a bounding box), matching how SAM/CVAT-style tools outline
+// a mask -- cheap enough at annotation-frame resolution since it's a
+// single pass over the cached alpha channel, no marching-squares/vector
+// tracing needed for a screen-space highlight.
+function traceAlphaOutline(
+  ctx: CanvasRenderingContext2D,
+  imageData: ImageData,
+  width: number,
+  height: number,
+  dashPeriod?: number,
+): void {
+  const { data } = imageData;
+  const isOpaque = (x: number, y: number) => x >= 0 && x < width && y >= 0 && y < height && data[(y * width + x) * 4 + 3] > 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!isOpaque(x, y)) continue;
+      const isBoundary = !isOpaque(x - 1, y) || !isOpaque(x + 1, y) || !isOpaque(x, y - 1) || !isOpaque(x, y + 1);
+      if (!isBoundary) continue;
+      // Dashed mode approximates a stroke dash pattern along the silhouette
+      // by skipping boundary pixels in bands based on position -- ctx.stroke's
+      // built-in setLineDash only applies to path strokes, not this per-pixel
+      // fillRect trace, so the dash has to be encoded into which pixels get
+      // drawn at all.
+      if (dashPeriod && Math.floor((x + y) / dashPeriod) % 2 === 0) continue;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+}
+
+// Renders a mask's cached alpha silhouette as a colored, semi-transparent
+// fill (tinted by the label's own color via a 'source-in' stencil, the
+// same technique already used for pendingMaskStrokeImage below) plus an
+// always-opaque silhouette outline on top, so the mask reads as a distinct
+// highlighted region rather than an opaque black-and-white cutout that
+// hides the frame underneath.
+function paintMaskOverlay(
+  ctx: CanvasRenderingContext2D,
+  imageData: ImageData,
+  color: string,
+  fillAlpha: number,
+  tintCanvasRef: MutableRefObject<HTMLCanvasElement | null>,
+): void {
+  const { width, height } = imageData;
+  let tintCanvas = tintCanvasRef.current;
+  if (!tintCanvas) {
+    tintCanvas = document.createElement("canvas");
+    tintCanvasRef.current = tintCanvas;
+  }
+  tintCanvas.width = width;
+  tintCanvas.height = height;
+  const tintCtx = tintCanvas.getContext("2d");
+  if (!tintCtx) return;
+
+  tintCtx.clearRect(0, 0, width, height);
+  tintCtx.putImageData(imageData, 0, 0);
+  const [r, g, b] = hexToRgb(color);
+  tintCtx.globalCompositeOperation = "source-in";
+  tintCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+  tintCtx.fillRect(0, 0, width, height);
+  tintCtx.globalCompositeOperation = "source-over";
+
+  ctx.globalAlpha = fillAlpha;
+  ctx.drawImage(tintCanvas, 0, 0);
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = MASK_OUTLINE_COLOR;
+  traceAlphaOutline(ctx, imageData, width, height);
+}
+
+export function FrameCanvas({
+  frame,
+  annotations,
+  store,
+  onPointOrBoxSubmit,
+  onRemoveAnnotation,
+  labelColorById,
+}: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskTintCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const maskOverlayTintCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const strokePointsRef = useRef<[number, number][]>([]);
   const maskImageDataCacheRef = useRef<Map<number, ImageData>>(new Map());
@@ -143,7 +238,9 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
         const offCtx = offscreen.getContext("2d");
         if (offCtx) {
           offCtx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
-          maskImageDataCacheRef.current.set(annotation.id, offCtx.getImageData(0, 0, canvas.width, canvas.height));
+          const imageData = offCtx.getImageData(0, 0, canvas.width, canvas.height);
+          luminanceToAlphaMask(imageData);
+          maskImageDataCacheRef.current.set(annotation.id, imageData);
         }
 
         // Route through drawPendingOverlay instead of drawing this mask
@@ -340,20 +437,23 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
     for (const annotation of annotations) {
       const imageData = maskImageDataCacheRef.current.get(annotation.id);
       if (!imageData) continue;
-      ctx.globalAlpha = isHighlighted(annotation.id, selectedAnnotationId, hoveredAnnotationId) ? 0.85 : 0.5;
-      ctx.putImageData(imageData, 0, 0);
-      ctx.globalAlpha = 1;
+      const highlighted = isHighlighted(annotation.id, selectedAnnotationId, hoveredAnnotationId);
+      const color = labelColorById?.get(annotation.label_id) ?? DEFAULT_MASK_COLOR;
+      paintMaskOverlay(
+        ctx,
+        imageData,
+        color,
+        highlighted ? MASK_FILL_ALPHA_HIGHLIGHTED : MASK_FILL_ALPHA,
+        maskOverlayTintCanvasRef,
+      );
 
       if (annotation.id === draftAnnotationId) {
-        // The draft (still-being-refined) mask gets a dashed outline drawn
-        // on top of its fill, so it reads as visually distinct from a
-        // committed mask without needing a second decode of the mask image.
-        ctx.save();
-        ctx.setLineDash([4, 3]);
-        ctx.lineWidth = Math.max(2, canvas.width * 0.003);
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-        traceAlphaOutline(ctx, imageData, canvas.width, canvas.height);
-        ctx.restore();
+        // The draft (still-being-refined) mask gets an additional dashed
+        // silhouette outline in the accent color, drawn on top of
+        // paintMaskOverlay's always-solid white outline, so draft vs.
+        // committed stays visually distinct at a glance.
+        ctx.fillStyle = "rgba(34, 211, 238, 0.9)";
+        traceAlphaOutline(ctx, imageData, canvas.width, canvas.height, 6);
       }
     }
 

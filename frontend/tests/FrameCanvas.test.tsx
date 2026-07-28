@@ -338,6 +338,7 @@ describe("FrameCanvas", () => {
         clearRect: () => {},
         drawImage: () => {},
         putImageData: () => {},
+        fillRect: () => {},
         beginPath: () => {},
         closePath: () => {},
         moveTo: () => {},
@@ -351,6 +352,7 @@ describe("FrameCanvas", () => {
         lineWidth: 0,
         lineCap: "round",
         globalAlpha: 1,
+        globalCompositeOperation: "source-over",
         getImageData: () => ({ data, width: this.width, height: this.height, colorSpace: "srgb" }) as ImageData,
       } as never;
     };
@@ -442,6 +444,7 @@ describe("FrameCanvas", () => {
         clearRect: () => {},
         drawImage: () => calls.push("drawImage"),
         putImageData: () => {},
+        fillRect: () => {},
         beginPath: () => {},
         moveTo: () => {},
         lineTo: () => {},
@@ -454,6 +457,7 @@ describe("FrameCanvas", () => {
         lineWidth: 0,
         lineCap: "round",
         globalAlpha: 1,
+        globalCompositeOperation: "source-over",
         getImageData: () => ({ data, width: this.width, height: this.height, colorSpace: "srgb" }) as ImageData,
       } as never;
     };
