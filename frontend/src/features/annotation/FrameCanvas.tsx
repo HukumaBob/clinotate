@@ -152,7 +152,17 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
       maskImg.src = annotation.mask_url;
     }
 
-  }, [frameImage, frame.width, frame.height, annotations, selectedAnnotationId, hoveredAnnotationId]);
+    // selectedAnnotationId/hoveredAnnotationId intentionally excluded: they
+    // only affect the alpha of already-loaded masks, which the lightweight
+    // drawPendingOverlay effect below repaints from maskImageDataCacheRef.
+    // Including them here would re-run this effect on every hover/select
+    // change, tearing down and re-decoding every mask Image on the frame
+    // from scratch (new Image() + full PNG decode + a fresh offscreen
+    // getImageData pass, per annotation) -- for hover in particular, that
+    // means one full re-decode pass of every mask per mouseenter/mouseleave
+    // while sweeping the cursor across MasksList rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameImage, frame.width, frame.height, annotations]);
 
   // Decode the current mask prompt's mask_png (if any) into an Image so
   // drawPendingOverlay can redraw the rough-mask stroke on every redraw,
@@ -185,7 +195,7 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
   useEffect(() => {
     drawPendingOverlay(pendingBox);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPrompts, pendingMaskStrokeImage, draftAnnotationId]);
+  }, [pendingPrompts, pendingMaskStrokeImage, draftAnnotationId, selectedAnnotationId, hoveredAnnotationId]);
 
   function toNormalized(clientX: number, clientY: number): [number, number] {
     const canvas = canvasRef.current;
