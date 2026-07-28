@@ -26,6 +26,7 @@
 - **Create `frontend/tests/AppHeader.test.tsx`** — unit tests for `AppHeader`.
 - **Create `frontend/src/app/AppLayout.tsx`** — renders `<AppHeader />` above `<Outlet />`.
 - **Modify `frontend/src/app/App.tsx`** — replace per-page `RequireAuth` wrapping with a single layout route holding nested protected routes.
+- **Modify `frontend/src/features/auth/useAuth.ts`** — hydrate `user` from `GET /auth/me` on store creation when a token already exists in `localStorage`, so a page reload (or a fresh app load with an existing session) doesn't leave `user: null` while `isAuthenticated` is `true`.
 
 No other files change. `VideoListPage` and `SequenceGridPage` keep their own `min-h-screen` root `div`s unmodified — nesting them under a header with `min-h-screen` still gives correct visual height (the header just adds fixed height on top; this is a pure layout composition, not a change to either page's own markup).
 
@@ -413,6 +414,240 @@ git commit -m "feat: route protected pages through AppLayout for a shared header
 
 ---
 
+### Task 3.5: Hydrate `useAuth`'s `user` on store creation
+
+**Why this task exists:** manual browser verification of Task 3 found that `AppHeader`'s email/logout block never appears on a page load that starts from an existing session (token already in `localStorage`, no `login()` call in this page load) — only right after submitting the login form. Root cause: `useAuth`'s initial state hardcodes `user: null` and only ever sets `user` inside `login()`. `isAuthenticated` is correctly derived from the stored token, but `user` has no equivalent hydration path. `AppHeader.tsx`'s `{user && (...)}` condition is correct as written (Task 1) — the defect is in the store providing stale data, not in the header reading it.
+
+**Files:**
+- Modify: `frontend/src/features/auth/useAuth.ts` (currently 51 lines — full file below)
+- Test: `frontend/tests/useAuth.test.ts`
+
+**Interfaces:**
+- Consumes: `apiClient` and `setAuthToken` from `frontend/src/shared/api/client.ts` (already imported in this file). `apiClient.GET("/auth/me", {})` — already used inside `login()`, same call shape, returns `{ data?: AuthUser, ... }` on success.
+- Produces: no new exports — `useAuth`'s public shape (`token`, `user`, `isAuthenticated`, `login`, `logout`) is unchanged. `AppHeader` (Task 1) already consumes `state.user`; after this task, `state.user` is a real value on a reloaded page with a valid stored token, not just after an in-session `login()` call. No consumer needs to change.
+
+Current full contents of `frontend/src/features/auth/useAuth.ts`:
+
+```ts
+import { create } from "zustand";
+
+import { apiClient, setAuthToken } from "../../shared/api/client";
+
+const TOKEN_STORAGE_KEY = "endoscopy_auth_token";
+
+interface AuthUser {
+  id: number;
+  email: string;
+  role: "annotator" | "reviewer" | "admin";
+}
+
+interface AuthState {
+  token: string | null;
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+}
+
+const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+if (storedToken) {
+  setAuthToken(storedToken);
+}
+
+export const useAuth = create<AuthState>((set) => ({
+  token: storedToken,
+  user: null,
+  isAuthenticated: storedToken !== null,
+
+  login: async (email: string, password: string) => {
+    const loginResult = await apiClient.POST("/auth/login", {
+      body: { email, password },
+    });
+    if (!loginResult.data) {
+      throw new Error("Login failed");
+    }
+    const token = loginResult.data.access_token;
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    setAuthToken(token);
+
+    const meResult = await apiClient.GET("/auth/me", {});
+    if (!meResult.data) {
+      throw new Error("Failed to fetch current user");
+    }
+
+    set({ token, user: meResult.data as AuthUser, isAuthenticated: true });
+  },
+
+  logout: () => {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    setAuthToken(null);
+    set({ token: null, user: null, isAuthenticated: false });
+  },
+}));
+```
+
+- [ ] **Step 1: Write the failing test**
+
+Create `frontend/tests/useAuth.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { apiClient } from "../src/shared/api/client";
+
+const STORAGE_KEY = "endoscopy_auth_token";
+
+describe("useAuth hydration on module load", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    localStorage.clear();
+  });
+
+  it("hydrates user from /auth/me when a token already exists in localStorage", async () => {
+    localStorage.setItem(STORAGE_KEY, "existing-token");
+
+    const meSpy = vi
+      .spyOn(apiClient, "GET")
+      .mockResolvedValue({ data: { id: 7, email: "reload@example.com", role: "annotator" }, error: undefined, response: new Response() } as never);
+
+    const { useAuth } = await import("../src/features/auth/useAuth");
+
+    await vi.waitFor(() => {
+      expect(useAuth.getState().user).toEqual({ id: 7, email: "reload@example.com", role: "annotator" });
+    });
+
+    expect(meSpy).toHaveBeenCalledWith("/auth/me", {});
+    expect(useAuth.getState().isAuthenticated).toBe(true);
+  });
+
+  it("leaves user null when no token exists in localStorage", async () => {
+    const meSpy = vi.spyOn(apiClient, "GET");
+
+    const { useAuth } = await import("../src/features/auth/useAuth");
+
+    expect(useAuth.getState().user).toBeNull();
+    expect(useAuth.getState().isAuthenticated).toBe(false);
+    expect(meSpy).not.toHaveBeenCalled();
+  });
+
+  it("logs out (clears token/user) if hydration's /auth/me call fails", async () => {
+    localStorage.setItem(STORAGE_KEY, "stale-token");
+
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: undefined, error: { detail: "Unauthorized" }, response: new Response() } as never);
+
+    const { useAuth } = await import("../src/features/auth/useAuth");
+
+    await vi.waitFor(() => {
+      expect(useAuth.getState().isAuthenticated).toBe(false);
+    });
+
+    expect(useAuth.getState().user).toBeNull();
+    expect(useAuth.getState().token).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd frontend && npx vitest run tests/useAuth.test.ts`
+Expected: FAIL — the first test times out waiting for `user` to become non-null (current code never calls `/auth/me` outside `login()`); the third test times out the same way. The second test passes already (no token means no change in behavior).
+
+- [ ] **Step 3: Write the implementation**
+
+Replace the full contents of `frontend/src/features/auth/useAuth.ts`:
+
+```ts
+import { create } from "zustand";
+
+import { apiClient, setAuthToken } from "../../shared/api/client";
+
+const TOKEN_STORAGE_KEY = "endoscopy_auth_token";
+
+interface AuthUser {
+  id: number;
+  email: string;
+  role: "annotator" | "reviewer" | "admin";
+}
+
+interface AuthState {
+  token: string | null;
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+}
+
+const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+if (storedToken) {
+  setAuthToken(storedToken);
+}
+
+export const useAuth = create<AuthState>((set) => ({
+  token: storedToken,
+  user: null,
+  isAuthenticated: storedToken !== null,
+
+  login: async (email: string, password: string) => {
+    const loginResult = await apiClient.POST("/auth/login", {
+      body: { email, password },
+    });
+    if (!loginResult.data) {
+      throw new Error("Login failed");
+    }
+    const token = loginResult.data.access_token;
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    setAuthToken(token);
+
+    const meResult = await apiClient.GET("/auth/me", {});
+    if (!meResult.data) {
+      throw new Error("Failed to fetch current user");
+    }
+
+    set({ token, user: meResult.data as AuthUser, isAuthenticated: true });
+  },
+
+  logout: () => {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    setAuthToken(null);
+    set({ token: null, user: null, isAuthenticated: false });
+  },
+}));
+
+if (storedToken) {
+  apiClient.GET("/auth/me", {}).then((meResult) => {
+    if (meResult.data) {
+      useAuth.setState({ user: meResult.data as AuthUser, isAuthenticated: true });
+    } else {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      setAuthToken(null);
+      useAuth.setState({ token: null, user: null, isAuthenticated: false });
+    }
+  });
+}
+```
+
+The hydration call runs once at module load, after `useAuth` is defined (so `useAuth.setState` is available), guarded by the same `storedToken` check already used to seed `token`/`isAuthenticated`. On success it fills in `user`. On failure (expired/invalid token) it clears the session the same way `logout()` does, rather than leaving a stale, unusable token in `localStorage` and an inconsistent `isAuthenticated: true`/`user: null` state.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd frontend && npx vitest run tests/useAuth.test.ts`
+Expected: PASS — all 3 tests green.
+
+- [ ] **Step 5: Run the full frontend test suite to confirm no regressions**
+
+Run: `cd frontend && npm test -- --run`
+Expected: All existing tests pass, plus the 3 new `useAuth` tests. `AppHeader.test.tsx` (Task 1) already calls `useAuth.setState(...)` directly in its own `beforeEach`, overriding whatever the module-load hydration produced — it is unaffected by this change.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add frontend/src/features/auth/useAuth.ts frontend/tests/useAuth.test.ts
+git commit -m "fix: hydrate useAuth's user from /auth/me on store creation"
+```
+
+---
+
 ### Task 4: Manual browser verification
 
 **Files:** none (verification only, per CLAUDE.md's testing philosophy — backend `TestClient` and frontend unit tests both mock past cross-cutting concerns like this).
@@ -437,12 +672,16 @@ Open `http://localhost:5173/login` in a real browser, log in with any valid user
 
 - [ ] **Step 3: Confirm the header persists into the frame editor**
 
-Navigate into any sequence (`/videos/:videoId/sequences/:sequenceId`), open a frame in the editor. Confirm the header bar is still visible above the frame editor's two-column layout — it does not disappear or get pushed off-screen.
+Navigate into any sequence (`/videos/:videoId/sequences/:sequenceId`), open a frame in the editor. Confirm the header bar is still visible above the frame editor's two-column layout — it does not disappear or get pushed off-screen. Also confirm the frame editor's bottom edge (canvas/toolbar) is fully visible and not clipped by the header's height — the editor should fill exactly the remaining viewport height, not overflow 56px below the fold.
 
 - [ ] **Step 4: Confirm logout works**
 
 Click "Log out". Confirm the app redirects to `/login` and that navigating back to `/videos` redirects to `/login` again (session actually cleared, not just a UI change).
 
-- [ ] **Step 5: Report results**
+- [ ] **Step 5: Confirm the email/logout block survives a page reload**
 
-No commit for this task — it's a verification gate. If any check in Steps 2–4 fails, treat it as a bug: return to Task 1 or Task 3 to fix it, re-run the affected task's tests, and repeat this task's manual verification before considering the plan complete.
+While logged in (on `/videos` or in the frame editor), hard-reload the browser page (not a client-side navigation — an actual full page reload, e.g. Ctrl+R). Confirm the header still shows the user's email and "Log out" button immediately, without requiring a fresh login. This is the scenario Task 3.5 fixes — before that task, the header would render with the nav items but an empty right-hand side after a reload.
+
+- [ ] **Step 6: Report results**
+
+No commit for this task — it's a verification gate. If any check in Steps 2–5 fails, treat it as a bug: return to Task 1, Task 3, or Task 3.5 to fix it, re-run the affected task's tests, and repeat this task's manual verification before considering the plan complete.

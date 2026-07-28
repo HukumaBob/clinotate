@@ -5,7 +5,7 @@ export function VideoListPage() {
   const videosQuery = useVideos();
 
   return (
-    <div className="min-h-screen bg-gray-950 p-8 text-gray-100">
+    <div className="min-h-full bg-gray-950 p-8 text-gray-100">
       <h1 className="mb-4 text-xl font-semibold">Videos</h1>
       <div className="mb-6">
         <VideoUploadForm />
