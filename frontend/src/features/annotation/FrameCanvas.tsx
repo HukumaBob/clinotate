@@ -257,15 +257,17 @@ export function FrameCanvas({
       maskImg.src = annotation.mask_url;
     }
 
-    // selectedAnnotationId/hoveredAnnotationId intentionally excluded: they
-    // only affect the alpha of already-loaded masks, which the lightweight
-    // drawPendingOverlay effect below repaints from maskImageDataCacheRef.
-    // Including them here would re-run this effect on every hover/select
-    // change, tearing down and re-decoding every mask Image on the frame
-    // from scratch (new Image() + full PNG decode + a fresh offscreen
-    // getImageData pass, per annotation) -- for hover in particular, that
-    // means one full re-decode pass of every mask per mouseenter/mouseleave
-    // while sweeping the cursor across MasksList rows.
+    // selectedAnnotationId/hoveredAnnotationId/labelColorById intentionally
+    // excluded: they only affect the fill color/alpha of already-loaded
+    // masks, which the lightweight drawPendingOverlay effect below repaints
+    // from maskImageDataCacheRef. Including them here would re-run this
+    // effect on every hover/select change (or once the label tree query
+    // resolves after this frame's first paint), tearing down and
+    // re-decoding every mask Image on the frame from scratch (new Image()
+    // + full PNG decode + a fresh offscreen getImageData pass, per
+    // annotation) -- for hover in particular, that means one full re-decode
+    // pass of every mask per mouseenter/mouseleave while sweeping the
+    // cursor across MasksList rows.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameImage, frame.width, frame.height, annotations]);
 
@@ -300,7 +302,7 @@ export function FrameCanvas({
   useEffect(() => {
     drawPendingOverlay(pendingBox);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPrompts, pendingMaskStrokeImage, draftAnnotationId, selectedAnnotationId, hoveredAnnotationId]);
+  }, [pendingPrompts, pendingMaskStrokeImage, draftAnnotationId, selectedAnnotationId, hoveredAnnotationId, labelColorById]);
 
   function toNormalized(clientX: number, clientY: number): [number, number] {
     const canvas = canvasRef.current;
