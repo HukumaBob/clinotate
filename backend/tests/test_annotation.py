@@ -33,8 +33,48 @@ def _create_frame(token: str) -> int:
 
 
 def _create_label(token: str) -> int:
+    headers = _headers(token)
+
+    # Get-or-create for procedure/category/evaluation-type: this helper is called by
+    # every test in this file (and the fixture names are shared across runs against
+    # the same dev DB), so look each one up first rather than relying on the POST to
+    # fail gracefully -- Procedure/Category/EvaluationType creation raises a raw 500
+    # on a unique-constraint collision instead of returning a JSON error body.
+    procedures = client.get("/taxonomy/procedures", headers=headers).json()
+    procedure = next((p for p in procedures if p["name"] == "annotation-test-procedure"), None)
+    if procedure is None:
+        procedure = client.post(
+            "/taxonomy/procedures", json={"name": "annotation-test-procedure"}, headers=headers
+        ).json()
+
+    categories = client.get(
+        f"/taxonomy/categories?procedure_id={procedure['id']}", headers=headers
+    ).json()
+    category = next((c for c in categories if c["name"] == "annotation-test-category"), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": "annotation-test-category", "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next(
+        (e for e in evaluation_types if e["name"] == "annotation-test-evaluation-type"), None
+    )
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types", json={"name": "annotation-test-evaluation-type"}, headers=headers
+        ).json()
+
     return client.post(
-        "/taxonomy/labels", json={"name": "Landmark", "label_type": "geometric"}, headers=_headers(token)
+        "/taxonomy/labels",
+        json={
+            "name": "Landmark",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
     ).json()["id"]
 
 
