@@ -5,6 +5,7 @@ import { SequenceGridPage } from "../features/annotation/SequenceGridPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
 import { VideoListPage } from "../features/media/VideoListPage";
+import { AppLayout } from "./AppLayout";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuth((state) => state.isAuthenticated);
@@ -17,21 +18,15 @@ export function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
-          path="/videos"
           element={
             <RequireAuth>
-              <VideoListPage />
+              <AppLayout />
             </RequireAuth>
           }
-        />
-        <Route
-          path="/videos/:videoId/sequences/:sequenceId"
-          element={
-            <RequireAuth>
-              <SequenceGridPage />
-            </RequireAuth>
-          }
-        />
+        >
+          <Route path="/videos" element={<VideoListPage />} />
+          <Route path="/videos/:videoId/sequences/:sequenceId" element={<SequenceGridPage />} />
+        </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
