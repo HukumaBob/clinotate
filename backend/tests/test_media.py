@@ -355,6 +355,61 @@ def test_extract_frames_all_zero_crop_is_a_no_op():
     assert zero_cropped[0][3] == uncropped[0][3]
 
 
+def test_upload_photo_batch_creates_one_sequence_and_all_frames():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Photo batch procedure"}, headers=headers
+    ).json()["id"]
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+
+    response = client.post(
+        "/media/sequences/photos",
+        data={"name": "Photo batch seq", "procedure_id": str(procedure_id)},
+        files=[
+            ("files", ("a.png", image_bytes, "image/png")),
+            ("files", ("b.png", image_bytes, "image/png")),
+            ("files", ("c.png", image_bytes, "image/png")),
+        ],
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == "Photo batch seq"
+    assert body["video_id"] is None
+    sequence_id = body["id"]
+
+    frames = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+    assert len(frames) == 3
+    assert [f["frame_index"] for f in frames] == [0, 1, 2]
+
+
+def test_upload_photo_batch_rejects_non_image_file():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Photo batch bad file"}, headers=headers
+    ).json()["id"]
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+
+    response = client.post(
+        "/media/sequences/photos",
+        data={"name": "Photo batch bad", "procedure_id": str(procedure_id)},
+        files=[
+            ("files", ("a.png", image_bytes, "image/png")),
+            ("files", ("bad.png", b"not a real image", "image/png")),
+        ],
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+
 def test_create_standalone_sequence_requires_name():
     headers = _auth_headers()
     procedure_id = client.post(

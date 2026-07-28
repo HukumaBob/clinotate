@@ -127,6 +127,53 @@ def get_suggested_sequence_name(
     return SuggestSequenceNameResponse(name=suggest_sequence_name(session, procedure, date.today()))
 
 
+@router.post("/sequences/photos", response_model=SequenceRead, status_code=status.HTTP_201_CREATED)
+async def upload_photo_sequence(
+    files: list[UploadFile],
+    name: str = Form(...),
+    procedure_id: int = Form(...),
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> Sequence:
+    procedure = session.get(Procedure, procedure_id)
+    if procedure is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Procedure not found")
+
+    decoded: list[tuple[bytes, int, int]] = []
+    for upload in files:
+        data = await upload.read()
+        try:
+            with Image.open(io.BytesIO(data)) as img:
+                width, height = img.size
+        except UnidentifiedImageError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"File '{upload.filename}' is not a valid image",
+            )
+        decoded.append((data, width, height))
+
+    sequence = Sequence(video_id=None, procedure_id=procedure_id, name=name, start_time=0, duration=0)
+    session.add(sequence)
+    session.commit()
+    session.refresh(sequence)
+
+    for frame_index, (data, width, height) in enumerate(decoded):
+        storage_key = f"frames/{sequence.id}/{frame_index}.png"
+        storage.upload(storage_key, data, content_type="image/png")
+        session.add(
+            Frame(
+                sequence_id=sequence.id,
+                storage_key=storage_key,
+                frame_index=frame_index,
+                width=width,
+                height=height,
+                size_bytes=len(data),
+            )
+        )
+    session.commit()
+    return sequence
+
+
 @router.post(
     "/sequences/{sequence_id}/frames/upload",
     response_model=FrameRead,
