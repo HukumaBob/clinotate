@@ -1100,6 +1100,53 @@
         }
       }
     },
+    "/media/sequences/{sequence_id}": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Get Sequence",
+        "operationId": "get_sequence_media_sequences__sequence_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/media/sequences/{sequence_id}/frames": {
       "get": {
         "tags": [

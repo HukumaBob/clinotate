@@ -156,6 +156,14 @@ def _frame_read(frame: Frame, storage: StorageService) -> FrameRead:
     )
 
 
+@router.get("/sequences/{sequence_id}", response_model=SequenceRead)
+def get_sequence(sequence_id: int, session: Session = Depends(get_session)) -> Sequence:
+    sequence = session.get(Sequence, sequence_id)
+    if sequence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
+    return sequence
+
+
 @router.get("/sequences/{sequence_id}/frames", response_model=list[FrameRead])
 def list_frames(
     sequence_id: int,

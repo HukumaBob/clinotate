@@ -232,3 +232,28 @@ def test_list_sequences_for_procedure():
     assert response.status_code == 200
     ids = [s["id"] for s in response.json()]
     assert sequence_id in ids
+
+
+def test_get_sequence_by_id():
+    import time
+    headers = _auth_headers()
+    procedure_response = client.post("/taxonomy/procedures", json={"name": f"media-seq-test-{int(time.time()*1000)}"}, headers=headers)
+    procedure_id = procedure_response.json()["id"]
+
+    create_response = client.post(
+        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+    )
+    sequence_id = create_response.json()["id"]
+
+    response = client.get(f"/media/sequences/{sequence_id}", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == sequence_id
+    assert body["procedure_id"] == procedure_id
+
+
+def test_get_sequence_404_for_missing_sequence():
+    headers = _auth_headers()
+    response = client.get("/media/sequences/999999999", headers=headers)
+    assert response.status_code == 404
