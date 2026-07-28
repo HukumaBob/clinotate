@@ -72,7 +72,9 @@ def _create_frame(token: str) -> int:
         )
     video_id = upload.json()["id"]
     sequence = client.post(
-        f"/media/videos/{video_id}/sequences", json={"start_time": 0, "duration": 2}, headers=headers
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "test sequence", "start_time": 0, "duration": 2},
+        headers=headers,
     ).json()
     frames = client.get(f"/media/sequences/{sequence['id']}/frames", headers=headers).json()
     return frames[0]["id"], sequence["id"]

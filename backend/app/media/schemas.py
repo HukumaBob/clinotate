@@ -13,11 +13,13 @@ class VideoRead(BaseModel):
 
 
 class SequenceCreate(BaseModel):
+    name: str
     start_time: int
     duration: int
 
 
 class SequenceCreateStandalone(BaseModel):
+    name: str
     procedure_id: int
     start_time: int = 0
     duration: int = 0
@@ -26,10 +28,15 @@ class SequenceCreateStandalone(BaseModel):
 class SequenceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    name: str
     video_id: int | None
     procedure_id: int | None
     start_time: int
     duration: int
+
+
+class SuggestSequenceNameResponse(BaseModel):
+    name: str
 
 
 class FrameRead(BaseModel):

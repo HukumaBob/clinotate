@@ -73,7 +73,7 @@ def test_create_sequence_extracts_frames():
 
     sequence_response = client.post(
         f"/media/videos/{video_id}/sequences",
-        json={"start_time": 0, "duration": 2},
+        json={"name": "test sequence", "start_time": 0, "duration": 2},
         headers=headers,
     )
     assert sequence_response.status_code == 201
@@ -99,7 +99,7 @@ def test_sequence_can_be_created_without_a_video():
 
     session = SessionLocal()
     try:
-        sequence = Sequence(video_id=None, procedure_id=procedure_id, start_time=0, duration=0)
+        sequence = Sequence(video_id=None, procedure_id=procedure_id, name="", start_time=0, duration=0)
         session.add(sequence)
         session.commit()
         session.refresh(sequence)
@@ -123,7 +123,7 @@ def test_get_frame_returns_browser_loadable_image_url():
 
     sequence_response = client.post(
         f"/media/videos/{video_id}/sequences",
-        json={"start_time": 0, "duration": 2},
+        json={"name": "test sequence", "start_time": 0, "duration": 2},
         headers=headers,
     )
     sequence_id = sequence_response.json()["id"]
@@ -151,7 +151,9 @@ def test_create_standalone_sequence_without_video():
     ).json()["id"]
 
     response = client.post(
-        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+        "/media/sequences",
+        json={"procedure_id": procedure_id, "name": "test sequence"},
+        headers=headers,
     )
 
     assert response.status_code == 201
@@ -166,7 +168,9 @@ def test_upload_frame_to_standalone_sequence():
         "/taxonomy/procedures", json={"name": "Downloaded polyp set 2"}, headers=headers
     ).json()["id"]
     sequence_id = client.post(
-        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+        "/media/sequences",
+        json={"procedure_id": procedure_id, "name": "test sequence"},
+        headers=headers,
     ).json()["id"]
 
     fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
@@ -189,7 +193,9 @@ def test_upload_invalid_image_to_standalone_sequence_returns_4xx():
         "/taxonomy/procedures", json={"name": "Downloaded polyp set 3"}, headers=headers
     ).json()["id"]
     sequence_id = client.post(
-        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+        "/media/sequences",
+        json={"procedure_id": procedure_id, "name": "test sequence"},
+        headers=headers,
     ).json()["id"]
 
     response = client.post(
@@ -222,7 +228,7 @@ def test_list_sequences_for_video():
 
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
-        json={"start_time": 0, "duration": 2},
+        json={"name": "test sequence", "start_time": 0, "duration": 2},
         headers=headers,
     ).json()["id"]
 
@@ -239,7 +245,9 @@ def test_list_sequences_for_procedure():
         "/taxonomy/procedures", json={"name": "Listing procedure"}, headers=headers
     ).json()["id"]
     sequence_id = client.post(
-        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+        "/media/sequences",
+        json={"procedure_id": procedure_id, "name": "test sequence"},
+        headers=headers,
     ).json()["id"]
 
     response = client.get(f"/media/procedures/{procedure_id}/sequences", headers=headers)
@@ -256,7 +264,9 @@ def test_get_sequence_by_id():
     procedure_id = procedure_response.json()["id"]
 
     create_response = client.post(
-        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+        "/media/sequences",
+        json={"procedure_id": procedure_id, "name": "test sequence"},
+        headers=headers,
     )
     sequence_id = create_response.json()["id"]
 
@@ -272,3 +282,54 @@ def test_get_sequence_404_for_missing_sequence():
     headers = _auth_headers()
     response = client.get("/media/sequences/999999999", headers=headers)
     assert response.status_code == 404
+
+
+def test_suggest_sequence_name_first_of_the_day():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Suggest name EGD 1"}, headers=headers
+    ).json()["id"]
+
+    response = client.get(
+        "/media/sequences/suggest-name", params={"procedure_id": procedure_id}, headers=headers
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"].startswith("Suggest name EGD 1 ")
+    assert body["name"].endswith("#1")
+
+
+def test_suggest_sequence_name_increments_same_day_ordinal():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Suggest name EGD 2"}, headers=headers
+    ).json()["id"]
+
+    first_name = client.get(
+        "/media/sequences/suggest-name", params={"procedure_id": procedure_id}, headers=headers
+    ).json()["name"]
+    client.post(
+        "/media/sequences",
+        json={"procedure_id": procedure_id, "name": first_name, "start_time": 0, "duration": 0},
+        headers=headers,
+    )
+
+    second_response = client.get(
+        "/media/sequences/suggest-name", params={"procedure_id": procedure_id}, headers=headers
+    )
+
+    assert second_response.json()["name"].endswith("#2")
+
+
+def test_create_standalone_sequence_requires_name():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Requires name test"}, headers=headers
+    ).json()["id"]
+
+    response = client.post(
+        "/media/sequences", json={"procedure_id": procedure_id}, headers=headers
+    )
+
+    assert response.status_code == 422

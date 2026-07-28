@@ -1,4 +1,5 @@
 import io
+from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from PIL import Image, UnidentifiedImageError
@@ -12,9 +13,10 @@ from app.media.schemas import (
     SequenceCreate,
     SequenceCreateStandalone,
     SequenceRead,
+    SuggestSequenceNameResponse,
     VideoRead,
 )
-from app.media.service import compute_checksum, extract_frames, probe_video
+from app.media.service import compute_checksum, extract_frames, probe_video, suggest_sequence_name
 from app.storage import StorageService, get_storage_service
 from app.taxonomy.models import Procedure
 
@@ -67,7 +69,9 @@ def create_sequence(
     if video is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
-    sequence = Sequence(video_id=video_id, start_time=payload.start_time, duration=payload.duration)
+    sequence = Sequence(
+        video_id=video_id, name=payload.name, start_time=payload.start_time, duration=payload.duration
+    )
     session.add(sequence)
     session.commit()
     session.refresh(sequence)
@@ -102,6 +106,7 @@ def create_standalone_sequence(
     sequence = Sequence(
         video_id=None,
         procedure_id=payload.procedure_id,
+        name=payload.name,
         start_time=payload.start_time,
         duration=payload.duration,
     )
@@ -109,6 +114,17 @@ def create_standalone_sequence(
     session.commit()
     session.refresh(sequence)
     return sequence
+
+
+@router.get("/sequences/suggest-name", response_model=SuggestSequenceNameResponse)
+def get_suggested_sequence_name(
+    procedure_id: int,
+    session: Session = Depends(get_session),
+) -> SuggestSequenceNameResponse:
+    procedure = session.get(Procedure, procedure_id)
+    if procedure is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Procedure not found")
+    return SuggestSequenceNameResponse(name=suggest_sequence_name(session, procedure, date.today()))
 
 
 @router.post(

@@ -1,12 +1,29 @@
 import hashlib
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import cv2
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.media.models import Sequence
+from app.taxonomy.models import Procedure
 
 
 def compute_checksum(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def suggest_sequence_name(session: Session, procedure: Procedure, today: date) -> str:
+    base = f"{procedure.name} {today.isoformat()}"
+    existing_count = (
+        session.query(func.count(Sequence.id))
+        .filter(Sequence.name.like(f"{base}%"))
+        .scalar()
+        or 0
+    )
+    return f"{base} #{existing_count + 1}"
 
 
 def probe_video(video_bytes: bytes) -> tuple[float, float]:
