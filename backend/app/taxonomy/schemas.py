@@ -1,7 +1,5 @@
 from pydantic import BaseModel, ConfigDict
 
-from app.taxonomy.models import LabelType
-
 
 class ProcedureCreate(BaseModel):
     name: str
@@ -13,29 +11,65 @@ class ProcedureRead(BaseModel):
     name: str
 
 
+class CategoryCreate(BaseModel):
+    name: str
+    procedure_id: int
+
+
+class CategoryUpdate(BaseModel):
+    name: str | None = None
+
+
+class CategoryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    procedure_id: int
+
+
+class EvaluationTypeCreate(BaseModel):
+    name: str
+
+
+class EvaluationTypeUpdate(BaseModel):
+    name: str | None = None
+
+
+class EvaluationTypeRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+
+
 class LabelCreate(BaseModel):
     name: str
-    label_type: LabelType
     color: str = "#FFFFFF"
-    procedure_id: int | None = None
+    category_id: int
+    evaluation_type_id: int
+
+
+class LabelUpdate(BaseModel):
+    name: str | None = None
+    color: str | None = None
+    category_id: int | None = None
+    evaluation_type_id: int | None = None
 
 
 class LabelRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
-    label_type: LabelType
     color: str
-    procedure_id: int | None
+    category_id: int
+    evaluation_type_id: int
     taxonomy_version: int
 
 
-class LabelRelationCreate(BaseModel):
-    parent_id: int
-    child_id: int
-    confidence: float = 1.0
+class TaxonomyTreeEvaluationTypeNode(BaseModel):
+    evaluation_type: EvaluationTypeRead
+    labels: list[LabelRead]
 
 
-class LabelTreeNode(BaseModel):
-    category: LabelRead
-    children: list[LabelRead]
+class TaxonomyTreeNode(BaseModel):
+    category: CategoryRead
+    evaluation_types: list[TaxonomyTreeEvaluationTypeNode]
