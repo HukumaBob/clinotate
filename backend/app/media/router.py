@@ -6,6 +6,7 @@ from PIL import Image, UnidentifiedImageError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
 from app.db import get_session
 from app.media.models import Frame, Sequence, Video
@@ -310,3 +311,44 @@ def get_frame(
     if frame is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
     return _frame_read(frame, storage)
+
+
+@router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_video(video_id: int, session: Session = Depends(get_session)) -> None:
+    video = session.get(Video, video_id)
+    if video is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    linked_count = session.query(Sequence).filter(Sequence.video_id == video_id).count()
+    if linked_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Delete or reassign this video's sequences before deleting it",
+        )
+
+    session.delete(video)
+    session.commit()
+
+
+@router.delete("/sequences/{sequence_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_sequence(sequence_id: int, session: Session = Depends(get_session)) -> None:
+    sequence = session.get(Sequence, sequence_id)
+    if sequence is None or sequence.video_id is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
+
+    has_annotations = (
+        session.query(Annotation)
+        .join(Frame, Annotation.frame_id == Frame.id)
+        .filter(Frame.sequence_id == sequence_id)
+        .first()
+        is not None
+    )
+    if has_annotations:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This sequence has annotated frames — remove annotations before deleting it",
+        )
+
+    session.query(Frame).filter(Frame.sequence_id == sequence_id).delete()
+    session.delete(sequence)
+    session.commit()

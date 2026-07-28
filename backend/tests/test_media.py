@@ -463,3 +463,76 @@ def test_media_library_lists_videos_and_photo_sequences():
     photo_item = next(i for i in items if i["kind"] == "photo" and i["id"] == photo_sequence_id)
     assert photo_item["linked_sequence_count"] == 1
     assert photo_item["filename"] == "Library photo seq"
+
+
+def test_delete_video_without_sequences_succeeds():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("deletable.mp4", f, "video/mp4")},
+            data={"title": "Deletable video"},
+            headers=headers,
+        ).json()["id"]
+
+    response = client.delete(f"/media/videos/{video_id}", headers=headers)
+
+    assert response.status_code == 204
+    assert client.get("/media/videos", headers=headers).json()
+    assert video_id not in [v["id"] for v in client.get("/media/videos", headers=headers).json()]
+
+
+def test_delete_video_with_linked_sequence_returns_409():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("linked.mp4", f, "video/mp4")},
+            data={"title": "Linked video"},
+            headers=headers,
+        ).json()["id"]
+    client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Linked seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    )
+
+    response = client.delete(f"/media/videos/{video_id}", headers=headers)
+
+    assert response.status_code == 409
+
+
+def test_delete_photo_sequence_without_annotations_succeeds():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Delete photo seq procedure"}, headers=headers
+    ).json()["id"]
+    sequence_id = client.post(
+        "/media/sequences",
+        json={"procedure_id": procedure_id, "name": "Deletable photo seq"},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.delete(f"/media/sequences/{sequence_id}", headers=headers)
+
+    assert response.status_code == 204
+
+
+def test_delete_video_derived_sequence_via_media_endpoint_returns_404():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("not_deletable_here.mp4", f, "video/mp4")},
+            data={"title": "Not deletable here"},
+            headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Video-derived seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.delete(f"/media/sequences/{sequence_id}", headers=headers)
+
+    assert response.status_code == 404
