@@ -891,6 +891,36 @@
         ]
       }
     },
+    "/media/library": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Get Media Library",
+        "operationId": "get_media_library_media_library_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaLibraryItem"
+                  },
+                  "type": "array",
+                  "title": "Response Get Media Library Media Library Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/media/videos/{video_id}/sequences": {
       "post": {
         "tags": [
@@ -1043,6 +1073,99 @@
         ]
       }
     },
+    "/media/sequences/suggest-name": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Get Suggested Sequence Name",
+        "operationId": "get_suggested_sequence_name_media_sequences_suggest_name_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procedure_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Procedure Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestSequenceNameResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/sequences/photos": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Upload Photo Sequence",
+        "operationId": "upload_photo_sequence_media_sequences_photos_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_photo_sequence_media_sequences_photos_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/media/sequences/{sequence_id}/frames/upload": {
       "post": {
         "tags": [
@@ -1133,6 +1256,44 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Delete Sequence",
+        "operationId": "delete_sequence_media_sequences__sequence_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -1282,6 +1443,46 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/videos/{video_id}": {
+      "delete": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Delete Video",
+        "operationId": "delete_video_media_videos__video_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -1927,6 +2128,33 @@
         ],
         "title": "AnnotationType"
       },
+      "Body_upload_photo_sequence_media_sequences_photos_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "procedure_id": {
+            "type": "integer",
+            "title": "Procedure Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "name",
+          "procedure_id"
+        ],
+        "title": "Body_upload_photo_sequence_media_sequences_photos_post"
+      },
       "Body_upload_standalone_frame_media_sequences__sequence_id__frames_upload_post": {
         "properties": {
           "file": {
@@ -1951,6 +2179,17 @@
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "procedure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Id"
           }
         },
         "type": "object",
@@ -2017,6 +2256,32 @@
         },
         "type": "object",
         "title": "CategoryUpdate"
+      },
+      "CropBox": {
+        "properties": {
+          "left": {
+            "type": "number",
+            "title": "Left",
+            "default": 0
+          },
+          "right": {
+            "type": "number",
+            "title": "Right",
+            "default": 0
+          },
+          "top": {
+            "type": "number",
+            "title": "Top",
+            "default": 0
+          },
+          "bottom": {
+            "type": "number",
+            "title": "Bottom",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "CropBox"
       },
       "EvaluationTypeCreate": {
         "properties": {
@@ -2339,6 +2604,61 @@
         "type": "object",
         "title": "LabelUpdate"
       },
+      "MediaLibraryItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "video",
+              "photo"
+            ],
+            "title": "Kind"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "procedure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Id"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Uploaded At"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "linked_sequence_count": {
+            "type": "integer",
+            "title": "Linked Sequence Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "filename",
+          "procedure_id",
+          "uploaded_at",
+          "size_bytes",
+          "linked_sequence_count"
+        ],
+        "title": "MediaLibraryItem"
+      },
       "ProcedureCreate": {
         "properties": {
           "name": {
@@ -2533,6 +2853,10 @@
       },
       "SequenceCreate": {
         "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
           "start_time": {
             "type": "integer",
             "title": "Start Time"
@@ -2540,10 +2864,26 @@
           "duration": {
             "type": "integer",
             "title": "Duration"
+          },
+          "fps": {
+            "type": "number",
+            "title": "Fps",
+            "default": 1.0
+          },
+          "crop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CropBox"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
+          "name",
           "start_time",
           "duration"
         ],
@@ -2551,6 +2891,10 @@
       },
       "SequenceCreateStandalone": {
         "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
           "procedure_id": {
             "type": "integer",
             "title": "Procedure Id"
@@ -2568,6 +2912,7 @@
         },
         "type": "object",
         "required": [
+          "name",
           "procedure_id"
         ],
         "title": "SequenceCreateStandalone"
@@ -2577,6 +2922,10 @@
           "id": {
             "type": "integer",
             "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
           },
           "video_id": {
             "anyOf": [
@@ -2612,12 +2961,26 @@
         "type": "object",
         "required": [
           "id",
+          "name",
           "video_id",
           "procedure_id",
           "start_time",
           "duration"
         ],
         "title": "SequenceRead"
+      },
+      "SuggestSequenceNameResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SuggestSequenceNameResponse"
       },
       "TaxonomyTreeEvaluationTypeNode": {
         "properties": {
@@ -2797,9 +3160,24 @@
             "type": "integer",
             "title": "Id"
           },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "procedure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Id"
           },
           "fps": {
             "type": "number",
@@ -2808,14 +3186,21 @@
           "duration_seconds": {
             "type": "number",
             "title": "Duration Seconds"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
           }
         },
         "type": "object",
         "required": [
           "id",
+          "filename",
           "title",
+          "procedure_id",
           "fps",
-          "duration_seconds"
+          "duration_seconds",
+          "size_bytes"
         ],
         "title": "VideoRead"
       }
