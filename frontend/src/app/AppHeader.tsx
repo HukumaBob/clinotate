@@ -17,7 +17,7 @@ export function AppHeader() {
   const logout = useAuth((state) => state.logout);
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-gray-800 bg-gray-950 px-6 text-gray-100">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-800 bg-gray-950 px-6 text-gray-100">
       <div className="flex items-center gap-8">
         <span className="font-semibold">Endoscopy Annotation Platform</span>
         <nav className="flex items-center gap-6">

@@ -672,7 +672,7 @@ Open `http://localhost:5173/login` in a real browser, log in with any valid user
 
 - [ ] **Step 3: Confirm the header persists into the frame editor**
 
-Navigate into any sequence (`/videos/:videoId/sequences/:sequenceId`), open a frame in the editor. Confirm the header bar is still visible above the frame editor's two-column layout — it does not disappear or get pushed off-screen.
+Navigate into any sequence (`/videos/:videoId/sequences/:sequenceId`), open a frame in the editor. Confirm the header bar is still visible above the frame editor's two-column layout — it does not disappear or get pushed off-screen. Also confirm the frame editor's bottom edge (canvas/toolbar) is fully visible and not clipped by the header's height — the editor should fill exactly the remaining viewport height, not overflow 56px below the fold.
 
 - [ ] **Step 4: Confirm logout works**
 

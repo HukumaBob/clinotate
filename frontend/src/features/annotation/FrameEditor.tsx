@@ -183,7 +183,7 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   }
 
   return (
-    <div className="flex h-screen flex-col bg-gray-950 text-gray-100">
+    <div className="flex h-full flex-col bg-gray-950 text-gray-100">
       {(() => {
         const banner = describeJobBanner(jobQuery.data);
         if (banner?.kind === "error" && jobQuery.data?.id !== dismissedJobId) {

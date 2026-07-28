@@ -24,7 +24,7 @@ export function SequenceGridPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 p-8 text-gray-100">
+    <div className="min-h-full bg-gray-950 p-8 text-gray-100">
       <h1 className="mb-4 text-xl font-semibold">Sequence #{sequenceId}</h1>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {(framesQuery.data ?? []).map((frame) => (

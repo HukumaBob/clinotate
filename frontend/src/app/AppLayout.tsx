@@ -4,9 +4,11 @@ import { AppHeader } from "./AppHeader";
 
 export function AppLayout() {
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="flex h-screen flex-col bg-gray-950">
       <AppHeader />
-      <Outlet />
+      <main className="flex-1 overflow-auto">
+        <Outlet />
+      </main>
     </div>
   );
 }
