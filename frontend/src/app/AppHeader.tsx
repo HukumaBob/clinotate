@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../features/auth/useAuth";
 
@@ -13,8 +13,14 @@ const NAV_ITEMS = [
 
 export function AppHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const user = useAuth((state) => state.user);
   const logout = useAuth((state) => state.logout);
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-800 bg-gray-950 px-6 text-gray-100">
@@ -53,7 +59,7 @@ export function AppHeader() {
           <span className="text-sm text-gray-400">{user.email}</span>
           <button
             type="button"
-            onClick={logout}
+            onClick={handleLogout}
             className="rounded border border-gray-700 px-3 py-1 text-sm text-gray-100 hover:bg-gray-800"
           >
             Log out

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppHeader } from "../src/app/AppHeader";
@@ -10,6 +10,17 @@ function renderHeader(path = "/videos") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <AppHeader />
+    </MemoryRouter>,
+  );
+}
+
+function renderHeaderWithRoutes(path = "/videos") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/videos" element={<AppHeader />} />
+        <Route path="/login" element={<div>Login page content</div>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -64,6 +75,14 @@ describe("AppHeader", () => {
     await userEvent.click(screen.getByRole("button", { name: "Log out" }));
 
     expect(logoutSpy).toHaveBeenCalledOnce();
+  });
+
+  it("navigates to /login when the Log out button is clicked", async () => {
+    renderHeaderWithRoutes();
+
+    await userEvent.click(screen.getByRole("button", { name: "Log out" }));
+
+    expect(screen.getByText("Login page content")).toBeInTheDocument();
   });
 
   it("highlights Media as active when the current path is /videos", () => {
