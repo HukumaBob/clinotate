@@ -1,0 +1,1693 @@
+{
+  "procedures": [
+    "egds",
+    "colono"
+  ],
+  "labels": [
+    {
+      "key": "category::anatomy::egds",
+      "name": "Anatomy",
+      "procedure": "egds",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "category::findings::egds",
+      "name": "Findings",
+      "procedure": "egds",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "category::artifacts::egds",
+      "name": "Artifacts",
+      "procedure": "egds",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "category::quality::egds",
+      "name": "Quality",
+      "procedure": "egds",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "category::mode::egds",
+      "name": "Imaging mode",
+      "procedure": "egds",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "category::anatomy::colono",
+      "name": "Anatomy",
+      "procedure": "colono",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "category::quality::colono",
+      "name": "Quality",
+      "procedure": "colono",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "category::artifacts::colono",
+      "name": "Artifacts",
+      "procedure": "colono",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "category::findings::colono",
+      "name": "Findings",
+      "procedure": "colono",
+      "color": "#FFFFFF",
+      "label_type": "geometric"
+    },
+    {
+      "key": "pedunculated_polyp_0_Ip::egds",
+      "name": "pedunculated_polyp_0_Ip",
+      "procedure": "egds",
+      "color": "#DA802E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "tongue::egds",
+      "name": "tongue",
+      "procedure": "egds",
+      "color": "#4C2EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "root_of_the_tongue::egds",
+      "name": "root_of_the_tongue",
+      "procedure": "egds",
+      "color": "#422EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "palate::egds",
+      "name": "palate",
+      "procedure": "egds",
+      "color": "#2E3FDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "teeth::egds",
+      "name": "teeth",
+      "procedure": "egds",
+      "color": "#482EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "uvula::egds",
+      "name": "uvula",
+      "procedure": "egds",
+      "color": "#522EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "palatine_arch::egds",
+      "name": "palatine_arch",
+      "procedure": "egds",
+      "color": "#2E3CDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "pharynx::egds",
+      "name": "pharynx",
+      "procedure": "egds",
+      "color": "#2E32DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "epiglottis::egds",
+      "name": "epiglottis",
+      "procedure": "egds",
+      "color": "#2E5DDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "vestibular_fold::egds",
+      "name": "vestibular_fold",
+      "procedure": "egds",
+      "color": "#592EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "vocal_cord::egds",
+      "name": "vocal_cord",
+      "procedure": "egds",
+      "color": "#5C2EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "trachea::egds",
+      "name": "trachea",
+      "procedure": "egds",
+      "color": "#4F2EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "mouthpiece::egds",
+      "name": "mouthpiece",
+      "procedure": "egds",
+      "color": "#2E4DDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "aryepiglottic_fold::egds",
+      "name": "aryepiglottic_fold",
+      "procedure": "egds",
+      "color": "#2E81DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "oesophagus::egds",
+      "name": "oesophagus",
+      "procedure": "egds",
+      "color": "#2E49DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "gastroesophageal_junction::egds",
+      "name": "gastroesophageal_junction",
+      "procedure": "egds",
+      "color": "#2E57DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "phlebectasia::egds",
+      "name": "phlebectasia",
+      "procedure": "egds",
+      "color": "#DA842E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "glycogen acanthosis::egds",
+      "name": "glycogen acanthosis",
+      "procedure": "egds",
+      "color": "#DA6B2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "inlet_patch::egds",
+      "name": "inlet_patch",
+      "procedure": "egds",
+      "color": "#DA712E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "cardia::egds",
+      "name": "cardia",
+      "procedure": "egds",
+      "color": "#2E7BDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "foam::egds",
+      "name": "foam",
+      "procedure": "egds",
+      "color": "#DA2E95",
+      "label_type": "geometric"
+    },
+    {
+      "key": "mucus::egds",
+      "name": "mucus",
+      "procedure": "egds",
+      "color": "#DA2E6D",
+      "label_type": "geometric"
+    },
+    {
+      "key": "fundus::egds",
+      "name": "fundus",
+      "procedure": "egds",
+      "color": "#2E5ADA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "corpus_ventriculi::egds",
+      "name": "corpus_ventriculi",
+      "procedure": "egds",
+      "color": "#2E6ADA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "curvatura_major::egds",
+      "name": "curvatura_major",
+      "procedure": "egds",
+      "color": "#2E67DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "curvatura_minor::egds",
+      "name": "curvatura_minor",
+      "procedure": "egds",
+      "color": "#2E64DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "plicae_gastricae::egds",
+      "name": "plicae_gastricae",
+      "procedure": "egds",
+      "color": "#312EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "angulus_ventriculi::egds",
+      "name": "angulus_ventriculi",
+      "procedure": "egds",
+      "color": "#2E95DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "pylorus::egds",
+      "name": "pylorus",
+      "procedure": "egds",
+      "color": "#3B2EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "ampulla_duodeni::egds",
+      "name": "ampulla_duodeni",
+      "procedure": "egds",
+      "color": "#2E98DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "post_bulbus_duodenum::egds",
+      "name": "post_bulbus_duodenum",
+      "procedure": "egds",
+      "color": "#342EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "papilla_maj::egds",
+      "name": "papilla_maj",
+      "procedure": "egds",
+      "color": "#2E39DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "papilla_min::egds",
+      "name": "papilla_min",
+      "procedure": "egds",
+      "color": "#2E36DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "plicae_circulares::egds",
+      "name": "plicae_circulares",
+      "procedure": "egds",
+      "color": "#2E2FDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "lymphangiectasis::egds",
+      "name": "lymphangiectasis",
+      "procedure": "egds",
+      "color": "#DA7A2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "exesa_ventriculi::egds",
+      "name": "exesa_ventriculi",
+      "procedure": "egds",
+      "color": "#DA4A2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "ulceratio_ventriculi::egds",
+      "name": "ulceratio_ventriculi",
+      "procedure": "egds",
+      "color": "#DAA02E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "antrum::egds",
+      "name": "antrum",
+      "procedure": "egds",
+      "color": "#2E8FDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "angiectasis::egds",
+      "name": "angiectasis",
+      "procedure": "egds",
+      "color": "#DA312E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "z_line::egds",
+      "name": "z_line",
+      "procedure": "egds",
+      "color": "#662EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "larinx::egds",
+      "name": "larinx",
+      "procedure": "egds",
+      "color": "#2E50DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "dirty_optic::egds",
+      "name": "dirty_optic",
+      "procedure": "egds",
+      "color": "#DA2EB4",
+      "label_type": "geometric"
+    },
+    {
+      "key": "close_focus::egds",
+      "name": "close_focus",
+      "procedure": "egds",
+      "color": "#DA2EC8",
+      "label_type": "geometric"
+    },
+    {
+      "key": "corpus ventriculi_retro::egds",
+      "name": "corpus ventriculi_retro",
+      "procedure": "egds",
+      "color": "#2E6EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "endoscope::egds",
+      "name": "endoscope",
+      "procedure": "egds",
+      "color": "#AEDA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "outside_the_body::egds",
+      "name": "outside_the_body",
+      "procedure": "egds",
+      "color": "#68DA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "liquor::egds",
+      "name": "liquor",
+      "procedure": "egds",
+      "color": "#DA2E81",
+      "label_type": "geometric"
+    },
+    {
+      "key": "bad_picture::egds",
+      "name": "bad_picture",
+      "procedure": "egds",
+      "color": "#C22EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "water_jet::egds",
+      "name": "water_jet",
+      "procedure": "egds",
+      "color": "#2EDA4D",
+      "label_type": "geometric"
+    },
+    {
+      "key": "forcept::egds",
+      "name": "forcept",
+      "procedure": "egds",
+      "color": "#8BDA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "scar_duodenum::egds",
+      "name": "scar_duodenum",
+      "procedure": "egds",
+      "color": "#DA872E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "nbi::egds",
+      "name": "nbi",
+      "procedure": "egds",
+      "color": "#2EDABD",
+      "label_type": "geometric"
+    },
+    {
+      "key": "columnar_metaplasia::egds",
+      "name": "columnar_metaplasia",
+      "procedure": "egds",
+      "color": "#DA402E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "suspicious_spot::egds",
+      "name": "suspicious_spot",
+      "procedure": "egds",
+      "color": "#DA932E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "gastric_metaplasia::egds",
+      "name": "gastric_metaplasia",
+      "procedure": "egds",
+      "color": "#DA682E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "posterior_parietis_ventriculi::egds",
+      "name": "posterior_parietis_ventriculi",
+      "procedure": "egds",
+      "color": "#382EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "duodenum::egds",
+      "name": "duodenum",
+      "procedure": "egds",
+      "color": "#2E60DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "oral_cavity::egds",
+      "name": "oral_cavity",
+      "procedure": "egds",
+      "color": "#2E46DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "hiatal_hernia::egds",
+      "name": "hiatal_hernia",
+      "procedure": "egds",
+      "color": "#DA6D2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "papula::egds",
+      "name": "papula",
+      "procedure": "egds",
+      "color": "#DA7E2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "anterior_parietis_ventriculi::egds",
+      "name": "anterior_parietis_ventriculi",
+      "procedure": "egds",
+      "color": "#2E92DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "exesa_duodenum::egds",
+      "name": "exesa_duodenum",
+      "procedure": "egds",
+      "color": "#DA462E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "gastric_advanced_cancer::egds",
+      "name": "gastric_advanced_cancer",
+      "procedure": "egds",
+      "color": "#DA642E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "flat_lesion_0_IIa::egds",
+      "name": "flat_lesion_0_IIa",
+      "procedure": "egds",
+      "color": "#DA532E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "elevated_surface::egds",
+      "name": "elevated_surface",
+      "procedure": "egds",
+      "color": "#DA442E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "flat_lesion_0_IIb::egds",
+      "name": "flat_lesion_0_IIb",
+      "procedure": "egds",
+      "color": "#DA572E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "flat_lesion_0_IIc::egds",
+      "name": "flat_lesion_0_IIc",
+      "procedure": "egds",
+      "color": "#DA5A2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "subepitelial_lesion::egds",
+      "name": "subepitelial_lesion",
+      "procedure": "egds",
+      "color": "#DA8F2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "ulcer_duodeni::egds",
+      "name": "ulcer_duodeni",
+      "procedure": "egds",
+      "color": "#DA9C2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "flat_lesion_0_III::egds",
+      "name": "flat_lesion_0_III",
+      "procedure": "egds",
+      "color": "#DA4F2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "snare::egds",
+      "name": "snare",
+      "procedure": "egds",
+      "color": "#44DA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "polypoid::egds",
+      "name": "polypoid",
+      "procedure": "egds",
+      "color": "#DA862E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "flat_lesion::egds",
+      "name": "flat_lesion",
+      "procedure": "egds",
+      "color": "#DA4D2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "sessile_polyp_0_Is::egds",
+      "name": "sessile_polyp_0_Is",
+      "procedure": "egds",
+      "color": "#DA8B2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "focus_haematini::egds",
+      "name": "focus_haematini",
+      "procedure": "egds",
+      "color": "#DA602E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "focus_fibrini::egds",
+      "name": "focus_fibrini",
+      "procedure": "egds",
+      "color": "#DA5E2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "aberrant_pancreas::egds",
+      "name": "aberrant_pancreas",
+      "procedure": "egds",
+      "color": "#DA2F2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "add_duct::egds",
+      "name": "add_duct",
+      "procedure": "egds",
+      "color": "#2E9FDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "exesa_ventriculi_chronic::egds",
+      "name": "exesa_ventriculi_chronic",
+      "procedure": "egds",
+      "color": "#DA4B2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "traces_of_blood::egds",
+      "name": "traces_of_blood",
+      "procedure": "egds",
+      "color": "#DA962E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "exesa_oesophagus::egds",
+      "name": "exesa_oesophagus",
+      "procedure": "egds",
+      "color": "#DA482E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "ulceratio_oesophagus::egds",
+      "name": "ulceratio_oesophagus",
+      "procedure": "egds",
+      "color": "#DA9E2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "bad_preparation::egds",
+      "name": "bad_preparation",
+      "procedure": "egds",
+      "color": "#CD2EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "ostium_oesophageum::egds",
+      "name": "ostium_oesophageum",
+      "procedure": "egds",
+      "color": "#2E43DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "whole_oesophagus::egds",
+      "name": "whole_oesophagus",
+      "procedure": "egds",
+      "color": "#5F2EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "scar_ventriculi::egds",
+      "name": "scar_ventriculi",
+      "procedure": "egds",
+      "color": "#DA892E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "whole_ventriculi::egds",
+      "name": "whole_ventriculi",
+      "procedure": "egds",
+      "color": "#632EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "bilis::egds",
+      "name": "bilis",
+      "procedure": "egds",
+      "color": "#DA2ED3",
+      "label_type": "geometric"
+    },
+    {
+      "key": "zoom::egds",
+      "name": "zoom",
+      "procedure": "egds",
+      "color": "#2EBDDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "diverticulum::egds",
+      "name": "diverticulum",
+      "procedure": "egds",
+      "color": "#DA422E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "gastric_adenoma_lgd::egds",
+      "name": "gastric_adenoma_lgd",
+      "procedure": "egds",
+      "color": "#DA622E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "gastric_normal_pyloric_gland_mucosa::egds",
+      "name": "gastric_normal_pyloric_gland_mucosa",
+      "procedure": "egds",
+      "color": "#DA692E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "oesophagus_normal_mucus::egds",
+      "name": "oesophagus_normal_mucus",
+      "procedure": "egds",
+      "color": "#DA7C2E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "gastric_early_carcinoma::egds",
+      "name": "gastric_early_carcinoma",
+      "procedure": "egds",
+      "color": "#DA662E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "colon_transversum::colono",
+      "name": "colon_transversum",
+      "procedure": "colono",
+      "color": "#2E71DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "foam::colono",
+      "name": "foam",
+      "procedure": "colono",
+      "color": "#DA2E8B",
+      "label_type": "geometric"
+    },
+    {
+      "key": "liquor::colono",
+      "name": "liquor",
+      "procedure": "colono",
+      "color": "#DA2E77",
+      "label_type": "geometric"
+    },
+    {
+      "key": "close_focus::colono",
+      "name": "close_focus",
+      "procedure": "colono",
+      "color": "#DA2EBE",
+      "label_type": "geometric"
+    },
+    {
+      "key": "feces::colono",
+      "name": "feces",
+      "procedure": "colono",
+      "color": "#DA2EA0",
+      "label_type": "geometric"
+    },
+    {
+      "key": "dirty_optic::colono",
+      "name": "dirty_optic",
+      "procedure": "colono",
+      "color": "#DA2EAA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "bad_preparation::colono",
+      "name": "bad_preparation",
+      "procedure": "colono",
+      "color": "#D72EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "caecum::colono",
+      "name": "caecum",
+      "procedure": "colono",
+      "color": "#2E7EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "valvula_ileocaecalis::colono",
+      "name": "valvula_ileocaecalis",
+      "procedure": "colono",
+      "color": "#552EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "appendix::colono",
+      "name": "appendix",
+      "procedure": "colono",
+      "color": "#2E85DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "ampula_recti_retro::colono",
+      "name": "ampula_recti_retro",
+      "procedure": "colono",
+      "color": "#2E9CDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "ileum::colono",
+      "name": "ileum",
+      "procedure": "colono",
+      "color": "#2E53DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "rectum::colono",
+      "name": "rectum",
+      "procedure": "colono",
+      "color": "#3E2EDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "water_jet::colono",
+      "name": "water_jet",
+      "procedure": "colono",
+      "color": "#2EDA5F",
+      "label_type": "geometric"
+    },
+    {
+      "key": "colon_asc::colono",
+      "name": "colon_asc",
+      "procedure": "colono",
+      "color": "#2E77DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "colon_desc::colono",
+      "name": "colon_desc",
+      "procedure": "colono",
+      "color": "#2E74DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "anus_canal::colono",
+      "name": "anus_canal",
+      "procedure": "colono",
+      "color": "#2E8BDA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "anus_internal::colono",
+      "name": "anus_internal",
+      "procedure": "colono",
+      "color": "#2E88DA",
+      "label_type": "geometric"
+    },
+    {
+      "key": "outside_the_body::colono",
+      "name": "outside_the_body",
+      "procedure": "colono",
+      "color": "#56DA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "flat_lesion_0_IIa::colono",
+      "name": "flat_lesion_0_IIa",
+      "procedure": "colono",
+      "color": "#DA552E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "flat_lesion_0_IIb::colono",
+      "name": "flat_lesion_0_IIb",
+      "procedure": "colono",
+      "color": "#DA592E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "flat_lesion_0_IIc::colono",
+      "name": "flat_lesion_0_IIc",
+      "procedure": "colono",
+      "color": "#DA5C2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "flat_lesion_0_III::colono",
+      "name": "flat_lesion_0_III",
+      "procedure": "colono",
+      "color": "#DA512E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "pedunculated_polyp_0_Ip::colono",
+      "name": "pedunculated_polyp_0_Ip",
+      "procedure": "colono",
+      "color": "#DA822E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "colon_adenoma::colono",
+      "name": "colon_adenoma",
+      "procedure": "colono",
+      "color": "#DA352E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "colono_hyperplastic_polyp::colono",
+      "name": "colono_hyperplastic_polyp",
+      "procedure": "colono",
+      "color": "#DA392E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "lst_g_homogeneous::colono",
+      "name": "lst_g_homogeneous",
+      "procedure": "colono",
+      "color": "#DA732E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "colono_ssl::colono",
+      "name": "colono_ssl",
+      "procedure": "colono",
+      "color": "#DA3C2E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "sessile_polyp_0_Is::colono",
+      "name": "sessile_polyp_0_Is",
+      "procedure": "colono",
+      "color": "#DA8D2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "lst_ng_flat_elevated::colono",
+      "name": "lst_ng_flat_elevated",
+      "procedure": "colono",
+      "color": "#DA772E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "lst_ng_pseudodepressed::colono",
+      "name": "lst_ng_pseudodepressed",
+      "procedure": "colono",
+      "color": "#DA782E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "lst_g_nodular_mixed::colono",
+      "name": "lst_g_nodular_mixed",
+      "procedure": "colono",
+      "color": "#DA752E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "forcept::colono",
+      "name": "forcept",
+      "procedure": "colono",
+      "color": "#79DA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "colono_normal_mucus::colono",
+      "name": "colono_normal_mucus",
+      "procedure": "colono",
+      "color": "#DA3B2E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "subepitelial_lesion::colono",
+      "name": "subepitelial_lesion",
+      "procedure": "colono",
+      "color": "#DA912E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "colon_advanced_cancer::colono",
+      "name": "colon_advanced_cancer",
+      "procedure": "colono",
+      "color": "#DA372E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "tubulovillous_adenoma::colono",
+      "name": "tubulovillous_adenoma",
+      "procedure": "colono",
+      "color": "#DA9A2E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "colono_t1_carcinoma::colono",
+      "name": "colono_t1_carcinoma",
+      "procedure": "colono",
+      "color": "#DA3E2E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "chicken_skin_mucosa::colono",
+      "name": "chicken_skin_mucosa",
+      "procedure": "colono",
+      "color": "#DA332E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "ileum_normal_mucus::colono",
+      "name": "ileum_normal_mucus",
+      "procedure": "colono",
+      "color": "#DA6F2E",
+      "label_type": "morphological"
+    },
+    {
+      "key": "colono_sheath::colono",
+      "name": "colono_sheath",
+      "procedure": "colono",
+      "color": "#BFDA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "snare::colono",
+      "name": "snare",
+      "procedure": "colono",
+      "color": "#33DA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "traces_of_blood_colono::colono",
+      "name": "traces_of_blood_colono",
+      "procedure": "colono",
+      "color": "#DA982E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "endoscope::colono",
+      "name": "endoscope",
+      "procedure": "colono",
+      "color": "#9CDA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "colono_lifting::colono",
+      "name": "colono_lifting",
+      "procedure": "colono",
+      "color": "#D1DA2E",
+      "label_type": "geometric"
+    },
+    {
+      "key": "transparent_cap::colono",
+      "name": "transparent_cap",
+      "procedure": "colono",
+      "color": "#2EDA3C",
+      "label_type": "geometric"
+    }
+  ],
+  "relations": [
+    {
+      "parent_key": "pharynx::egds",
+      "child_key": "root_of_the_tongue::egds"
+    },
+    {
+      "parent_key": "pharynx::egds",
+      "child_key": "palatine_arch::egds"
+    },
+    {
+      "parent_key": "pharynx::egds",
+      "child_key": "uvula::egds"
+    },
+    {
+      "parent_key": "pharynx::egds",
+      "child_key": "ostium_oesophageum::egds"
+    },
+    {
+      "parent_key": "pharynx::egds",
+      "child_key": "larinx::egds"
+    },
+    {
+      "parent_key": "oesophagus::egds",
+      "child_key": "inlet_patch::egds"
+    },
+    {
+      "parent_key": "oesophagus::egds",
+      "child_key": "glycogen acanthosis::egds"
+    },
+    {
+      "parent_key": "oesophagus::egds",
+      "child_key": "phlebectasia::egds"
+    },
+    {
+      "parent_key": "oesophagus::egds",
+      "child_key": "ulceratio_oesophagus::egds"
+    },
+    {
+      "parent_key": "oesophagus::egds",
+      "child_key": "gastroesophageal_junction::egds"
+    },
+    {
+      "parent_key": "gastroesophageal_junction::egds",
+      "child_key": "corpus_ventriculi::egds"
+    },
+    {
+      "parent_key": "gastroesophageal_junction::egds",
+      "child_key": "z_line::egds"
+    },
+    {
+      "parent_key": "gastroesophageal_junction::egds",
+      "child_key": "columnar_metaplasia::egds"
+    },
+    {
+      "parent_key": "gastroesophageal_junction::egds",
+      "child_key": "exesa_oesophagus::egds"
+    },
+    {
+      "parent_key": "cardia::egds",
+      "child_key": "hiatal_hernia::egds"
+    },
+    {
+      "parent_key": "corpus_ventriculi::egds",
+      "child_key": "antrum::egds"
+    },
+    {
+      "parent_key": "corpus_ventriculi::egds",
+      "child_key": "curvatura_major::egds"
+    },
+    {
+      "parent_key": "corpus_ventriculi::egds",
+      "child_key": "curvatura_minor::egds"
+    },
+    {
+      "parent_key": "corpus_ventriculi::egds",
+      "child_key": "posterior_parietis_ventriculi::egds"
+    },
+    {
+      "parent_key": "corpus_ventriculi::egds",
+      "child_key": "anterior_parietis_ventriculi::egds"
+    },
+    {
+      "parent_key": "corpus_ventriculi::egds",
+      "child_key": "corpus ventriculi_retro::egds"
+    },
+    {
+      "parent_key": "curvatura_major::egds",
+      "child_key": "plicae_gastricae::egds"
+    },
+    {
+      "parent_key": "ampulla_duodeni::egds",
+      "child_key": "post_bulbus_duodenum::egds"
+    },
+    {
+      "parent_key": "ampulla_duodeni::egds",
+      "child_key": "gastric_metaplasia::egds"
+    },
+    {
+      "parent_key": "ampulla_duodeni::egds",
+      "child_key": "scar_duodenum::egds"
+    },
+    {
+      "parent_key": "ampulla_duodeni::egds",
+      "child_key": "ulcer_duodeni::egds"
+    },
+    {
+      "parent_key": "ampulla_duodeni::egds",
+      "child_key": "pylorus::egds"
+    },
+    {
+      "parent_key": "post_bulbus_duodenum::egds",
+      "child_key": "papilla_maj::egds"
+    },
+    {
+      "parent_key": "post_bulbus_duodenum::egds",
+      "child_key": "papilla_min::egds"
+    },
+    {
+      "parent_key": "post_bulbus_duodenum::egds",
+      "child_key": "plicae_circulares::egds"
+    },
+    {
+      "parent_key": "post_bulbus_duodenum::egds",
+      "child_key": "lymphangiectasis::egds"
+    },
+    {
+      "parent_key": "antrum::egds",
+      "child_key": "corpus ventriculi_retro::egds"
+    },
+    {
+      "parent_key": "antrum::egds",
+      "child_key": "exesa_ventriculi::egds"
+    },
+    {
+      "parent_key": "antrum::egds",
+      "child_key": "exesa_ventriculi_chronic::egds"
+    },
+    {
+      "parent_key": "antrum::egds",
+      "child_key": "scar_ventriculi::egds"
+    },
+    {
+      "parent_key": "antrum::egds",
+      "child_key": "ulceratio_ventriculi::egds"
+    },
+    {
+      "parent_key": "antrum::egds",
+      "child_key": "pylorus::egds"
+    },
+    {
+      "parent_key": "antrum::egds",
+      "child_key": "angulus_ventriculi::egds"
+    },
+    {
+      "parent_key": "larinx::egds",
+      "child_key": "vocal_cord::egds"
+    },
+    {
+      "parent_key": "larinx::egds",
+      "child_key": "epiglottis::egds"
+    },
+    {
+      "parent_key": "larinx::egds",
+      "child_key": "vestibular_fold::egds"
+    },
+    {
+      "parent_key": "larinx::egds",
+      "child_key": "aryepiglottic_fold::egds"
+    },
+    {
+      "parent_key": "larinx::egds",
+      "child_key": "trachea::egds"
+    },
+    {
+      "parent_key": "corpus ventriculi_retro::egds",
+      "child_key": "cardia::egds"
+    },
+    {
+      "parent_key": "corpus ventriculi_retro::egds",
+      "child_key": "fundus::egds"
+    },
+    {
+      "parent_key": "corpus ventriculi_retro::egds",
+      "child_key": "endoscope::egds"
+    },
+    {
+      "parent_key": "outside_the_body::egds",
+      "child_key": "mouthpiece::egds"
+    },
+    {
+      "parent_key": "bad_picture::egds",
+      "child_key": "close_focus::egds"
+    },
+    {
+      "parent_key": "bad_picture::egds",
+      "child_key": "dirty_optic::egds"
+    },
+    {
+      "parent_key": "suspicious_spot::egds",
+      "child_key": "flat_lesion::egds"
+    },
+    {
+      "parent_key": "duodenum::egds",
+      "child_key": "ampulla_duodeni::egds"
+    },
+    {
+      "parent_key": "duodenum::egds",
+      "child_key": "post_bulbus_duodenum::egds"
+    },
+    {
+      "parent_key": "duodenum::egds",
+      "child_key": "papilla_maj::egds"
+    },
+    {
+      "parent_key": "duodenum::egds",
+      "child_key": "papilla_min::egds"
+    },
+    {
+      "parent_key": "duodenum::egds",
+      "child_key": "plicae_circulares::egds"
+    },
+    {
+      "parent_key": "duodenum::egds",
+      "child_key": "exesa_duodenum::egds"
+    },
+    {
+      "parent_key": "oral_cavity::egds",
+      "child_key": "tongue::egds"
+    },
+    {
+      "parent_key": "oral_cavity::egds",
+      "child_key": "palate::egds"
+    },
+    {
+      "parent_key": "oral_cavity::egds",
+      "child_key": "uvula::egds"
+    },
+    {
+      "parent_key": "oral_cavity::egds",
+      "child_key": "teeth::egds"
+    },
+    {
+      "parent_key": "oral_cavity::egds",
+      "child_key": "mouthpiece::egds"
+    },
+    {
+      "parent_key": "exesa_duodenum::egds",
+      "child_key": "focus_haematini::egds"
+    },
+    {
+      "parent_key": "exesa_duodenum::egds",
+      "child_key": "focus_fibrini::egds"
+    },
+    {
+      "parent_key": "elevated_surface::egds",
+      "child_key": "subepitelial_lesion::egds"
+    },
+    {
+      "parent_key": "elevated_surface::egds",
+      "child_key": "papula::egds"
+    },
+    {
+      "parent_key": "elevated_surface::egds",
+      "child_key": "aberrant_pancreas::egds"
+    },
+    {
+      "parent_key": "elevated_surface::egds",
+      "child_key": "exesa_ventriculi_chronic::egds"
+    },
+    {
+      "parent_key": "polypoid::egds",
+      "child_key": "pedunculated_polyp_0_Ip::egds"
+    },
+    {
+      "parent_key": "polypoid::egds",
+      "child_key": "sessile_polyp_0_Is::egds"
+    },
+    {
+      "parent_key": "flat_lesion::egds",
+      "child_key": "flat_lesion_0_IIa::egds"
+    },
+    {
+      "parent_key": "flat_lesion::egds",
+      "child_key": "flat_lesion_0_IIb::egds"
+    },
+    {
+      "parent_key": "flat_lesion::egds",
+      "child_key": "flat_lesion_0_IIc::egds"
+    },
+    {
+      "parent_key": "flat_lesion::egds",
+      "child_key": "flat_lesion_0_III::egds"
+    },
+    {
+      "parent_key": "aberrant_pancreas::egds",
+      "child_key": "add_duct::egds"
+    },
+    {
+      "parent_key": "add_duct::egds",
+      "child_key": "glycogen acanthosis::egds"
+    },
+    {
+      "parent_key": "bad_preparation::egds",
+      "child_key": "foam::egds"
+    },
+    {
+      "parent_key": "bad_preparation::egds",
+      "child_key": "mucus::egds"
+    },
+    {
+      "parent_key": "bad_preparation::egds",
+      "child_key": "liquor::egds"
+    },
+    {
+      "parent_key": "ostium_oesophageum::egds",
+      "child_key": "oesophagus::egds"
+    },
+    {
+      "parent_key": "whole_oesophagus::egds",
+      "child_key": "ostium_oesophageum::egds"
+    },
+    {
+      "parent_key": "whole_oesophagus::egds",
+      "child_key": "oesophagus::egds"
+    },
+    {
+      "parent_key": "whole_oesophagus::egds",
+      "child_key": "gastroesophageal_junction::egds"
+    },
+    {
+      "parent_key": "whole_oesophagus::egds",
+      "child_key": "z_line::egds"
+    },
+    {
+      "parent_key": "whole_ventriculi::egds",
+      "child_key": "gastroesophageal_junction::egds"
+    },
+    {
+      "parent_key": "whole_ventriculi::egds",
+      "child_key": "corpus_ventriculi::egds"
+    },
+    {
+      "parent_key": "whole_ventriculi::egds",
+      "child_key": "corpus ventriculi_retro::egds"
+    },
+    {
+      "parent_key": "whole_ventriculi::egds",
+      "child_key": "antrum::egds"
+    },
+    {
+      "parent_key": "whole_ventriculi::egds",
+      "child_key": "fundus::egds"
+    },
+    {
+      "parent_key": "whole_ventriculi::egds",
+      "child_key": "cardia::egds"
+    },
+    {
+      "parent_key": "close_focus::colono",
+      "child_key": "close_focus::colono"
+    },
+    {
+      "parent_key": "bad_preparation::colono",
+      "child_key": "feces::colono"
+    },
+    {
+      "parent_key": "category::anatomy::egds",
+      "child_key": "pharynx::egds"
+    },
+    {
+      "parent_key": "category::anatomy::egds",
+      "child_key": "duodenum::egds"
+    },
+    {
+      "parent_key": "category::anatomy::egds",
+      "child_key": "oral_cavity::egds"
+    },
+    {
+      "parent_key": "category::anatomy::egds",
+      "child_key": "whole_oesophagus::egds"
+    },
+    {
+      "parent_key": "category::anatomy::egds",
+      "child_key": "whole_ventriculi::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "angiectasis::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "suspicious_spot::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "gastric_advanced_cancer::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "elevated_surface::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "polypoid::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "traces_of_blood::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "diverticulum::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "gastric_adenoma_lgd::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "gastric_normal_pyloric_gland_mucosa::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "oesophagus_normal_mucus::egds"
+    },
+    {
+      "parent_key": "category::findings::egds",
+      "child_key": "gastric_early_carcinoma::egds"
+    },
+    {
+      "parent_key": "category::artifacts::egds",
+      "child_key": "outside_the_body::egds"
+    },
+    {
+      "parent_key": "category::artifacts::egds",
+      "child_key": "water_jet::egds"
+    },
+    {
+      "parent_key": "category::artifacts::egds",
+      "child_key": "forcept::egds"
+    },
+    {
+      "parent_key": "category::artifacts::egds",
+      "child_key": "snare::egds"
+    },
+    {
+      "parent_key": "category::quality::egds",
+      "child_key": "bad_picture::egds"
+    },
+    {
+      "parent_key": "category::quality::egds",
+      "child_key": "bad_preparation::egds"
+    },
+    {
+      "parent_key": "category::quality::egds",
+      "child_key": "bilis::egds"
+    },
+    {
+      "parent_key": "category::mode::egds",
+      "child_key": "nbi::egds"
+    },
+    {
+      "parent_key": "category::mode::egds",
+      "child_key": "zoom::egds"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "colon_transversum::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "caecum::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "valvula_ileocaecalis::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "appendix::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "ampula_recti_retro::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "ileum::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "rectum::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "colon_asc::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "colon_desc::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "anus_canal::colono"
+    },
+    {
+      "parent_key": "category::anatomy::colono",
+      "child_key": "anus_internal::colono"
+    },
+    {
+      "parent_key": "category::quality::colono",
+      "child_key": "foam::colono"
+    },
+    {
+      "parent_key": "category::quality::colono",
+      "child_key": "liquor::colono"
+    },
+    {
+      "parent_key": "category::quality::colono",
+      "child_key": "dirty_optic::colono"
+    },
+    {
+      "parent_key": "category::quality::colono",
+      "child_key": "bad_preparation::colono"
+    },
+    {
+      "parent_key": "category::artifacts::colono",
+      "child_key": "water_jet::colono"
+    },
+    {
+      "parent_key": "category::artifacts::colono",
+      "child_key": "outside_the_body::colono"
+    },
+    {
+      "parent_key": "category::artifacts::colono",
+      "child_key": "forcept::colono"
+    },
+    {
+      "parent_key": "category::artifacts::colono",
+      "child_key": "colono_sheath::colono"
+    },
+    {
+      "parent_key": "category::artifacts::colono",
+      "child_key": "snare::colono"
+    },
+    {
+      "parent_key": "category::artifacts::colono",
+      "child_key": "endoscope::colono"
+    },
+    {
+      "parent_key": "category::artifacts::colono",
+      "child_key": "colono_lifting::colono"
+    },
+    {
+      "parent_key": "category::artifacts::colono",
+      "child_key": "transparent_cap::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "flat_lesion_0_IIa::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "flat_lesion_0_IIb::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "flat_lesion_0_IIc::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "flat_lesion_0_III::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "pedunculated_polyp_0_Ip::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "colon_adenoma::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "colono_hyperplastic_polyp::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "lst_g_homogeneous::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "colono_ssl::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "sessile_polyp_0_Is::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "lst_ng_flat_elevated::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "lst_ng_pseudodepressed::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "lst_g_nodular_mixed::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "colono_normal_mucus::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "subepitelial_lesion::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "colon_advanced_cancer::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "tubulovillous_adenoma::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "colono_t1_carcinoma::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "chicken_skin_mucosa::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "ileum_normal_mucus::colono"
+    },
+    {
+      "parent_key": "category::findings::colono",
+      "child_key": "traces_of_blood_colono::colono"
+    }
+  ]
+}
