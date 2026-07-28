@@ -30,6 +30,21 @@ def test_upload_video_creates_record():
     assert body["id"] > 0
 
 
+def test_upload_video_stores_filename_and_size():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        data = f.read()
+    response = client.post(
+        "/media/videos",
+        files={"file": ("tiny.mp4", data, "video/mp4")},
+        data={"title": "Filename test"},
+        headers=headers,
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["filename"] == "tiny.mp4"
+
+
 def test_list_videos_includes_uploaded():
     headers = _auth_headers()
     with open(FIXTURE_VIDEO, "rb") as f:

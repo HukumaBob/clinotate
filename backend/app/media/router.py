@@ -25,6 +25,7 @@ router = APIRouter(prefix="/media", tags=["media"], dependencies=[Depends(get_cu
 async def upload_video(
     file: UploadFile,
     title: str = Form(...),
+    procedure_id: int | None = Form(None),
     session: Session = Depends(get_session),
     storage: StorageService = Depends(get_storage_service),
 ) -> Video:
@@ -34,7 +35,16 @@ async def upload_video(
     storage_key = f"videos/{checksum}.mp4"
     storage.upload(storage_key, data, content_type="video/mp4")
 
-    video = Video(storage_key=storage_key, title=title, fps=fps, duration_seconds=duration, checksum=checksum)
+    video = Video(
+        storage_key=storage_key,
+        filename=file.filename or "",
+        title=title,
+        procedure_id=procedure_id,
+        fps=fps,
+        duration_seconds=duration,
+        size_bytes=len(data),
+        checksum=checksum,
+    )
     session.add(video)
     session.commit()
     session.refresh(video)

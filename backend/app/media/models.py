@@ -11,9 +11,12 @@ class Video(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     storage_key: Mapped[str] = mapped_column(String(500))
+    filename: Mapped[str] = mapped_column(String(500), default="")
     title: Mapped[str] = mapped_column(String(255))
+    procedure_id: Mapped[int | None] = mapped_column(ForeignKey("procedures.id"), nullable=True)
     fps: Mapped[float] = mapped_column(Float, default=0.0)
     duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     checksum: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -26,6 +29,7 @@ class Sequence(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     video_id: Mapped[int | None] = mapped_column(ForeignKey("videos.id"), nullable=True)
     procedure_id: Mapped[int | None] = mapped_column(ForeignKey("procedures.id"), nullable=True)
+    name: Mapped[str] = mapped_column(String(255), default="")
     start_time: Mapped[int] = mapped_column(Integer, default=0)
     duration: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
@@ -42,6 +46,7 @@ class Frame(Base):
     frame_index: Mapped[int] = mapped_column(Integer)
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

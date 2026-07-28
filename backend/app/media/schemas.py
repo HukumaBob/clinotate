@@ -4,9 +4,12 @@ from pydantic import BaseModel, ConfigDict
 class VideoRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    filename: str
     title: str
+    procedure_id: int | None
     fps: float
     duration_seconds: float
+    size_bytes: int
 
 
 class SequenceCreate(BaseModel):
