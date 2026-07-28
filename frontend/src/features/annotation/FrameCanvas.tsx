@@ -70,6 +70,14 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
   const maskImageDataCacheRef = useRef<Map<number, ImageData>>(new Map());
   const [frameImage, setFrameImage] = useState<HTMLImageElement | null>(null);
   const [pendingBox, setPendingBox] = useState<PendingBox | null>(null);
+  // Mirrors pendingBox for the async mask-image onload handler below, which
+  // runs inside a closure captured when the frame/annotations effect last
+  // ran -- reading pendingBox directly there could use a stale value from
+  // before the user started (or cancelled) a box drag.
+  const pendingBoxRef = useRef<PendingBox | null>(null);
+  useEffect(() => {
+    pendingBoxRef.current = pendingBox;
+  }, [pendingBox]);
   // A submitted rough-mask stroke only ever existed as pixels drawn
   // directly on the visible canvas -- not as reusable data -- so the very
   // next full redraw (triggered by pendingPrompts changing, which addPrompt
@@ -124,10 +132,6 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
       const maskImg = new Image();
       maskImg.crossOrigin = "anonymous";
       maskImg.onload = () => {
-        ctx.globalAlpha = isHighlighted(annotation.id, selectedAnnotationId, hoveredAnnotationId) ? 0.85 : 0.5;
-        ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
-        ctx.globalAlpha = 1;
-
         // Cache each mask's own alpha channel offscreen (not sampled from
         // the shared visible canvas, which is a composite of the photo +
         // every mask drawn so far) so ctrl-click hit-testing can query
@@ -142,12 +146,16 @@ export function FrameCanvas({ frame, annotations, store, onPointOrBoxSubmit, onR
           maskImageDataCacheRef.current.set(annotation.id, offCtx.getImageData(0, 0, canvas.width, canvas.height));
         }
 
-        // A mask image's onload draws straight onto the visible canvas,
-        // stomping over any point markers drawn there previously -- redraw
-        // them on top so a refinement point never visually disappears the
-        // instant its own predict result lands (they're still part of
-        // pendingPrompts; only the rendering was clobbered).
-        drawPendingPoints();
+        // Route through drawPendingOverlay instead of drawing this mask
+        // directly -- it's the single source of truth for "what alpha does
+        // each cached mask get right now" (reads current
+        // selectedAnnotationId/hoveredAnnotationId). Drawing directly here
+        // with the alpha captured at effect-setup time raced with hover/
+        // select changes: whichever of the two finished last "won", so a
+        // mask could get stuck highlighted after the mouse left if this
+        // onload's stale alpha was applied after drawPendingOverlay's fresh
+        // one for the same paint.
+        drawPendingOverlay(pendingBoxRef.current);
       };
       maskImg.src = annotation.mask_url;
     }
