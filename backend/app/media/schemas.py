@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -46,6 +49,16 @@ class SequenceRead(BaseModel):
 
 class SuggestSequenceNameResponse(BaseModel):
     name: str
+
+
+class MediaLibraryItem(BaseModel):
+    id: int
+    kind: Literal["video", "photo"]
+    filename: str
+    procedure_id: int | None
+    uploaded_at: datetime
+    size_bytes: int
+    linked_sequence_count: int
 
 
 class FrameRead(BaseModel):

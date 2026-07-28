@@ -421,3 +421,45 @@ def test_create_standalone_sequence_requires_name():
     )
 
     assert response.status_code == 422
+
+
+def test_media_library_lists_videos_and_photo_sequences():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Library listing procedure"}, headers=headers
+    ).json()["id"]
+
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("library_video.mp4", f, "video/mp4")},
+            data={"title": "Library video", "procedure_id": str(procedure_id)},
+            headers=headers,
+        ).json()["id"]
+
+    client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Library video seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    )
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+    photo_sequence_id = client.post(
+        "/media/sequences/photos",
+        data={"name": "Library photo seq", "procedure_id": str(procedure_id)},
+        files=[("files", ("p.png", image_bytes, "image/png"))],
+        headers=headers,
+    ).json()["id"]
+
+    response = client.get("/media/library", headers=headers)
+
+    assert response.status_code == 200
+    items = response.json()
+    video_item = next(i for i in items if i["kind"] == "video" and i["filename"] == "library_video.mp4")
+    assert video_item["linked_sequence_count"] == 1
+
+    photo_item = next(i for i in items if i["kind"] == "photo" and i["id"] == photo_sequence_id)
+    assert photo_item["linked_sequence_count"] == 1
+    assert photo_item["filename"] == "Library photo seq"

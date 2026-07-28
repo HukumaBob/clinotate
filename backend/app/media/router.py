@@ -3,6 +3,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from PIL import Image, UnidentifiedImageError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -10,6 +11,7 @@ from app.db import get_session
 from app.media.models import Frame, Sequence, Video
 from app.media.schemas import (
     FrameRead,
+    MediaLibraryItem,
     SequenceCreate,
     SequenceCreateStandalone,
     SequenceRead,
@@ -56,6 +58,47 @@ async def upload_video(
 @router.get("/videos", response_model=list[VideoRead])
 def list_videos(session: Session = Depends(get_session)) -> list[Video]:
     return session.query(Video).all()
+
+
+@router.get("/library", response_model=list[MediaLibraryItem])
+def get_media_library(session: Session = Depends(get_session)) -> list[MediaLibraryItem]:
+    items: list[MediaLibraryItem] = []
+
+    videos = session.query(Video).all()
+    for video in videos:
+        linked_count = session.query(Sequence).filter(Sequence.video_id == video.id).count()
+        items.append(
+            MediaLibraryItem(
+                id=video.id,
+                kind="video",
+                filename=video.filename,
+                procedure_id=video.procedure_id,
+                uploaded_at=video.created_at,
+                size_bytes=video.size_bytes,
+                linked_sequence_count=linked_count,
+            )
+        )
+
+    photo_sequences = session.query(Sequence).filter(Sequence.video_id.is_(None)).all()
+    for sequence in photo_sequences:
+        total_size = (
+            session.query(func.sum(Frame.size_bytes)).filter(Frame.sequence_id == sequence.id).scalar()
+            or 0
+        )
+        items.append(
+            MediaLibraryItem(
+                id=sequence.id,
+                kind="photo",
+                filename=sequence.name,
+                procedure_id=sequence.procedure_id,
+                uploaded_at=sequence.created_at,
+                size_bytes=total_size,
+                linked_sequence_count=1,
+            )
+        )
+
+    items.sort(key=lambda item: item.uploaded_at, reverse=True)
+    return items
 
 
 @router.post("/videos/{video_id}/sequences", response_model=SequenceRead, status_code=status.HTTP_201_CREATED)
