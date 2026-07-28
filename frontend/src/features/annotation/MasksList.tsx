@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useStore } from "zustand/react";
 
 import { useDeleteAnnotation, useDeleteJobAnnotations } from "../../entities/useAnnotations";
-import { useLabelTree } from "../../entities/useLabelTree";
+import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import type { components } from "../../shared/api/generated/schema";
 import type { FrameEditorStore } from "./frameEditorStore";
 
@@ -12,10 +12,11 @@ interface MasksListProps {
   annotations: Annotation[];
   store: FrameEditorStore;
   frameId: number;
+  procedureId: number | null;
 }
 
-export function MasksList({ annotations, store, frameId }: MasksListProps) {
-  const treeQuery = useLabelTree();
+export function MasksList({ annotations, store, frameId, procedureId }: MasksListProps) {
+  const treeQuery = useTaxonomyTree(procedureId);
   const tree = treeQuery.data ?? [];
   const deleteAnnotation = useDeleteAnnotation(frameId);
   const deleteJobAnnotations = useDeleteJobAnnotations(frameId);
@@ -32,13 +33,17 @@ export function MasksList({ annotations, store, frameId }: MasksListProps) {
   const maskAnnotations = annotations.filter((annotation) => annotation.annotation_type === "mask");
 
   function resolveLabel(labelId: number) {
-    for (const node of tree) {
-      if (node.category.id === labelId) {
-        return { categoryId: node.category.id, tag: node.category, classification: null };
-      }
-      const child = node.children.find((c) => c.id === labelId);
-      if (child) {
-        return { categoryId: node.category.id, tag: child, classification: child.label_type };
+    for (const categoryNode of tree) {
+      for (const evaluationTypeNode of categoryNode.evaluation_types) {
+        const label = evaluationTypeNode.labels.find((l) => l.id === labelId);
+        if (label) {
+          return {
+            categoryId: categoryNode.category.id,
+            categoryName: categoryNode.category.name,
+            tag: label,
+            classification: evaluationTypeNode.evaluation_type.id,
+          };
+        }
       }
     }
     return null;
@@ -50,7 +55,7 @@ export function MasksList({ annotations, store, frameId }: MasksListProps) {
     if (resolved) {
       setLabelSelection({
         labelCategoryId: resolved.categoryId,
-        labelClassification: resolved.classification as never,
+        labelClassification: resolved.classification,
         labelTagId: resolved.tag.id,
       });
       setColor(resolved.tag.color);
@@ -98,7 +103,7 @@ export function MasksList({ annotations, store, frameId }: MasksListProps) {
     <ul className="max-h-48 space-y-1 overflow-y-auto text-sm">
       {maskAnnotations.map((annotation) => {
         const resolved = resolveLabel(annotation.label_id);
-        const categoryName = tree.find((node) => node.category.id === resolved?.categoryId)?.category.name;
+        const categoryName = resolved?.categoryName;
         const tagName = resolved?.tag.name;
         const isPendingDelete = pendingDeleteId === annotation.id;
         const isPendingBulk = annotation.job_id !== null && pendingBulkJobId === annotation.job_id;

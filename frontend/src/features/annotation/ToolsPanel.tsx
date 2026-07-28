@@ -13,13 +13,14 @@ interface ToolsPanelProps {
   annotations: Annotation[];
   frameId: number;
   onTrack: () => void;
+  procedureId: number | null;
 }
 
 const PRESET_COLORS = ["#22d3ee", "#f87171", "#4ade80", "#facc15", "#a78bfa", "#fb923c"];
 const TOOLS: PromptType[] = ["point", "box", "mask"];
 const TOOL_LABELS: Record<PromptType, string> = { point: "Point", box: "Box", mask: "Mask" };
 
-export function ToolsPanel({ store, annotations, frameId, onTrack }: ToolsPanelProps) {
+export function ToolsPanel({ store, annotations, frameId, onTrack, procedureId }: ToolsPanelProps) {
   const activeModel = useStore(store, (state) => state.activeModel);
   const activeTool = useStore(store, (state) => state.activeTool);
   const setActiveModel = useStore(store, (state) => state.setActiveModel);
@@ -88,7 +89,7 @@ export function ToolsPanel({ store, annotations, frameId, onTrack }: ToolsPanelP
 
       <section className="space-y-1">
         <h2 className="text-[11px] font-medium text-gray-500">Label</h2>
-        <CascadingLabelPicker store={store} />
+        <CascadingLabelPicker store={store} procedureId={procedureId} />
       </section>
 
       <section className="space-y-2">
@@ -127,7 +128,7 @@ export function ToolsPanel({ store, annotations, frameId, onTrack }: ToolsPanelP
 
       <section className="space-y-1">
         <h2 className="text-[11px] font-medium text-gray-500">Masks on this frame</h2>
-        <MasksList annotations={annotations} store={store} frameId={frameId} />
+        <MasksList annotations={annotations} store={store} frameId={frameId} procedureId={procedureId} />
       </section>
     </aside>
   );

@@ -4,7 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAnnotations, useDeleteAnnotation } from "../../entities/useAnnotations";
 import { useFrame } from "../../entities/useFrames";
 import { useJob } from "../../entities/useJobs";
-import { useLabelTree } from "../../entities/useLabelTree";
+import { useSequence } from "../../entities/useSequence";
+import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import { useSam2Predict, useSam2Track } from "../../entities/useSegmentation";
 import { createFrameEditorStore, type PromptDraft } from "./frameEditorStore";
 import { FrameCanvas } from "./FrameCanvas";
@@ -46,12 +47,13 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   const frameQuery = useFrame(frameId);
   const annotationsQuery = useAnnotations(frameId);
   const jobQuery = useJob(activeJobId);
-  const labelTreeQuery = useLabelTree();
+  const sequenceQuery = useSequence(frameQuery.data?.sequence_id ?? Number.NaN);
+  const taxonomyTreeQuery = useTaxonomyTree(sequenceQuery.data?.procedure_id ?? null);
   const predictMutation = useSam2Predict();
   const trackMutation = useSam2Track();
   const deleteAnnotation = useDeleteAnnotation(frameId);
 
-  const labelColorById = useMemo(() => buildLabelColorMap(labelTreeQuery.data ?? []), [labelTreeQuery.data]);
+  const labelColorById = useMemo(() => buildLabelColorMap(taxonomyTreeQuery.data ?? []), [taxonomyTreeQuery.data]);
 
   const orderedFrames = [...frames].sort((a, b) => a.frame_index - b.frame_index);
   const currentIndex = orderedFrames.findIndex((f) => f.id === frameId);
@@ -280,6 +282,7 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
           annotations={annotationsQuery.data ?? []}
           frameId={frameId}
           onTrack={handleTrack}
+          procedureId={sequenceQuery.data?.procedure_id ?? null}
         />
       </div>
     </div>

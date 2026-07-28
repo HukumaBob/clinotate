@@ -13,9 +13,12 @@ afterEach(() => {
 
 const TREE = [
   {
-    category: { id: 1, name: "lesion", label_type: "geometric", color: "#fff", procedure_id: null, taxonomy_version: 1 },
-    children: [
-      { id: 2, name: "0-Ip", label_type: "geometric", color: "#f00", procedure_id: null, taxonomy_version: 1 },
+    category: { id: 1, name: "lesion", procedure_id: 5 },
+    evaluation_types: [
+      {
+        evaluation_type: { id: 10, name: "geometric" },
+        labels: [{ id: 2, name: "0-Ip", color: "#f00", category_id: 1, evaluation_type_id: 10, taxonomy_version: 1 }],
+      },
     ],
   },
 ];
@@ -43,7 +46,7 @@ describe("MasksList", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -57,7 +60,7 @@ describe("MasksList", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -68,7 +71,7 @@ describe("MasksList", () => {
     expect(state.selectedAnnotationId).toBe(55);
     expect(state.labelCategoryId).toBe(1);
     expect(state.labelTagId).toBe(2);
-    expect(state.labelClassification).toBe("geometric");
+    expect(state.labelClassification).toBe(10);
   });
 });
 
@@ -81,7 +84,7 @@ describe("MasksList delete", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -107,7 +110,7 @@ describe("MasksList delete", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -130,7 +133,7 @@ describe("MasksList delete", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={annotationsWithJob as never} store={store} frameId={1} />
+        <MasksList annotations={annotationsWithJob as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -158,7 +161,7 @@ describe("MasksList delete", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -180,7 +183,7 @@ describe("MasksList delete", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -199,7 +202,7 @@ describe("MasksList delete", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -216,7 +219,7 @@ describe("MasksList hover", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 
@@ -235,7 +238,7 @@ describe("MasksList hover", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
       </QueryClientProvider>,
     );
 

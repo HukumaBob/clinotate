@@ -6,11 +6,14 @@ import { describe, expect, it, vi } from "vitest";
 import { apiClient } from "../src/shared/api/client";
 import { describeJobBanner, FrameEditor } from "../src/features/annotation/FrameEditor";
 
-const LABEL_TREE = [
+const TAXONOMY_TREE = [
   {
-    category: { id: 1, name: "lesion", label_type: "geometric", color: "#fff", procedure_id: null, taxonomy_version: 1 },
-    children: [
-      { id: 2, name: "0-Ip", label_type: "geometric", color: "#f00", procedure_id: null, taxonomy_version: 1 },
+    category: { id: 1, name: "lesion", procedure_id: 9 },
+    evaluation_types: [
+      {
+        evaluation_type: { id: 1, name: "geometric" },
+        labels: [{ id: 2, name: "0-Ip", color: "#f00", category_id: 1, evaluation_type_id: 1, taxonomy_version: 1 }],
+      },
     ],
   },
 ];
@@ -38,8 +41,11 @@ function renderEditor(
     if (path === "/annotation/frames/{frame_id}/annotations") {
       return { data: [], error: undefined, response: new Response() };
     }
-    if (path === "/taxonomy/labels/tree") {
-      return { data: LABEL_TREE, error: undefined, response: new Response() };
+    if (path === "/taxonomy/tree") {
+      return { data: TAXONOMY_TREE, error: undefined, response: new Response() };
+    }
+    if (path === "/media/sequences/{sequence_id}") {
+      return { data: { id: 9, procedure_id: 9, video_id: null, start_time: 0, duration: 0 }, error: undefined, response: new Response() };
     }
     if (path === "/jobs/{job_id}") {
       if (!jobData) return { data: undefined, error: undefined, response: new Response() };

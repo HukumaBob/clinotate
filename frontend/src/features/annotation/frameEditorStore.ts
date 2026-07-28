@@ -2,7 +2,7 @@ import { createStore } from "zustand/vanilla";
 
 export type PromptType = "point" | "box" | "mask";
 export type SegmentationModel = "sam2" | "sam3";
-export type LabelClassification = "geometric" | "morphological" | "quality";
+export type LabelClassification = number;
 
 export interface PromptDraft {
   type: PromptType;

@@ -1,17 +1,18 @@
 import { useStore } from "zustand/react";
 
-import { useLabelTree } from "../../entities/useLabelTree";
+import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import type { FrameEditorStore } from "./frameEditorStore";
 
 interface CascadingLabelPickerProps {
   store: FrameEditorStore;
+  procedureId: number | null;
 }
 
 const SELECT_CLASSES =
   "mt-1 w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50";
 
-export function CascadingLabelPicker({ store }: CascadingLabelPickerProps) {
-  const treeQuery = useLabelTree();
+export function CascadingLabelPicker({ store, procedureId }: CascadingLabelPickerProps) {
+  const treeQuery = useTaxonomyTree(procedureId);
   const tree = treeQuery.data ?? [];
 
   const labelCategoryId = useStore(store, (state) => state.labelCategoryId);
@@ -20,12 +21,13 @@ export function CascadingLabelPicker({ store }: CascadingLabelPickerProps) {
   const setLabelSelection = useStore(store, (state) => state.setLabelSelection);
 
   const selectedCategory = tree.find((node) => node.category.id === labelCategoryId);
-  const classificationOptions = Array.from(
-    new Set((selectedCategory?.children ?? []).map((child) => child.label_type)),
+  const evaluationTypeOptions = selectedCategory?.evaluation_types ?? [];
+  const selectedEvaluationTypeNode = evaluationTypeOptions.find(
+    (node) => node.evaluation_type.id === labelClassification,
   );
-  const tagOptions = (selectedCategory?.children ?? []).filter(
-    (child) => labelClassification === null || child.label_type === labelClassification,
-  );
+  const tagOptions = labelClassification === null
+    ? evaluationTypeOptions.flatMap((node) => node.labels)
+    : (selectedEvaluationTypeNode?.labels ?? []);
 
   return (
     <div className="space-y-2">
@@ -59,15 +61,15 @@ export function CascadingLabelPicker({ store }: CascadingLabelPickerProps) {
           disabled={!selectedCategory}
           onChange={(event) =>
             setLabelSelection({
-              labelClassification: (event.target.value || null) as never,
+              labelClassification: event.target.value ? Number(event.target.value) : null,
               labelTagId: null,
-            })
+            } as never)
           }
         >
           <option value="">All</option>
-          {classificationOptions.map((option) => (
-            <option key={option} value={option}>
-              {option}
+          {evaluationTypeOptions.map(({ evaluation_type: evaluationType }) => (
+            <option key={evaluationType.id} value={evaluationType.id}>
+              {evaluationType.name}
             </option>
           ))}
         </select>

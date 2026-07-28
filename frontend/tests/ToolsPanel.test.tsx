@@ -12,7 +12,7 @@ function renderPanel(onTrack = vi.fn(), store = createFrameEditorStore()) {
   vi.spyOn(apiClient, "GET").mockResolvedValue({ data: [], error: undefined, response: new Response() } as never);
   render(
     <QueryClientProvider client={queryClient}>
-      <ToolsPanel store={store} annotations={[]} frameId={1} onTrack={onTrack} />
+      <ToolsPanel store={store} annotations={[]} frameId={1} onTrack={onTrack} procedureId={null} />
     </QueryClientProvider>,
   );
   return store;

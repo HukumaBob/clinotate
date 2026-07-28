@@ -1,13 +1,14 @@
 import type { components } from "../../shared/api/generated/schema";
 
-type LabelTreeNode = components["schemas"]["LabelTreeNode"];
+type TaxonomyTreeNode = components["schemas"]["TaxonomyTreeNode"];
 
-export function buildLabelColorMap(tree: LabelTreeNode[]): Map<number, string> {
+export function buildLabelColorMap(tree: TaxonomyTreeNode[]): Map<number, string> {
   const map = new Map<number, string>();
-  for (const node of tree) {
-    map.set(node.category.id, node.category.color);
-    for (const child of node.children) {
-      map.set(child.id, child.color);
+  for (const categoryNode of tree) {
+    for (const evaluationTypeNode of categoryNode.evaluation_types) {
+      for (const label of evaluationTypeNode.labels) {
+        map.set(label.id, label.color);
+      }
     }
   }
   return map;
