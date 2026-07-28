@@ -25,6 +25,7 @@ export function MasksList({ annotations, store, frameId }: MasksListProps) {
 
   const selectedAnnotationId = useStore(store, (state) => state.selectedAnnotationId);
   const setSelectedAnnotation = useStore(store, (state) => state.setSelectedAnnotation);
+  const setHoveredAnnotation = useStore(store, (state) => state.setHoveredAnnotation);
   const setLabelSelection = useStore(store, (state) => state.setLabelSelection);
   const setColor = useStore(store, (state) => state.setColor);
 
@@ -107,6 +108,8 @@ export function MasksList({ annotations, store, frameId }: MasksListProps) {
             <button
               type="button"
               onClick={() => handleSelect(annotation)}
+              onMouseEnter={() => setHoveredAnnotation(annotation.id)}
+              onMouseLeave={() => setHoveredAnnotation(null)}
               className={`flex flex-1 items-center gap-2 rounded px-2 py-1 text-left hover:bg-gray-800 ${
                 annotation.id === selectedAnnotationId ? "bg-gray-800" : ""
               }`}

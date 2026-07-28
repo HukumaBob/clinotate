@@ -207,3 +207,41 @@ describe("MasksList delete", () => {
     expect(screen.queryByRole("button", { name: /delete all from this run/i })).not.toBeInTheDocument();
   });
 });
+
+describe("MasksList hover", () => {
+  it("sets hoveredAnnotationId on mouse enter and clears it on mouse leave", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+      </QueryClientProvider>,
+    );
+
+    const row = await screen.findByText("lesion / 0-Ip");
+    await userEvent.hover(row);
+    expect(store.getState().hoveredAnnotationId).toBe(55);
+
+    await userEvent.unhover(row);
+    expect(store.getState().hoveredAnnotationId).toBeNull();
+  });
+
+  it("does not change selectedAnnotationId on hover", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} />
+      </QueryClientProvider>,
+    );
+
+    const row = await screen.findByText("lesion / 0-Ip");
+    await userEvent.hover(row);
+
+    expect(store.getState().selectedAnnotationId).toBeNull();
+  });
+});
