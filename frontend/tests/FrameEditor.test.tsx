@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../src/shared/api/client";
-import { FrameEditor } from "../src/features/annotation/FrameEditor";
+import { describeJobBanner, FrameEditor } from "../src/features/annotation/FrameEditor";
 
 const LABEL_TREE = [
   {
@@ -21,7 +21,12 @@ const FRAMES = [
   { id: 43, sequence_id: 9, storage_key: "frames/9/43.png", frame_index: 2, width: 400, height: 200, image_url: "https://example.test/f43.png" },
 ];
 
-function renderEditor(frameId = 42, onClose = vi.fn(), onFrameChange = vi.fn()) {
+function renderEditor(
+  frameId = 42,
+  onClose = vi.fn(),
+  onFrameChange = vi.fn(),
+  jobData?: { status: string; progress: number; error: string | null },
+) {
   vi.restoreAllMocks();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(apiClient, "GET").mockImplementation((async (path: string, options?: { params?: { path?: { frame_id?: number } } }) => {
@@ -35,6 +40,24 @@ function renderEditor(frameId = 42, onClose = vi.fn(), onFrameChange = vi.fn()) 
     }
     if (path === "/taxonomy/labels/tree") {
       return { data: LABEL_TREE, error: undefined, response: new Response() };
+    }
+    if (path === "/jobs/{job_id}") {
+      if (!jobData) return { data: undefined, error: undefined, response: new Response() };
+      return {
+        data: {
+          id: 1,
+          job_type: "sam2_predict",
+          status: jobData.status,
+          progress: jobData.progress,
+          result_ref: null,
+          error: jobData.error,
+          created_by_id: 1,
+          started_at: null,
+          finished_at: null,
+        },
+        error: undefined,
+        response: new Response(),
+      };
     }
     return { data: undefined, error: "not mocked", response: new Response() };
   }) as never);
@@ -74,7 +97,7 @@ describe("FrameEditor", () => {
     renderEditor(42, vi.fn(), onFrameChange);
 
     await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
-    expect(screen.getByText("Frame 2 of 3")).toBeInTheDocument();
+    expect(screen.getByLabelText("Frame number")).toHaveValue(2);
 
     await userEvent.click(screen.getByRole("button", { name: /^next/i }));
     expect(onFrameChange).toHaveBeenCalledWith(43);
@@ -215,5 +238,86 @@ describe("FrameEditor", () => {
         }),
       ),
     );
+  });
+});
+
+describe("FrameEditor frame-number input", () => {
+  it("shows the current frame position in a numeric input", async () => {
+    renderEditor(42);
+
+    const input = await screen.findByLabelText("Frame number");
+    expect(input).toHaveValue(2);
+  });
+
+  it("calls onFrameChange with the target frame id when a new number is entered and committed", async () => {
+    const onFrameChange = vi.fn();
+    renderEditor(41, vi.fn(), onFrameChange);
+    const user = userEvent.setup();
+
+    const input = await screen.findByLabelText("Frame number");
+    await user.clear(input);
+    await user.type(input, "3{Enter}");
+
+    expect(onFrameChange).toHaveBeenCalledWith(43);
+  });
+
+  it("clamps out-of-range input to the last frame", async () => {
+    const onFrameChange = vi.fn();
+    renderEditor(41, vi.fn(), onFrameChange);
+    const user = userEvent.setup();
+
+    const input = await screen.findByLabelText("Frame number");
+    await user.clear(input);
+    await user.type(input, "999{Enter}");
+
+    expect(onFrameChange).toHaveBeenCalledWith(43);
+  });
+
+  it("clamps out-of-range input to the first frame", async () => {
+    const onFrameChange = vi.fn();
+    renderEditor(42, vi.fn(), onFrameChange);
+    const user = userEvent.setup();
+
+    const input = await screen.findByLabelText("Frame number");
+    await user.clear(input);
+    await user.type(input, "0{Enter}");
+
+    expect(onFrameChange).toHaveBeenCalledWith(41);
+  });
+});
+
+describe("FrameEditor job status", () => {
+  it("shows no spinner and no error notice when there is no active job", async () => {
+    renderEditor();
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    expect(screen.queryByRole("status", { name: "Job in progress" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("describeJobBanner", () => {
+  it("returns a spinner banner while pending or running", () => {
+    expect(describeJobBanner({ status: "pending", progress: 0, error: null })).toEqual({ kind: "progress", progress: 0 });
+    expect(describeJobBanner({ status: "running", progress: 40, error: null })).toEqual({ kind: "progress", progress: 40 });
+  });
+
+  it("returns an error banner when failed, using the job's error text", () => {
+    expect(describeJobBanner({ status: "failed", progress: 0, error: "OOM" })).toEqual({ kind: "error", message: "OOM" });
+  });
+
+  it("falls back to a generic message when failed with no error text", () => {
+    expect(describeJobBanner({ status: "failed", progress: 0, error: null })).toEqual({
+      kind: "error",
+      message: "The job failed.",
+    });
+  });
+
+  it("returns null once succeeded", () => {
+    expect(describeJobBanner({ status: "succeeded", progress: 100, error: null })).toBeNull();
+  });
+
+  it("returns null when there is no job", () => {
+    expect(describeJobBanner(undefined)).toBeNull();
   });
 });

@@ -7,10 +7,12 @@ import { useJob } from "../../entities/useJobs";
 import { useSam2Predict, useSam2Track } from "../../entities/useSegmentation";
 import { createFrameEditorStore, type PromptDraft } from "./frameEditorStore";
 import { FrameCanvas } from "./FrameCanvas";
+import { JobErrorNotice } from "./JobErrorNotice";
 import { ToolsPanel } from "./ToolsPanel";
 import type { components } from "../../shared/api/generated/schema";
 
 type FrameRead = components["schemas"]["FrameRead"];
+type JobRead = components["schemas"]["JobRead"];
 
 interface FrameEditorProps {
   frameId: number;
@@ -19,9 +21,24 @@ interface FrameEditorProps {
   onFrameChange: (frameId: number) => void;
 }
 
+export type JobBanner = { kind: "progress"; progress: number } | { kind: "error"; message: string };
+
+export function describeJobBanner(job: Pick<JobRead, "status" | "progress" | "error"> | undefined): JobBanner | null {
+  if (!job) return null;
+  if (job.status === "pending" || job.status === "running") {
+    return { kind: "progress", progress: job.progress };
+  }
+  if (job.status === "failed") {
+    return { kind: "error", message: job.error ?? "The job failed." };
+  }
+  return null;
+}
+
 export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEditorProps) {
   const store = useMemo(() => createFrameEditorStore(), [frameId]);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
+  const [dismissedJobId, setDismissedJobId] = useState<number | null>(null);
+  const [frameInputValue, setFrameInputValue] = useState("");
   const queryClient = useQueryClient();
 
   const frameQuery = useFrame(frameId);
@@ -35,6 +52,10 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   const currentIndex = orderedFrames.findIndex((f) => f.id === frameId);
   const prevFrame = currentIndex > 0 ? orderedFrames[currentIndex - 1] : null;
   const nextFrame = currentIndex >= 0 && currentIndex < orderedFrames.length - 1 ? orderedFrames[currentIndex + 1] : null;
+
+  useEffect(() => {
+    setFrameInputValue(String(currentIndex + 1));
+  }, [currentIndex]);
 
   useEffect(() => {
     if (jobQuery.data?.status === "succeeded") {
@@ -139,12 +160,35 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
     );
   }
 
+  function commitFrameInput() {
+    const parsed = Number(frameInputValue);
+    if (!Number.isFinite(parsed)) {
+      setFrameInputValue(String(currentIndex + 1));
+      return;
+    }
+    const clamped = Math.min(Math.max(Math.trunc(parsed), 1), orderedFrames.length);
+    const target = orderedFrames[clamped - 1];
+    if (target) onFrameChange(target.id);
+  }
+
   if (!frameQuery.data) {
     return <p className="p-8 text-sm text-gray-500">Loading frame...</p>;
   }
 
   return (
     <div className="flex h-screen flex-col bg-gray-950 text-gray-100">
+      {(() => {
+        const banner = describeJobBanner(jobQuery.data);
+        if (banner?.kind === "error" && jobQuery.data?.id !== dismissedJobId) {
+          return (
+            <JobErrorNotice
+              message={banner.message}
+              onDismiss={() => setDismissedJobId(jobQuery.data?.id ?? null)}
+            />
+          );
+        }
+        return null;
+      })()}
       <div className="flex items-center gap-3 border-b border-gray-800 p-3">
         <button
           type="button"
@@ -163,9 +207,26 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
           >
             ‹ Prev
           </button>
-          <span className="text-sm text-gray-400">
-            Frame {currentIndex + 1} of {orderedFrames.length}
-          </span>
+          <label className="flex items-center gap-1 text-sm text-gray-400">
+            Frame
+            <input
+              aria-label="Frame number"
+              type="number"
+              min={1}
+              max={orderedFrames.length}
+              value={frameInputValue}
+              onChange={(event) => setFrameInputValue(event.target.value)}
+              onBlur={commitFrameInput}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitFrameInput();
+                }
+              }}
+              className="w-14 rounded border border-gray-700 bg-gray-900 px-1 py-0.5 text-center text-sm text-gray-100"
+            />
+            of {orderedFrames.length}
+          </label>
           <button
             type="button"
             aria-label="Next frame"
@@ -176,11 +237,18 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
             Next ›
           </button>
         </div>
-        {jobQuery.data && (
-          <span className="ml-3 text-sm text-gray-400">
-            Job #{jobQuery.data.id}: {jobQuery.data.status} ({jobQuery.data.progress}%)
-          </span>
-        )}
+        {jobQuery.data?.id !== dismissedJobId
+          ? (() => {
+              const banner = describeJobBanner(jobQuery.data);
+              if (!banner || banner.kind !== "progress") return null;
+              return (
+                <span role="status" aria-label="Job in progress" className="ml-3 flex items-center gap-2 text-sm text-gray-400">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-gray-600 border-t-blue-500" />
+                  {jobQuery.data?.status} ({banner.progress}%)
+                </span>
+              );
+            })()
+          : null}
       </div>
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 items-center justify-center overflow-hidden p-4">
