@@ -13,7 +13,7 @@ os.environ.setdefault("MINIO_BUCKET", "endoscopy-media")
 os.environ.setdefault("HF_TOKEN", "unused-in-this-test")
 
 from app.db import SessionLocal
-from app.models import Frame, Job, JobStatus, JobType, Label, LabelType
+from app.models import Frame, Job, JobStatus, JobType, Label
 from app.sam3_adapter import MaskResult
 from app.storage import get_storage_service
 from app.tasks import run_sam3_predict
@@ -24,7 +24,14 @@ def _make_label(session) -> tuple[int, int]:
     row, using a taxonomy_version distinct from the column default (1) so
     a test that accidentally hardcodes/re-derives 1 instead of copying the
     real value would be caught."""
-    label = Label(name="test-polyp-label", label_type=LabelType.MORPHOLOGICAL, taxonomy_version=7)
+    category_id = _existing_row_id(session, "categories")
+    evaluation_type_id = _existing_row_id(session, "evaluation_types")
+    label = Label(
+        name="test-polyp-label",
+        category_id=category_id,
+        evaluation_type_id=evaluation_type_id,
+        taxonomy_version=7,
+    )
     session.add(label)
     session.commit()
     session.refresh(label)

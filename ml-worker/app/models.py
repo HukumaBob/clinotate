@@ -53,17 +53,6 @@ class Frame(Base):
     )
 
 
-class LabelType(str, enum.Enum):
-    """Duplicate of backend/app/taxonomy/models.py's LabelType — member
-    names must match exactly, since SQLAlchemy's Enum(str, enum.Enum)
-    stores Postgres enum labels by member *name* (e.g. "MORPHOLOGICAL"),
-    not by value."""
-
-    GEOMETRIC = "geometric"
-    MORPHOLOGICAL = "morphological"
-    QUALITY = "quality"
-
-
 class Label(Base):
     """Minimal duplicate of backend/app/taxonomy/models.py's Label — only
     the columns the ml-worker needs to read taxonomy_version for provenance
@@ -74,14 +63,15 @@ class Label(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
-    label_type: Mapped[LabelType] = mapped_column(Enum(LabelType))
     color: Mapped[str] = mapped_column(String(7), default="#FFFFFF")
-    # Plain int, not a ForeignKey: ml-worker has no duplicate `procedures`
-    # table mapping (it never reads/writes Procedure rows), and declaring
-    # an unresolvable FK breaks SQLAlchemy's mapper configuration for the
-    # whole Base metadata. The real FK constraint lives in the backend's
-    # migration-owned schema; this column is read-only here.
-    procedure_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Plain int, not a ForeignKey: ml-worker has no duplicate `categories`/
+    # `evaluation_types` table mapping (it never reads/writes those rows),
+    # and declaring an unresolvable FK breaks SQLAlchemy's mapper
+    # configuration for the whole Base metadata. The real FK constraints
+    # live in the backend's migration-owned schema; these columns are
+    # read-only here.
+    category_id: Mapped[int] = mapped_column(Integer)
+    evaluation_type_id: Mapped[int] = mapped_column(Integer)
     taxonomy_version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
