@@ -187,6 +187,372 @@
         ]
       }
     },
+    "/taxonomy/categories": {
+      "post": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Create Category",
+        "operationId": "create_category_taxonomy_categories_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "List Categories",
+        "operationId": "list_categories_taxonomy_categories_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procedure_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Procedure Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryRead"
+                  },
+                  "title": "Response List Categories Taxonomy Categories Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/taxonomy/categories/{category_id}": {
+      "patch": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Update Category",
+        "operationId": "update_category_taxonomy_categories__category_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Category Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Delete Category",
+        "operationId": "delete_category_taxonomy_categories__category_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Category Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/taxonomy/evaluation-types": {
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "List Evaluation Types",
+        "operationId": "list_evaluation_types_taxonomy_evaluation_types_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvaluationTypeRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Evaluation Types Taxonomy Evaluation Types Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Create Evaluation Type",
+        "operationId": "create_evaluation_type_taxonomy_evaluation_types_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationTypeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationTypeRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/taxonomy/evaluation-types/{evaluation_type_id}": {
+      "patch": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Update Evaluation Type",
+        "operationId": "update_evaluation_type_taxonomy_evaluation_types__evaluation_type_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evaluation_type_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Evaluation Type Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationTypeUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationTypeRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Delete Evaluation Type",
+        "operationId": "delete_evaluation_type_taxonomy_evaluation_types__evaluation_type_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evaluation_type_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Evaluation Type Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/taxonomy/labels": {
       "post": {
         "tags": [
@@ -245,7 +611,7 @@
         ],
         "parameters": [
           {
-            "name": "procedure_id",
+            "name": "category_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -257,7 +623,23 @@
                   "type": "null"
                 }
               ],
-              "title": "Procedure Id"
+              "title": "Category Id"
+            }
+          },
+          {
+            "name": "evaluation_type_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evaluation Type Id"
             }
           }
         ],
@@ -289,34 +671,46 @@
         }
       }
     },
-    "/taxonomy/labels/relations": {
-      "post": {
+    "/taxonomy/labels/{label_id}": {
+      "patch": {
         "tags": [
           "taxonomy"
         ],
-        "summary": "Create Label Relation",
-        "operationId": "create_label_relation_taxonomy_labels_relations_post",
+        "summary": "Update Label",
+        "operationId": "update_label_taxonomy_labels__label_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "label_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Label Id"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LabelRelationCreate"
+                "$ref": "#/components/schemas/LabelUpdate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "integer"
-                  },
-                  "type": "object",
-                  "title": "Response Create Label Relation Taxonomy Labels Relations Post"
+                  "$ref": "#/components/schemas/LabelRead"
                 }
               }
             }
@@ -331,51 +725,14 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/taxonomy/labels/tree": {
-      "get": {
+        }
+      },
+      "delete": {
         "tags": [
           "taxonomy"
         ],
-        "summary": "Label Tree",
-        "operationId": "label_tree_taxonomy_labels_tree_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/LabelTreeNode"
-                  },
-                  "type": "array",
-                  "title": "Response Label Tree Taxonomy Labels Tree Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/taxonomy/labels/{label_id}/descendants": {
-      "get": {
-        "tags": [
-          "taxonomy"
-        ],
-        "summary": "Label Descendants",
-        "operationId": "label_descendants_taxonomy_labels__label_id__descendants_get",
+        "summary": "Delete Label",
+        "operationId": "delete_label_taxonomy_labels__label_id__delete",
         "security": [
           {
             "HTTPBearer": []
@@ -393,6 +750,46 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/taxonomy/tree": {
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Taxonomy Tree",
+        "operationId": "taxonomy_tree_taxonomy_tree_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procedure_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Procedure Id"
+            }
+          }
+        ],
+        "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
@@ -400,9 +797,9 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/LabelRead"
+                    "$ref": "#/components/schemas/TaxonomyTreeNode"
                   },
-                  "title": "Response Label Descendants Taxonomy Labels  Label Id  Descendants Get"
+                  "title": "Response Taxonomy Tree Taxonomy Tree Get"
                 }
               }
             }
@@ -1516,6 +1913,112 @@
         ],
         "title": "Body_upload_video_media_videos_post"
       },
+      "CategoryCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "procedure_id": {
+            "type": "integer",
+            "title": "Procedure Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "procedure_id"
+        ],
+        "title": "CategoryCreate"
+      },
+      "CategoryRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "procedure_id": {
+            "type": "integer",
+            "title": "Procedure Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "procedure_id"
+        ],
+        "title": "CategoryRead"
+      },
+      "CategoryUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "CategoryUpdate"
+      },
+      "EvaluationTypeCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "EvaluationTypeCreate"
+      },
+      "EvaluationTypeRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "EvaluationTypeRead"
+      },
+      "EvaluationTypeUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "EvaluationTypeUpdate"
+      },
       "FrameRead": {
         "properties": {
           "id": {
@@ -1679,30 +2182,25 @@
             "type": "string",
             "title": "Name"
           },
-          "label_type": {
-            "$ref": "#/components/schemas/LabelType"
-          },
           "color": {
             "type": "string",
             "title": "Color",
             "default": "#FFFFFF"
           },
-          "procedure_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Procedure Id"
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "evaluation_type_id": {
+            "type": "integer",
+            "title": "Evaluation Type Id"
           }
         },
         "type": "object",
         "required": [
           "name",
-          "label_type"
+          "category_id",
+          "evaluation_type_id"
         ],
         "title": "LabelCreate"
       },
@@ -1716,23 +2214,17 @@
             "type": "string",
             "title": "Name"
           },
-          "label_type": {
-            "$ref": "#/components/schemas/LabelType"
-          },
           "color": {
             "type": "string",
             "title": "Color"
           },
-          "procedure_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Procedure Id"
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "evaluation_type_id": {
+            "type": "integer",
+            "title": "Evaluation Type Id"
           },
           "taxonomy_version": {
             "type": "integer",
@@ -1743,64 +2235,62 @@
         "required": [
           "id",
           "name",
-          "label_type",
           "color",
-          "procedure_id",
+          "category_id",
+          "evaluation_type_id",
           "taxonomy_version"
         ],
         "title": "LabelRead"
       },
-      "LabelRelationCreate": {
+      "LabelUpdate": {
         "properties": {
-          "parent_id": {
-            "type": "integer",
-            "title": "Parent Id"
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
-          "child_id": {
-            "type": "integer",
-            "title": "Child Id"
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
           },
-          "confidence": {
-            "type": "number",
-            "title": "Confidence",
-            "default": 1.0
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "evaluation_type_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Type Id"
           }
         },
         "type": "object",
-        "required": [
-          "parent_id",
-          "child_id"
-        ],
-        "title": "LabelRelationCreate"
-      },
-      "LabelTreeNode": {
-        "properties": {
-          "category": {
-            "$ref": "#/components/schemas/LabelRead"
-          },
-          "children": {
-            "items": {
-              "$ref": "#/components/schemas/LabelRead"
-            },
-            "type": "array",
-            "title": "Children"
-          }
-        },
-        "type": "object",
-        "required": [
-          "category",
-          "children"
-        ],
-        "title": "LabelTreeNode"
-      },
-      "LabelType": {
-        "type": "string",
-        "enum": [
-          "geometric",
-          "morphological",
-          "quality"
-        ],
-        "title": "LabelType"
+        "title": "LabelUpdate"
       },
       "ProcedureCreate": {
         "properties": {
@@ -2081,6 +2571,46 @@
           "duration"
         ],
         "title": "SequenceRead"
+      },
+      "TaxonomyTreeEvaluationTypeNode": {
+        "properties": {
+          "evaluation_type": {
+            "$ref": "#/components/schemas/EvaluationTypeRead"
+          },
+          "labels": {
+            "items": {
+              "$ref": "#/components/schemas/LabelRead"
+            },
+            "type": "array",
+            "title": "Labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluation_type",
+          "labels"
+        ],
+        "title": "TaxonomyTreeEvaluationTypeNode"
+      },
+      "TaxonomyTreeNode": {
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/CategoryRead"
+          },
+          "evaluation_types": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonomyTreeEvaluationTypeNode"
+            },
+            "type": "array",
+            "title": "Evaluation Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "evaluation_types"
+        ],
+        "title": "TaxonomyTreeNode"
       },
       "TokenResponse": {
         "properties": {

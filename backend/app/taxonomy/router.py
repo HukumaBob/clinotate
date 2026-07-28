@@ -1,18 +1,25 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.db import get_session
-from app.taxonomy.models import Label, LabelRelation, Procedure
+from app.taxonomy.models import Category, EvaluationType, Label, Procedure
 from app.taxonomy.schemas import (
+    CategoryCreate,
+    CategoryRead,
+    CategoryUpdate,
+    EvaluationTypeCreate,
+    EvaluationTypeRead,
+    EvaluationTypeUpdate,
     LabelCreate,
     LabelRead,
-    LabelRelationCreate,
-    LabelTreeNode,
+    LabelUpdate,
     ProcedureCreate,
     ProcedureRead,
+    TaxonomyTreeNode,
 )
-from app.taxonomy.service import get_label_descendants, get_label_tree
+from app.taxonomy.service import get_taxonomy_tree
 
 router = APIRouter(prefix="/taxonomy", tags=["taxonomy"], dependencies=[Depends(get_current_user)])
 
@@ -31,6 +38,97 @@ def list_procedures(session: Session = Depends(get_session)) -> list[Procedure]:
     return session.query(Procedure).all()
 
 
+@router.post("/categories", response_model=CategoryRead, status_code=status.HTTP_201_CREATED)
+def create_category(payload: CategoryCreate, session: Session = Depends(get_session)) -> Category:
+    category = Category(**payload.model_dump())
+    session.add(category)
+    session.commit()
+    session.refresh(category)
+    return category
+
+
+@router.get("/categories", response_model=list[CategoryRead])
+def list_categories(procedure_id: int | None = None, session: Session = Depends(get_session)) -> list[Category]:
+    query = session.query(Category)
+    if procedure_id is not None:
+        query = query.filter(Category.procedure_id == procedure_id)
+    return query.all()
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryRead)
+def update_category(
+    category_id: int, payload: CategoryUpdate, session: Session = Depends(get_session)
+) -> Category:
+    category = session.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(category, field, value)
+    session.commit()
+    session.refresh(category)
+    return category
+
+
+@router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_category(category_id: int, session: Session = Depends(get_session)) -> None:
+    category = session.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+    session.delete(category)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Category still has labels referencing it"
+        ) from None
+
+
+@router.post("/evaluation-types", response_model=EvaluationTypeRead, status_code=status.HTTP_201_CREATED)
+def create_evaluation_type(
+    payload: EvaluationTypeCreate, session: Session = Depends(get_session)
+) -> EvaluationType:
+    evaluation_type = EvaluationType(**payload.model_dump())
+    session.add(evaluation_type)
+    session.commit()
+    session.refresh(evaluation_type)
+    return evaluation_type
+
+
+@router.get("/evaluation-types", response_model=list[EvaluationTypeRead])
+def list_evaluation_types(session: Session = Depends(get_session)) -> list[EvaluationType]:
+    return session.query(EvaluationType).all()
+
+
+@router.patch("/evaluation-types/{evaluation_type_id}", response_model=EvaluationTypeRead)
+def update_evaluation_type(
+    evaluation_type_id: int, payload: EvaluationTypeUpdate, session: Session = Depends(get_session)
+) -> EvaluationType:
+    evaluation_type = session.get(EvaluationType, evaluation_type_id)
+    if evaluation_type is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation type not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(evaluation_type, field, value)
+    session.commit()
+    session.refresh(evaluation_type)
+    return evaluation_type
+
+
+@router.delete("/evaluation-types/{evaluation_type_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_evaluation_type(evaluation_type_id: int, session: Session = Depends(get_session)) -> None:
+    evaluation_type = session.get(EvaluationType, evaluation_type_id)
+    if evaluation_type is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation type not found")
+    session.delete(evaluation_type)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Evaluation type still has labels referencing it"
+        ) from None
+
+
 @router.post("/labels", response_model=LabelRead, status_code=status.HTTP_201_CREATED)
 def create_label(payload: LabelCreate, session: Session = Depends(get_session)) -> Label:
     label = Label(**payload.model_dump())
@@ -41,26 +139,40 @@ def create_label(payload: LabelCreate, session: Session = Depends(get_session)) 
 
 
 @router.get("/labels", response_model=list[LabelRead])
-def list_labels(procedure_id: int | None = None, session: Session = Depends(get_session)) -> list[Label]:
+def list_labels(
+    category_id: int | None = None,
+    evaluation_type_id: int | None = None,
+    session: Session = Depends(get_session),
+) -> list[Label]:
     query = session.query(Label)
-    if procedure_id is not None:
-        query = query.filter(Label.procedure_id == procedure_id)
+    if category_id is not None:
+        query = query.filter(Label.category_id == category_id)
+    if evaluation_type_id is not None:
+        query = query.filter(Label.evaluation_type_id == evaluation_type_id)
     return query.all()
 
 
-@router.post("/labels/relations", status_code=status.HTTP_201_CREATED)
-def create_label_relation(payload: LabelRelationCreate, session: Session = Depends(get_session)) -> dict[str, int]:
-    relation = LabelRelation(**payload.model_dump())
-    session.add(relation)
+@router.patch("/labels/{label_id}", response_model=LabelRead)
+def update_label(label_id: int, payload: LabelUpdate, session: Session = Depends(get_session)) -> Label:
+    label = session.get(Label, label_id)
+    if label is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(label, field, value)
     session.commit()
-    return {"id": relation.id}
+    session.refresh(label)
+    return label
 
 
-@router.get("/labels/tree", response_model=list[LabelTreeNode])
-def label_tree(session: Session = Depends(get_session)) -> list[dict]:
-    return get_label_tree(session)
+@router.delete("/labels/{label_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_label(label_id: int, session: Session = Depends(get_session)) -> None:
+    label = session.get(Label, label_id)
+    if label is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
+    session.delete(label)
+    session.commit()
 
 
-@router.get("/labels/{label_id}/descendants", response_model=list[LabelRead])
-def label_descendants(label_id: int, session: Session = Depends(get_session)) -> list[Label]:
-    return get_label_descendants(session, label_id)
+@router.get("/tree", response_model=list[TaxonomyTreeNode])
+def taxonomy_tree(procedure_id: int, session: Session = Depends(get_session)) -> list[dict]:
+    return get_taxonomy_tree(session, procedure_id)
