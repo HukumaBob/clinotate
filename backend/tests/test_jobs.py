@@ -80,10 +80,30 @@ def _create_frame(token: str) -> int:
 
 def _create_label() -> int:
     from app.db import SessionLocal
-    from app.taxonomy.models import Label, LabelType
+    from app.taxonomy.models import Category, EvaluationType, Label, Procedure
 
     session = SessionLocal()
-    label = Label(name="jobs-test-label", label_type=LabelType.MORPHOLOGICAL, taxonomy_version=1)
+    procedure = session.query(Procedure).filter_by(name="jobs-test-procedure").one_or_none()
+    if procedure is None:
+        procedure = Procedure(name="jobs-test-procedure")
+        session.add(procedure)
+        session.flush()
+    category = session.query(Category).filter_by(name="jobs-test-category", procedure_id=procedure.id).one_or_none()
+    if category is None:
+        category = Category(name="jobs-test-category", procedure_id=procedure.id)
+        session.add(category)
+        session.flush()
+    evaluation_type = session.query(EvaluationType).filter_by(name="jobs-test-evaluation-type").one_or_none()
+    if evaluation_type is None:
+        evaluation_type = EvaluationType(name="jobs-test-evaluation-type")
+        session.add(evaluation_type)
+        session.flush()
+    label = Label(
+        name="jobs-test-label",
+        category_id=category.id,
+        evaluation_type_id=evaluation_type.id,
+        taxonomy_version=1,
+    )
     session.add(label)
     session.commit()
     session.refresh(label)
