@@ -40,6 +40,7 @@ def upgrade() -> None:
     # no backfill needed.
     op.execute("TRUNCATE labels, label_relations, annotations CASCADE")
     op.drop_table("label_relations")
+    op.drop_column("labels", "procedure_id")
     op.add_column("labels", sa.Column("category_id", sa.Integer(), nullable=False))
     op.add_column("labels", sa.Column("evaluation_type_id", sa.Integer(), nullable=False))
     op.create_foreign_key(None, "labels", "categories", ["category_id"], ["id"])
@@ -49,6 +50,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("CREATE TYPE labeltype AS ENUM ('GEOMETRIC', 'MORPHOLOGICAL', 'QUALITY')")
     op.add_column(
         "labels",
         sa.Column(
@@ -59,6 +61,8 @@ def downgrade() -> None:
     )
     op.drop_column("labels", "evaluation_type_id")
     op.drop_column("labels", "category_id")
+    op.add_column("labels", sa.Column("procedure_id", sa.Integer(), nullable=True))
+    op.create_foreign_key(None, "labels", "procedures", ["procedure_id"], ["id"])
     op.create_table(
         "label_relations",
         sa.Column("id", sa.Integer(), nullable=False),
