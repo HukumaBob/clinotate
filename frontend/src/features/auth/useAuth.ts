@@ -53,3 +53,15 @@ export const useAuth = create<AuthState>((set) => ({
     set({ token: null, user: null, isAuthenticated: false });
   },
 }));
+
+if (storedToken) {
+  apiClient.GET("/auth/me", {}).then((meResult) => {
+    if (meResult.data) {
+      useAuth.setState({ user: meResult.data as AuthUser, isAuthenticated: true });
+    } else {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      setAuthToken(null);
+      useAuth.setState({ token: null, user: null, isAuthenticated: false });
+    }
+  });
+}
