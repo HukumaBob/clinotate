@@ -1,0 +1,52 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+
+import { apiClient } from "../../shared/api/client";
+import { MediaLibraryTable } from "./MediaLibraryTable";
+
+vi.mock("../../shared/api/client", () => ({
+  apiClient: { GET: vi.fn(), DELETE: vi.fn() },
+}));
+
+function wrapper({ children }: { children: ReactNode }) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
+
+describe("MediaLibraryTable", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("shows the backend's 409 message inline when delete is blocked by linked sequences", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          kind: "video",
+          filename: "a.mp4",
+          procedure_id: null,
+          uploaded_at: "2026-07-28T00:00:00Z",
+          size_bytes: 1_200_000,
+          linked_sequence_count: 2,
+        },
+      ],
+      error: undefined,
+    } as never);
+    vi.mocked(apiClient.DELETE).mockResolvedValue({
+      data: undefined,
+      error: { detail: "Delete or reassign this video's sequences before deleting it" },
+    } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("a.mp4");
+    await userEvent.click(screen.getByRole("button", { name: /delete/i }));
+    await userEvent.click(screen.getByRole("button", { name: /confirm/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/reassign this video's sequences/i)).toBeInTheDocument()
+    );
+  });
+});
