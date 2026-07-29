@@ -8,7 +8,11 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function MediaLibraryTable() {
+export function MediaLibraryTable({
+  onSelectVideo,
+}: {
+  onSelectVideo?: (videoId: number) => void;
+} = {}) {
   const libraryQuery = useMediaLibrary();
   const deleteVideo = useDeleteVideo();
   const deleteSequence = useDeleteSequence();
@@ -48,7 +52,12 @@ export function MediaLibraryTable() {
           const key = `${item.kind}-${item.id}`;
           return (
             <tr key={key} className="border-b border-gray-900">
-              <td className="py-2">{item.filename}</td>
+              <td
+                className={`py-2 ${item.kind === "video" ? "cursor-pointer text-blue-400 hover:underline" : ""}`}
+                onClick={item.kind === "video" ? () => onSelectVideo?.(item.id) : undefined}
+              >
+                {item.filename}
+              </td>
               <td>{item.kind}</td>
               <td>{item.procedure_id ?? "—"}</td>
               <td>{new Date(item.uploaded_at).toLocaleDateString()}</td>
