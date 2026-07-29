@@ -618,3 +618,23 @@ def test_delete_video_derived_sequence_via_media_endpoint_returns_404():
     response = client.delete(f"/media/sequences/{sequence_id}", headers=headers)
 
     assert response.status_code == 404
+
+
+def test_video_model_has_codec_compatibility_columns():
+    from app.media.models import Video
+
+    video = Video(
+        storage_key="videos/x.mp4",
+        filename="x.mp4",
+        title="t",
+        fps=1.0,
+        duration_seconds=1.0,
+        size_bytes=10,
+        checksum="abc",
+        browser_playable=True,
+        container="mov,mp4,m4a,3gp,3g2,mj2",
+        video_codec="h264",
+    )
+    assert video.browser_playable is True
+    assert video.container == "mov,mp4,m4a,3gp,3g2,mj2"
+    assert video.video_codec == "h264"
