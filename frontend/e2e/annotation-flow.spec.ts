@@ -1,73 +1,79 @@
-import { expect, test } from "@playwright/test";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { expect, test, type Page } from "@playwright/test";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-test("annotator can log in, upload a video, and classify a frame", async ({ page, request }) => {
-  const email = `e2e-${Date.now()}@example.com`;
+async function loginAsNewAnnotator(page: Page, request: import("@playwright/test").APIRequestContext) {
+  const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
   const password = "e2e-pass-1234";
-  const videoTitle = `E2E procedure ${Date.now()}`;
-  const labelName = `E2E Landmark ${Date.now()}`;
 
   const registerResponse = await request.post("http://localhost:8000/auth/register", {
     data: { email, password, role: "annotator" },
   });
   expect(registerResponse.ok()).toBe(true);
 
-  const loginResponse = await request.post("http://localhost:8000/auth/login", {
-    data: { email, password },
-  });
-  const { access_token: token } = await loginResponse.json();
-  const authHeaders = { Authorization: `Bearer ${token}` };
-
-  const labelCreateResponse = await request.post("http://localhost:8000/taxonomy/labels", {
-    headers: authHeaders,
-    data: { name: labelName, label_type: "geometric" },
-  });
-  const label = await labelCreateResponse.json();
-
   await page.goto("/login");
   await page.getByPlaceholder("Email").fill(email);
   await page.getByPlaceholder("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page).toHaveURL(/\/videos$/);
+  await expect(page).toHaveURL(/\/media$/);
 
-  await page.getByPlaceholder("Title").fill(videoTitle);
-  await page.setInputFiles('input[type="file"]', path.join(__dirname, "..", "tests", "fixtures", "tiny.mp4"));
-  await page.getByRole("button", { name: "Upload" }).click();
+  return { email, password };
+}
 
-  await expect(page.getByText(videoTitle)).toBeVisible({ timeout: 10_000 });
+test("annotator can log in, upload a video, and extract a sequence", async ({ page, request }) => {
+  const videoTitle = `E2E procedure ${Date.now()}`;
 
-  const videosResponse = await request.get("http://localhost:8000/media/videos", {
-    headers: authHeaders,
-  });
-  const videos = await videosResponse.json();
-  const uploadedVideo = videos.find((video: { title: string }) => video.title === videoTitle);
-  expect(uploadedVideo).toBeTruthy();
+  await loginAsNewAnnotator(page, request);
 
-  const sequenceResponse = await request.post(
-    `http://localhost:8000/media/videos/${uploadedVideo.id}/sequences`,
-    {
-      headers: authHeaders,
-      data: { start_time: 0, duration: 2 },
-    },
-  );
-  const sequence = await sequenceResponse.json();
+  await expect(page).toHaveURL(/\/media$/);
 
-  const framesResponse = await request.get(
-    `http://localhost:8000/media/sequences/${sequence.id}/frames`,
-    { headers: authHeaders },
-  );
-  const frames = await framesResponse.json();
-  expect(frames.length).toBeGreaterThan(0);
-  const firstFrame = frames[0];
+  await page.getByLabel("Title").fill(videoTitle);
+  await page.getByLabel("Choose video").setInputFiles("e2e/fixtures/tiny.mp4");
+  await page.getByRole("button", { name: "Upload video" }).click();
 
-  await page.goto(`/frames/${firstFrame.id}`);
+  const extractForm = page.locator("form", { has: page.getByLabel("Start (s)") });
+  await expect(extractForm).toBeVisible({ timeout: 10_000 });
+  await extractForm.getByLabel("Procedure").selectOption({ index: 1 });
+  await extractForm.getByRole("button", { name: "Create sequence" }).click();
 
-  await expect(page.getByText(labelName)).toBeVisible();
-  await page.getByText(labelName).click();
+  await expect(page).toHaveURL(/\/sequences\/\d+/);
+  await expect(page.getByRole("img").first()).toBeVisible({ timeout: 10_000 });
+});
 
-  await expect(page.getByText(`Label #${label.id} — draft`)).toBeVisible({ timeout: 10_000 });
+test("uploading a video and extracting a sequence with a crop box lands on the sequence grid", async ({
+  page,
+  request,
+}) => {
+  await loginAsNewAnnotator(page, request);
+  await page.goto("/media");
+
+  await page.getByLabel("Title").fill("E2E crop video");
+  await page.getByLabel("Choose video").setInputFiles("e2e/fixtures/tiny.mp4");
+  await page.getByRole("button", { name: "Upload video" }).click();
+
+  const extractForm = page.locator("form", { has: page.getByLabel("Start (s)") });
+  await expect(extractForm).toBeVisible({ timeout: 10_000 });
+  await extractForm.getByLabel("Procedure").selectOption({ index: 1 });
+  await extractForm.getByRole("button", { name: /crop box/i }).click();
+  await extractForm.getByLabel("left %").fill("10");
+  await extractForm.getByLabel("right %").fill("10");
+  await extractForm.getByRole("button", { name: "Create sequence" }).click();
+
+  await expect(page).toHaveURL(/\/sequences\/\d+/);
+  await expect(page.getByRole("img").first()).toBeVisible();
+});
+
+test("uploading a batch of photos lands on the sequence grid with all frames", async ({ page, request }) => {
+  await loginAsNewAnnotator(page, request);
+  await page.goto("/media");
+
+  const photosForm = page.locator("form", { has: page.getByLabel("Choose photos") });
+  await photosForm.getByLabel("Choose photos").setInputFiles([
+    "e2e/fixtures/tiny_frame.png",
+    "e2e/fixtures/tiny_frame.png",
+  ]);
+  await photosForm.getByLabel("Procedure").selectOption({ index: 1 });
+  await photosForm.getByRole("button", { name: "Create sequence" }).click();
+
+  await expect(page).toHaveURL(/\/sequences\/\d+/);
+  await expect(page.getByRole("img")).toHaveCount(2);
 });

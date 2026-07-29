@@ -15,7 +15,7 @@ export function LoginPage() {
     setError(null);
     try {
       await login(email, password);
-      navigate("/videos");
+      navigate("/media");
     } catch {
       setError("Invalid email or password");
     }

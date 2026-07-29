@@ -24,8 +24,8 @@ export function App() {
             </RequireAuth>
           }
         >
-          <Route path="/videos" element={<MediaPage />} />
-          <Route path="/videos/:videoId/sequences/:sequenceId" element={<SequenceGridPage />} />
+          <Route path="/media" element={<MediaPage />} />
+          <Route path="/sequences/:sequenceId" element={<SequenceGridPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

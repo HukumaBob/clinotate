@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppHeader } from "../src/app/AppHeader";
 import { useAuth } from "../src/features/auth/useAuth";
 
-function renderHeader(path = "/videos") {
+function renderHeader(path = "/media") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <AppHeader />
@@ -14,11 +14,11 @@ function renderHeader(path = "/videos") {
   );
 }
 
-function renderHeaderWithRoutes(path = "/videos") {
+function renderHeaderWithRoutes(path = "/media") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/videos" element={<AppHeader />} />
+        <Route path="/media" element={<AppHeader />} />
         <Route path="/login" element={<div>Login page content</div>} />
       </Routes>
     </MemoryRouter>,
@@ -41,11 +41,11 @@ describe("AppHeader", () => {
     expect(navItems).toEqual(["Media", "Sequences", "Tags", "Dataset", "Train", "Results"]);
   });
 
-  it("renders Media as a real link to /videos", () => {
+  it("renders Media as a real link to /media", () => {
     renderHeader();
 
     const mediaLink = screen.getByRole("link", { name: "Media" });
-    expect(mediaLink).toHaveAttribute("href", "/videos");
+    expect(mediaLink).toHaveAttribute("href", "/media");
   });
 
   it("does not render the other five items as links", () => {
@@ -85,8 +85,8 @@ describe("AppHeader", () => {
     expect(screen.getByText("Login page content")).toBeInTheDocument();
   });
 
-  it("highlights Media as active when the current path is /videos", () => {
-    renderHeader("/videos");
+  it("highlights Media as active when the current path is /media", () => {
+    renderHeader("/media");
 
     expect(screen.getByRole("link", { name: "Media" })).toHaveAttribute("aria-current", "page");
   });
