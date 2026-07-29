@@ -485,6 +485,98 @@ RT-DETRv2. No architectural pattern changed — the adapter-registry design
 already anticipated exactly this kind of model-version churn — only which
 concrete adapters are the near-term target.
 
+### Phase 2a.3: Media screen — DONE (2026-07-29)
+
+Real "Media" top-level screen (video upload → extract-sequence with crop
+box and configurable fps, batch photo upload, raw media library table
+with delete) per [docs/superpowers/specs/2026-07-28-media-screen-design.md](docs/superpowers/specs/2026-07-28-media-screen-design.md)
+and [docs/superpowers/plans/2026-07-28-media-screen.md](docs/superpowers/plans/2026-07-28-media-screen.md),
+replacing the old single-title video-upload placeholder. Routes renamed
+`/videos` → `/media`, `/videos/:videoId/sequences/:sequenceId` →
+`/sequences/:sequenceId`. Executed via `superpowers:subagent-driven-development`
+across all 12 plan tasks, each independently task-reviewed, plus a final
+whole-branch review and one fix wave for its findings. Manually verified
+end-to-end against a real browser (login → upload → extraction → sequence
+grid with real frames, for both the video and photo-batch flows; delete
+with 409-on-conflict).
+
+**Deviations from the plan, decided during execution:**
+
+- **Out-of-band test-isolation fix, not part of the plan's own tasks:**
+  `backend/tests/conftest.py` gained a session-scoped autouse fixture that
+  patches `app.db`'s module-level `engine`/`SessionLocal` to point at
+  `endoscopy_test` for the whole pytest session (commit `e1ad521`). Before
+  this, `test_media.py`/`test_taxonomy.py`/`test_auth.py`'s `TestClient(app)`
+  calls went through `app/db.py`'s real engine (pointed at the real
+  `endoscopy` dev DB per `.env`), not the `endoscopy_test`-scoped fixture —
+  every full suite run silently wrote real rows into the real dev DB, and
+  a second run collided with `UniqueViolation`/409s against the first
+  run's leftovers. Verified fixed with two consecutive full `pytest -q`
+  runs (both green, no collisions) and confirmed the real `endoscopy`
+  database's row counts didn't change across either run.
+- **`MediaLibraryTable.tsx` was built one task early (Task 10 instead of
+  Task 11)** because `MediaPage.tsx` (Task 10's own deliverable) imports
+  it and the task's own quality bar required a clean `tsc`/`vitest` build.
+  The Task 10 placeholder used `window.confirm()` for delete instead of
+  Task 11's planned two-click inline Confirm button; Task 11 replaced it
+  wholesale per its own brief, confirmed zero `window.confirm` remnants
+  anywhere in `frontend/src`.
+- **Final whole-branch review (Opus) found 2 Critical + 5 Important + 5
+  Minor issues invisible to every per-task review** because they lived at
+  task boundaries or in files no single task's brief listed:
+  - Critical: an out-of-range crop box (`left+right>=100` or
+    `top+bottom>=100`) crashed with an uncaught `cv2.error` → HTTP 500
+    instead of the spec-mandated 422, leaving an orphaned `Sequence` row
+    already committed before the crash. Fixed with Pydantic-level
+    validation on `CropBox` (commit `b7be883`).
+  - Critical: `MediaLibraryTable`'s delete-confirm state was keyed on bare
+    numeric `item.id`, which collides between independent video-id and
+    sequence-id spaces — confirming delete on one row could affect the
+    wrong same-id row of the other kind. Fixed by keying on the same
+    composite `${kind}-${id}` the row `key` already used (commit `b7be883`).
+  - Important: the procedure selected during video upload
+    (`VideoUploadFlow`) was silently discarded when `ExtractSequenceForm`
+    mounted, which then auto-selected the query-first procedure instead —
+    confirmed user-visible via the manual browser walkthrough. Fixed by
+    threading a `procedureId` prop through, and by actually persisting it
+    as `Sequence.procedure_id` on video-derived sequences (previously
+    never sent to the backend at all) (commit `b7be883`).
+  - Important: `PhotosUploadFlow`'s name input had lost its `required`
+    attribute as a test-workaround. Fixed by restoring `required` and
+    extending the existing submit guard to also reject a blank/
+    whitespace-only name (commit `b7be883`).
+  - All 5 blocking findings re-reviewed clean (ADDRESSED, no new breakage)
+    before merge.
+- **Deferred to a follow-up ticket, not blocking this merge** (per the
+  final reviewer's own "Ready to merge: With fixes" verdict, which named
+  only the items above as blocking):
+  - `suggest_sequence_name` (backend/app/media/service.py) has unescaped
+    LIKE metacharacters in the procedure-name prefix match, and doesn't
+    filter on `procedure_id` — a procedure literally named `100% egds`,
+    or two procedures sharing a name prefix (`egds` / `egds 2`), can
+    produce a wrong ordinal in the auto-suggested sequence name. Cosmetic
+    (user-editable suggestion only), not data corruption.
+  - Two spec-mandated backend tests for `suggest_sequence_name` were never
+    written (different-day reset, cross-procedure independence) — the
+    second would have caught the collision above.
+  - Photo-batch upload has no file-count/size limit and reads every file
+    fully into memory before writing any — fine for this internal tool's
+    current scale, worth a cap before wider use.
+  - `MediaLibraryTable` shows a raw `procedure_id` instead of a resolved
+    name — this is a plan/brief defect, not an execution one: the design
+    spec doesn't call for a Procedure column on this table at all, so the
+    brief added an extra column and under-specified how to resolve it.
+  - `MediaPage.tsx`'s `min-h-screen` reintroduces the double-scroll bug
+    commit `d6b36f4` already fixed once for `AppLayout` — should be
+    `min-h-full`.
+  - `PhotosUploadFlow` shows one page-level error instead of the
+    spec-mandated per-file inline error next to each thumbnail; the
+    backend already returns the failing filename, currently discarded.
+  - Storage objects (MinIO) are never cleaned up when a video or sequence
+    is deleted, despite `StorageService.delete` already existing — the
+    design spec's original hedge on this gap assumed no delete method
+    existed, which turned out not to hold.
+
 ---
 
 ## How to use this file
