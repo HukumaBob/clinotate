@@ -4,7 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { SequenceGridPage } from "../features/annotation/SequenceGridPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
-import { VideoListPage } from "../features/media/VideoListPage";
+import { MediaPage } from "../features/media/MediaPage";
 import { AppLayout } from "./AppLayout";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -24,7 +24,7 @@ export function App() {
             </RequireAuth>
           }
         >
-          <Route path="/videos" element={<VideoListPage />} />
+          <Route path="/videos" element={<MediaPage />} />
           <Route path="/videos/:videoId/sequences/:sequenceId" element={<SequenceGridPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
