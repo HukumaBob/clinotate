@@ -380,3 +380,24 @@ def test_enqueue_sam2_predict_endpoint_requires_auth():
         json={"frame_id": 1, "label_id": 1, "prompts": []},
     )
     assert response.status_code == 401
+
+
+def test_enqueue_video_transcode_creates_pending_job():
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.models import JobStatus, JobType
+    from app.jobs.service import enqueue_video_transcode
+
+    token = _register_and_login("video-transcode1@example.com")
+    _, sequence_id = _create_frame(token)
+    sequence = client.get(f"/media/sequences/{sequence_id}", headers=_auth_headers(token)).json()
+    video_id = sequence["video_id"]
+
+    session = SessionLocal()
+    user = session.query(User).filter(User.email == "video-transcode1@example.com").one()
+    job = enqueue_video_transcode(session, video_id, user)
+    session.close()
+
+    assert job.job_type == JobType.VIDEO_TRANSCODE
+    assert job.status == JobStatus.PENDING
+    assert job.payload == {"video_id": video_id}

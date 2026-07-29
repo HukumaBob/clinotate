@@ -12,6 +12,7 @@ class JobType(str, enum.Enum):
     SAM3_TRACK = "sam3_track"
     SAM2_PREDICT = "sam2_predict"
     SAM2_TRACK = "sam2_track"
+    VIDEO_TRANSCODE = "video_transcode"
 
 
 class JobStatus(str, enum.Enum):

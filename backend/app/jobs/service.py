@@ -102,3 +102,18 @@ def enqueue_sam2_track(
 
     celery_app.send_task("sam2_track", args=[job.id])
     return job
+
+
+def enqueue_video_transcode(session: Session, video_id: int, created_by: User) -> Job:
+    job = Job(
+        job_type=JobType.VIDEO_TRANSCODE,
+        status=JobStatus.PENDING,
+        payload={"video_id": video_id},
+        created_by_id=created_by.id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    celery_app.send_task("video_transcode", args=[job.id])
+    return job
