@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { apiClient } from "../shared/api/client";
-import { useCreatePhotoSequence, useCreateSequenceFromVideo } from "./useSequences";
+import { useCreatePhotoSequence, useCreateSequenceFromVideo, useVideoSequences } from "./useSequences";
 
 vi.mock("../shared/api/client", () => ({
   apiClient: { GET: vi.fn(), POST: vi.fn() },
@@ -63,5 +63,27 @@ describe("useCreatePhotoSequence", () => {
     expect(formData.get("name")).toBe("Photo seq");
     expect(formData.get("procedure_id")).toBe("2");
     expect(formData.getAll("files").length).toBe(1);
+  });
+});
+
+describe("useVideoSequences", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("fetches the sequences for a given video id", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: [
+        { id: 1, name: "Larynx", video_id: 5, procedure_id: 1, start_time: 0, duration: 30 },
+        { id: 2, name: "Esophagus", video_id: 5, procedure_id: 1, start_time: 30, duration: 40 },
+      ],
+      error: undefined,
+    } as never);
+
+    const { result } = renderHook(() => useVideoSequences(5), { wrapper });
+
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
+    expect(apiClient.GET).toHaveBeenCalledWith(
+      "/media/videos/{video_id}/sequences",
+      expect.objectContaining({ params: { path: { video_id: 5 } } })
+    );
   });
 });

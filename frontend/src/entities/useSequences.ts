@@ -2,6 +2,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "../shared/api/client";
 
+export function useVideoSequences(videoId: number | null) {
+  return useQuery({
+    queryKey: ["video-sequences", videoId],
+    queryFn: async () => {
+      const result = await apiClient.GET("/media/videos/{video_id}/sequences", {
+        params: { path: { video_id: videoId as number } },
+      });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    enabled: videoId !== null,
+  });
+}
+
 export function useSequencesForVideo(videoId: number) {
   return useQuery({
     queryKey: ["sequences", "video", videoId],
