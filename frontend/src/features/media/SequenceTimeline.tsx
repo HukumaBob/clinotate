@@ -1,11 +1,8 @@
+import type { components } from "../../shared/api/generated/schema";
+
 const SEGMENT_COLORS = ["bg-blue-600", "bg-emerald-600", "bg-amber-600", "bg-purple-600", "bg-pink-600"];
 
-type SequenceLike = {
-  id: number;
-  name: string;
-  start_time: number;
-  duration: number;
-};
+type SequenceRead = components["schemas"]["SequenceRead"];
 
 export function SequenceTimeline({
   durationSeconds,
@@ -19,7 +16,7 @@ export function SequenceTimeline({
   markEndDisabled,
 }: {
   durationSeconds: number;
-  sequences: SequenceLike[];
+  sequences: SequenceRead[];
   markStart: number | null;
   markEnd: number | null;
   onMarkStart: () => void;
@@ -36,11 +33,11 @@ export function SequenceTimeline({
   return (
     <div className="flex flex-col gap-2">
       <div className="relative h-10 w-full rounded bg-gray-800">
-        {sequences.map((sequence, index) => (
+        {sequences.map((sequence) => (
           <div
             key={sequence.id}
             title={sequence.name}
-            className={`absolute top-0 flex h-full items-center justify-center overflow-hidden whitespace-nowrap px-1 text-xs text-white ${SEGMENT_COLORS[sequence.id % SEGMENT_COLORS.length] ?? SEGMENT_COLORS[index % SEGMENT_COLORS.length]}`}
+            className={`absolute top-0 flex h-full items-center justify-center overflow-hidden whitespace-nowrap px-1 text-xs text-white ${SEGMENT_COLORS[sequence.id % SEGMENT_COLORS.length]}`}
             style={{ left: `${pct(sequence.start_time)}%`, width: `${pct(sequence.duration)}%` }}
           >
             <span className="truncate">{sequence.name}</span>
