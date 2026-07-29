@@ -15,18 +15,31 @@ export function useVideos() {
 export function useUploadVideo() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ file, title }: { file: File; title: string }) => {
+    mutationFn: async ({
+      file,
+      title,
+      procedureId,
+    }: {
+      file: File;
+      title: string;
+      procedureId?: number;
+    }) => {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("title", title);
+      if (procedureId !== undefined) {
+        formData.append("procedure_id", String(procedureId));
+      }
       const result = await apiClient.POST("/media/videos", {
         body: formData as never,
         bodySerializer: (body) => body as unknown as FormData,
       });
+      if (result.error) throw result.error;
       return result.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["videos"] });
+      queryClient.invalidateQueries({ queryKey: ["media-library"] });
     },
   });
 }
