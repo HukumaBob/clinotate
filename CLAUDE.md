@@ -69,7 +69,10 @@ decided during execution — it's the map between "what the plan said" and
 docker compose up -d                                    # postgres, redis, minio
 cd backend && uv run uvicorn app.main:app --reload       # :8000
 cd frontend && npm install --legacy-peer-deps && npm run dev  # :5173
+cd backend && uv run celery -A app.worker.celery_app worker --loglevel=info -Q celery  # transcode worker
 ```
+
+The transcode worker is a separate CPU-only process needed for video transcode jobs to actually run; without it, `POST /media/videos/{id}/transcode` creates a `Job` row but it stays `pending` forever.
 
 `npm run build`/`dev`/`test`/`test:e2e` all auto-run `generate-api` first
 (via `prebuild`/`predev`/`pretest`/`pretest:e2e` hooks) — the generated
