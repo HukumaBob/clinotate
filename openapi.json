@@ -891,6 +891,91 @@
         ]
       }
     },
+    "/media/videos/{video_id}": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Get Video",
+        "operationId": "get_video_media_videos__video_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Delete Video",
+        "operationId": "delete_video_media_videos__video_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/media/library": {
       "get": {
         "tags": [
@@ -1443,46 +1528,6 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/media/videos/{video_id}": {
-      "delete": {
-        "tags": [
-          "media"
-        ],
-        "summary": "Delete Video",
-        "operationId": "delete_video_media_videos__video_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "video_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Video Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -2261,21 +2306,29 @@
         "properties": {
           "left": {
             "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
             "title": "Left",
             "default": 0
           },
           "right": {
             "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
             "title": "Right",
             "default": 0
           },
           "top": {
             "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
             "title": "Top",
             "default": 0
           },
           "bottom": {
             "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
             "title": "Bottom",
             "default": 0
           }
@@ -2857,6 +2910,17 @@
             "type": "string",
             "title": "Name"
           },
+          "procedure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Id"
+          },
           "start_time": {
             "type": "integer",
             "title": "Start Time"
@@ -3190,6 +3254,43 @@
           "size_bytes": {
             "type": "integer",
             "title": "Size Bytes"
+          },
+          "browser_playable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Playable"
+          },
+          "container": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Container"
+          },
+          "video_codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Codec"
+          },
+          "stream_url": {
+            "type": "string",
+            "title": "Stream Url"
           }
         },
         "type": "object",
@@ -3200,7 +3301,11 @@
           "procedure_id",
           "fps",
           "duration_seconds",
-          "size_bytes"
+          "size_bytes",
+          "browser_playable",
+          "container",
+          "video_codec",
+          "stream_url"
         ],
         "title": "VideoRead"
       }

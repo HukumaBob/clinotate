@@ -657,3 +657,57 @@ def test_probe_codec_compatibility_rejects_mpeg4():
     playable, container, codec = probe_codec_compatibility(data)
     assert playable is False
     assert codec == "mpeg4"
+
+
+def test_upload_video_computes_browser_playable_true_for_h264():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO_H264, "rb") as f:
+        response = client.post(
+            "/media/videos",
+            files={"file": ("tiny_h264.mp4", f, "video/mp4")},
+            data={"title": "H264 source"},
+            headers=headers,
+        )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["browser_playable"] is True
+    assert body["video_codec"] == "h264"
+
+
+def test_upload_video_computes_browser_playable_false_for_mpeg4():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "MPEG4 source"},
+            headers=headers,
+        )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["browser_playable"] is False
+    assert body["video_codec"] == "mpeg4"
+
+
+def test_get_video_by_id_returns_full_record():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO_H264, "rb") as f:
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny_h264.mp4", f, "video/mp4")},
+            data={"title": "Fetch me"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+
+    response = client.get(f"/media/videos/{video_id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["id"] == video_id
+    assert response.json()["browser_playable"] is True
+    assert response.json()["stream_url"].startswith("http")
+
+
+def test_get_video_404_for_missing_video():
+    headers = _auth_headers()
+    response = client.get("/media/videos/999999999", headers=headers)
+    assert response.status_code == 404

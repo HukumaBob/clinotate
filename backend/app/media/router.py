@@ -19,7 +19,13 @@ from app.media.schemas import (
     SuggestSequenceNameResponse,
     VideoRead,
 )
-from app.media.service import compute_checksum, extract_frames, probe_video, suggest_sequence_name
+from app.media.service import (
+    compute_checksum,
+    extract_frames,
+    probe_codec_compatibility,
+    probe_video,
+    suggest_sequence_name,
+)
 from app.storage import StorageService, get_storage_service
 from app.taxonomy.models import Procedure
 
@@ -33,9 +39,10 @@ async def upload_video(
     procedure_id: int | None = Form(None),
     session: Session = Depends(get_session),
     storage: StorageService = Depends(get_storage_service),
-) -> Video:
+) -> VideoRead:
     data = await file.read()
     fps, duration = probe_video(data)
+    browser_playable, container, video_codec = probe_codec_compatibility(data)
     checksum = compute_checksum(data)
     storage_key = f"videos/{checksum}.mp4"
     storage.upload(storage_key, data, content_type="video/mp4")
@@ -49,16 +56,34 @@ async def upload_video(
         duration_seconds=duration,
         size_bytes=len(data),
         checksum=checksum,
+        browser_playable=browser_playable,
+        container=container,
+        video_codec=video_codec,
     )
     session.add(video)
     session.commit()
     session.refresh(video)
-    return video
+    return _video_read(video, storage)
 
 
 @router.get("/videos", response_model=list[VideoRead])
-def list_videos(session: Session = Depends(get_session)) -> list[Video]:
-    return session.query(Video).all()
+def list_videos(
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> list[VideoRead]:
+    return [_video_read(v, storage) for v in session.query(Video).all()]
+
+
+@router.get("/videos/{video_id}", response_model=VideoRead)
+def get_video(
+    video_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> VideoRead:
+    video = session.get(Video, video_id)
+    if video is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return _video_read(video, storage)
 
 
 @router.get("/library", response_model=list[MediaLibraryItem])
@@ -263,6 +288,22 @@ async def upload_standalone_frame(
     session.commit()
     session.refresh(frame)
     return _frame_read(frame, storage)
+
+
+def _video_read(video: Video, storage: StorageService) -> VideoRead:
+    return VideoRead(
+        id=video.id,
+        filename=video.filename,
+        title=video.title,
+        procedure_id=video.procedure_id,
+        fps=video.fps,
+        duration_seconds=video.duration_seconds,
+        size_bytes=video.size_bytes,
+        browser_playable=video.browser_playable,
+        container=video.container,
+        video_codec=video.video_codec,
+        stream_url=storage.url_for(video.storage_key),
+    )
 
 
 def _frame_read(frame: Frame, storage: StorageService) -> FrameRead:

@@ -13,6 +13,10 @@ class VideoRead(BaseModel):
     fps: float
     duration_seconds: float
     size_bytes: int
+    browser_playable: bool | None
+    container: str | None
+    video_codec: str | None
+    stream_url: str
 
 
 class CropBox(BaseModel):
