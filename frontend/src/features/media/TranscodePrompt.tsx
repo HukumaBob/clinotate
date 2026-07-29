@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useJob } from "../../entities/useJobs";
 import { useTranscodeVideo } from "../../entities/useVideo";
@@ -14,9 +14,11 @@ export function TranscodePrompt({
   const transcode = useTranscodeVideo();
   const jobQuery = useJob(jobId);
 
-  if (jobQuery.data?.status === "succeeded") {
-    onTranscodeComplete();
-  }
+  useEffect(() => {
+    if (jobQuery.data?.status === "succeeded") {
+      onTranscodeComplete();
+    }
+  }, [jobQuery.data?.status, jobQuery.data?.id, onTranscodeComplete]);
 
   function handleClick() {
     transcode.mutate(videoId, {
