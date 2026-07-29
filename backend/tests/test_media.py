@@ -3,9 +3,11 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.media.service import probe_codec_compatibility
 
 client = TestClient(app)
 FIXTURE_VIDEO = Path(__file__).parent / "fixtures" / "tiny.mp4"
+FIXTURE_VIDEO_H264 = Path(__file__).parent / "fixtures" / "tiny_h264.mp4"
 
 
 def _auth_headers() -> dict[str, str]:
@@ -638,3 +640,20 @@ def test_video_model_has_codec_compatibility_columns():
     assert video.browser_playable is True
     assert video.container == "mov,mp4,m4a,3gp,3g2,mj2"
     assert video.video_codec == "h264"
+
+
+def test_probe_codec_compatibility_accepts_h264_mp4():
+    with open(FIXTURE_VIDEO_H264, "rb") as f:
+        data = f.read()
+    playable, container, codec = probe_codec_compatibility(data)
+    assert playable is True
+    assert codec == "h264"
+    assert container is not None
+
+
+def test_probe_codec_compatibility_rejects_mpeg4():
+    with open(FIXTURE_VIDEO, "rb") as f:
+        data = f.read()
+    playable, container, codec = probe_codec_compatibility(data)
+    assert playable is False
+    assert codec == "mpeg4"

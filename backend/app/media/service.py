@@ -1,4 +1,6 @@
 import hashlib
+import json
+import subprocess
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -38,6 +40,60 @@ def probe_video(video_bytes: bytes) -> tuple[float, float]:
         capture.release()
     duration = frame_count / fps if fps > 0 else 0.0
     return fps, duration
+
+
+# Browsers reliably play H.264 video in an MP4/MOV-family container.
+# ffprobe reports this container family's format_name as this exact
+# comma-joined string (confirmed empirically against a real ffprobe
+# build, not assumed from documentation) -- verify against your ffprobe
+# version if this check ever starts rejecting normal MP4 uploads.
+_BROWSER_PLAYABLE_CONTAINERS = {"mov,mp4,m4a,3gp,3g2,mj2"}
+_BROWSER_PLAYABLE_CODECS = {"h264"}
+
+
+def probe_codec_compatibility(video_bytes: bytes) -> tuple[bool, str | None, str | None]:
+    """Returns (browser_playable, container_format_name, video_codec_name).
+
+    Runs real ffprobe against the file (not a guess from the filename
+    extension) -- a `.mp4` file can still contain a codec (e.g. MPEG-4
+    Part 2 / "mpeg4") no mainstream browser's <video> element will
+    decode. Whitelist, not blacklist: an unrecognized/unparseable
+    container or codec is treated as NOT playable, since a false "yes"
+    here means a silent black-screen player with no path forward, while
+    a false "no" only costs one avoidable transcode offer.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".mp4") as tmp:
+        tmp.write(video_bytes)
+        tmp.flush()
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=codec_name",
+                    "-show_entries", "format=format_name",
+                    "-of", "json",
+                    tmp.name,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=True,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+            return False, None, None
+
+    try:
+        parsed = json.loads(result.stdout)
+        container = parsed.get("format", {}).get("format_name")
+        streams = parsed.get("streams", [])
+        codec = streams[0].get("codec_name") if streams else None
+    except (json.JSONDecodeError, IndexError, AttributeError):
+        return False, None, None
+
+    playable = container in _BROWSER_PLAYABLE_CONTAINERS and codec in _BROWSER_PLAYABLE_CODECS
+    return playable, container, codec
 
 
 def _apply_crop(frame, crop: "CropBox | None"):
