@@ -891,6 +891,53 @@
         ]
       }
     },
+    "/media/videos/{video_id}/transcode": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Transcode Video",
+        "operationId": "transcode_video_media_videos__video_id__transcode_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/media/videos/{video_id}": {
       "get": {
         "tags": [
@@ -2537,7 +2584,8 @@
           "sam3_predict",
           "sam3_track",
           "sam2_predict",
-          "sam2_track"
+          "sam2_track",
+          "video_transcode"
         ],
         "title": "JobType"
       },

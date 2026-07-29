@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
+from app.auth.models import User
 from app.db import get_session
+from app.jobs.models import Job, JobStatus, JobType
+from app.jobs.schemas import JobRead
+from app.jobs.service import enqueue_video_transcode
 from app.media.models import Frame, Sequence, Video
 from app.media.schemas import (
     FrameRead,
@@ -72,6 +76,40 @@ def list_videos(
     storage: StorageService = Depends(get_storage_service),
 ) -> list[VideoRead]:
     return [_video_read(v, storage) for v in session.query(Video).all()]
+
+
+@router.post(
+    "/videos/{video_id}/transcode", response_model=JobRead, status_code=status.HTTP_201_CREATED
+)
+def transcode_video(
+    video_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Job:
+    video = session.get(Video, video_id)
+    if video is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    if video.browser_playable:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Video is already browser-playable"
+        )
+
+    existing_pending_or_running = (
+        session.query(Job)
+        .filter(
+            Job.job_type == JobType.VIDEO_TRANSCODE,
+            Job.payload["video_id"].as_integer() == video_id,
+            Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
+        )
+        .first()
+    )
+    if existing_pending_or_running is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A conversion is already in progress for this video",
+        )
+
+    return enqueue_video_transcode(session, video_id, current_user)
 
 
 @router.get("/videos/{video_id}", response_model=VideoRead)

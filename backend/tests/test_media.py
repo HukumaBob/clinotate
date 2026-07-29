@@ -711,3 +711,60 @@ def test_get_video_404_for_missing_video():
     headers = _auth_headers()
     response = client.get("/media/videos/999999999", headers=headers)
     assert response.status_code == 404
+
+
+def test_transcode_video_creates_job():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:  # tiny.mp4 -- mpeg4, not playable
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "Needs transcode"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+
+    response = client.post(f"/media/videos/{video_id}/transcode", headers=headers)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["job_type"] == "video_transcode"
+    assert body["status"] == "pending"
+
+
+def test_transcode_video_404_for_missing_video():
+    headers = _auth_headers()
+    response = client.post("/media/videos/999999999/transcode", headers=headers)
+    assert response.status_code == 404
+
+
+def test_transcode_video_409_when_already_playable():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO_H264, "rb") as f:  # already h264
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny_h264.mp4", f, "video/mp4")},
+            data={"title": "Already fine"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+
+    response = client.post(f"/media/videos/{video_id}/transcode", headers=headers)
+    assert response.status_code == 409
+
+
+def test_transcode_video_409_when_already_pending():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "Double transcode"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+
+    first = client.post(f"/media/videos/{video_id}/transcode", headers=headers)
+    assert first.status_code == 201
+
+    second = client.post(f"/media/videos/{video_id}/transcode", headers=headers)
+    assert second.status_code == 409
