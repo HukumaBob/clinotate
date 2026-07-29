@@ -37,6 +37,7 @@ export function useCreateSequenceFromVideo() {
     mutationFn: async (params: {
       videoId: number;
       name: string;
+      procedureId?: number;
       startTime: number;
       duration: number;
       fps: number;
@@ -46,6 +47,7 @@ export function useCreateSequenceFromVideo() {
         params: { path: { video_id: params.videoId } },
         body: {
           name: params.name,
+          procedure_id: params.procedureId,
           start_time: params.startTime,
           duration: params.duration,
           fps: params.fps,

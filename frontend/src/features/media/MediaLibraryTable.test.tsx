@@ -49,4 +49,41 @@ describe("MediaLibraryTable", () => {
       expect(screen.getByText(/reassign this video's sequences/i)).toBeInTheDocument()
     );
   });
+
+  it("keeps confirm state independent for a video and a photo sequence that share the same numeric id", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: [
+        {
+          id: 5,
+          kind: "video",
+          filename: "video-five.mp4",
+          procedure_id: null,
+          uploaded_at: "2026-07-28T00:00:00Z",
+          size_bytes: 1_000,
+          linked_sequence_count: 0,
+        },
+        {
+          id: 5,
+          kind: "photo",
+          filename: "photo-sequence-five",
+          procedure_id: null,
+          uploaded_at: "2026-07-27T00:00:00Z",
+          size_bytes: 2_000,
+          linked_sequence_count: 1,
+        },
+      ],
+      error: undefined,
+    } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("video-five.mp4");
+    const deleteButtons = screen.getAllByRole("button", { name: /^delete$/i });
+    expect(deleteButtons).toHaveLength(2);
+
+    await userEvent.click(deleteButtons[0]);
+
+    expect(screen.getByRole("button", { name: /^confirm$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^delete$/i })).toBeInTheDocument();
+  });
 });

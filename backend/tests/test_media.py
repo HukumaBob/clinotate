@@ -87,6 +87,88 @@ def test_create_sequence_extracts_frames():
     assert all(f["image_url"].startswith("http") for f in frames)
 
 
+def test_create_sequence_from_video_persists_selected_procedure_id():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Video sequence procedure"}, headers=headers
+    ).json()["id"]
+
+    with open(FIXTURE_VIDEO, "rb") as f:
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "Procedure-tagged source"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+
+    sequence_response = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={
+            "name": "procedure-tagged sequence",
+            "procedure_id": procedure_id,
+            "start_time": 0,
+            "duration": 2,
+        },
+        headers=headers,
+    )
+    assert sequence_response.status_code == 201
+    assert sequence_response.json()["procedure_id"] == procedure_id
+
+
+def test_create_sequence_with_invalid_crop_box_returns_422_and_creates_no_sequence():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "Invalid crop source"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+
+    before_count = len(client.get(f"/media/videos/{video_id}/sequences", headers=headers).json())
+
+    sequence_response = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={
+            "name": "invalid crop sequence",
+            "start_time": 0,
+            "duration": 2,
+            "crop": {"left": 60, "right": 60, "top": 0, "bottom": 0},
+        },
+        headers=headers,
+    )
+    assert sequence_response.status_code == 422
+
+    after_count = len(client.get(f"/media/videos/{video_id}/sequences", headers=headers).json())
+    assert after_count == before_count
+
+
+def test_create_sequence_with_negative_crop_value_returns_422():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "Negative crop source"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+
+    sequence_response = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={
+            "name": "negative crop sequence",
+            "start_time": 0,
+            "duration": 2,
+            "crop": {"left": -50, "right": 0, "top": 0, "bottom": 0},
+        },
+        headers=headers,
+    )
+    assert sequence_response.status_code == 422
+
+
 def test_sequence_can_be_created_without_a_video():
     headers = _auth_headers()
     procedure_response = client.post(

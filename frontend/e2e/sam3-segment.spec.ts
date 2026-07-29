@@ -77,7 +77,7 @@ test("annotator can segment a frame with SAM-3 and see the resulting mask annota
   await page.getByPlaceholder("Email").fill(email);
   await page.getByPlaceholder("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/videos$/);
+  await expect(page).toHaveURL(/\/media$/);
 
   await page.goto(`/frames/${firstFrame.id}`);
 

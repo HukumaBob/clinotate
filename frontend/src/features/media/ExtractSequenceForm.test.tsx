@@ -35,4 +35,28 @@ describe("ExtractSequenceForm", () => {
       expect(screen.getByLabelText(/name/i)).toHaveValue("EGD 2026-07-28 #1")
     );
   });
+
+  it("seeds the procedure select from the procedureId prop instead of auto-selecting the first result", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/taxonomy/procedures") {
+        return {
+          data: [
+            { id: 1, name: "EGD" },
+            { id: 2, name: "Colonoscopy" },
+          ],
+          error: undefined,
+        } as never;
+      }
+      if (path === "/media/sequences/suggest-name") {
+        return { data: { name: "Colonoscopy 2026-07-28 #1" }, error: undefined } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    render(<ExtractSequenceForm videoId={1} procedureId={2} onCreated={vi.fn()} />, { wrapper });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/procedure/i)).toHaveValue("2")
+    );
+  });
 });

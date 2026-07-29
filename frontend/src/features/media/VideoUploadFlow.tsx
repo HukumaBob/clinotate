@@ -22,7 +22,13 @@ export function VideoUploadFlow({ onSequenceCreated }: { onSequenceCreated: (seq
   }
 
   if (uploadedVideoId !== null) {
-    return <ExtractSequenceForm videoId={uploadedVideoId} onCreated={onSequenceCreated} />;
+    return (
+      <ExtractSequenceForm
+        videoId={uploadedVideoId}
+        procedureId={procedureId}
+        onCreated={onSequenceCreated}
+      />
+    );
   }
 
   return (

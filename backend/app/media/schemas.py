@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class VideoRead(BaseModel):
@@ -16,14 +16,23 @@ class VideoRead(BaseModel):
 
 
 class CropBox(BaseModel):
-    left: float = 0
-    right: float = 0
-    top: float = 0
-    bottom: float = 0
+    left: float = Field(default=0, ge=0, le=100)
+    right: float = Field(default=0, ge=0, le=100)
+    top: float = Field(default=0, ge=0, le=100)
+    bottom: float = Field(default=0, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _check_insets_leave_a_positive_area(self) -> "CropBox":
+        if self.left + self.right >= 100:
+            raise ValueError("left + right crop insets must be less than 100")
+        if self.top + self.bottom >= 100:
+            raise ValueError("top + bottom crop insets must be less than 100")
+        return self
 
 
 class SequenceCreate(BaseModel):
     name: str
+    procedure_id: int | None = None
     start_time: int
     duration: int
     fps: float = 1.0

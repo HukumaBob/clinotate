@@ -37,10 +37,37 @@ describe("PhotosUploadFlow", () => {
 
     const procedureSelect = await screen.findByLabelText(/procedure/i);
     await userEvent.selectOptions(procedureSelect, "1");
+    await userEvent.type(screen.getByLabelText(/^name$/i), "EGD batch");
     await userEvent.click(screen.getByRole("button", { name: /create sequence/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/not a valid image/i)).toBeInTheDocument()
     );
+  });
+
+  it("does not submit when the name is blank or whitespace-only", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: [{ id: 1, name: "EGD" }],
+      error: undefined,
+    } as never);
+    const postMock = vi.mocked(apiClient.POST);
+
+    render(<PhotosUploadFlow onCreated={vi.fn()} />, { wrapper });
+
+    const file = new File(["x"], "good.png", { type: "image/png" });
+    const input = screen.getByLabelText(/choose photos/i);
+    await userEvent.upload(input, file);
+
+    const procedureSelect = await screen.findByLabelText(/procedure/i);
+    await userEvent.selectOptions(procedureSelect, "1");
+    await userEvent.type(screen.getByLabelText(/^name$/i), "   ");
+
+    // Bypass native HTML `required` validation blocking submit in jsdom so
+    // we can assert the component's own guard also rejects a blank name.
+    const form = input.closest("form") as HTMLFormElement;
+    form.noValidate = true;
+    await userEvent.click(screen.getByRole("button", { name: /create sequence/i }));
+
+    expect(postMock).not.toHaveBeenCalled();
   });
 });

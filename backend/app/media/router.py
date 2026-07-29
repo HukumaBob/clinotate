@@ -114,7 +114,11 @@ def create_sequence(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
     sequence = Sequence(
-        video_id=video_id, name=payload.name, start_time=payload.start_time, duration=payload.duration
+        video_id=video_id,
+        procedure_id=payload.procedure_id,
+        name=payload.name,
+        start_time=payload.start_time,
+        duration=payload.duration,
     )
     session.add(sequence)
     session.commit()

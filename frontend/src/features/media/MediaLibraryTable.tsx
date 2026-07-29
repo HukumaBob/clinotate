@@ -12,19 +12,20 @@ export function MediaLibraryTable() {
   const libraryQuery = useMediaLibrary();
   const deleteVideo = useDeleteVideo();
   const deleteSequence = useDeleteSequence();
-  const [confirmingId, setConfirmingId] = useState<number | null>(null);
-  const [errorsById, setErrorsById] = useState<Record<number, string>>({});
+  const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
+  const [errorsByKey, setErrorsByKey] = useState<Record<string, string>>({});
 
   function handleDelete(id: number, kind: "video" | "photo") {
+    const key = `${kind}-${id}`;
     const mutation = kind === "video" ? deleteVideo : deleteSequence;
     mutation.mutate(id, {
       onSuccess: () => {
-        setConfirmingId(null);
-        setErrorsById((errors) => ({ ...errors, [id]: "" }));
+        setConfirmingKey(null);
+        setErrorsByKey((errors) => ({ ...errors, [key]: "" }));
       },
       onError: (error: unknown) => {
         const detail = (error as { detail?: string } | undefined)?.detail ?? "Delete failed";
-        setErrorsById((errors) => ({ ...errors, [id]: detail }));
+        setErrorsByKey((errors) => ({ ...errors, [key]: detail }));
       },
     });
   }
@@ -43,36 +44,39 @@ export function MediaLibraryTable() {
         </tr>
       </thead>
       <tbody>
-        {(libraryQuery.data ?? []).map((item) => (
-          <tr key={`${item.kind}-${item.id}`} className="border-b border-gray-900">
-            <td className="py-2">{item.filename}</td>
-            <td>{item.kind}</td>
-            <td>{item.procedure_id ?? "—"}</td>
-            <td>{new Date(item.uploaded_at).toLocaleDateString()}</td>
-            <td>{formatSize(item.size_bytes)}</td>
-            <td>{item.linked_sequence_count}</td>
-            <td>
-              {confirmingId === item.id ? (
-                <button
-                  onClick={() => handleDelete(item.id, item.kind)}
-                  className="rounded bg-red-600 px-2 py-1 text-white hover:bg-red-500"
-                >
-                  Confirm
-                </button>
-              ) : (
-                <button
-                  onClick={() => setConfirmingId(item.id)}
-                  className="rounded border border-gray-700 px-2 py-1 hover:bg-gray-800"
-                >
-                  Delete
-                </button>
-              )}
-              {errorsById[item.id] && (
-                <p className="mt-1 text-xs text-red-400">{errorsById[item.id]}</p>
-              )}
-            </td>
-          </tr>
-        ))}
+        {(libraryQuery.data ?? []).map((item) => {
+          const key = `${item.kind}-${item.id}`;
+          return (
+            <tr key={key} className="border-b border-gray-900">
+              <td className="py-2">{item.filename}</td>
+              <td>{item.kind}</td>
+              <td>{item.procedure_id ?? "—"}</td>
+              <td>{new Date(item.uploaded_at).toLocaleDateString()}</td>
+              <td>{formatSize(item.size_bytes)}</td>
+              <td>{item.linked_sequence_count}</td>
+              <td>
+                {confirmingKey === key ? (
+                  <button
+                    onClick={() => handleDelete(item.id, item.kind)}
+                    className="rounded bg-red-600 px-2 py-1 text-white hover:bg-red-500"
+                  >
+                    Confirm
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingKey(key)}
+                    className="rounded border border-gray-700 px-2 py-1 hover:bg-gray-800"
+                  >
+                    Delete
+                  </button>
+                )}
+                {errorsByKey[key] && (
+                  <p className="mt-1 text-xs text-red-400">{errorsByKey[key]}</p>
+                )}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

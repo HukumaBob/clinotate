@@ -32,7 +32,7 @@ export function PhotosUploadFlow({ onCreated }: { onCreated: (sequenceId: number
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!procedureId || files.length === 0) return;
+    if (!procedureId || files.length === 0 || !name.trim()) return;
     setError(null);
     createPhotoSequence.mutate(
       { files, name, procedureId },
@@ -94,6 +94,7 @@ export function PhotosUploadFlow({ onCreated }: { onCreated: (sequenceId: number
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+          required
         />
       </label>
       {error && <p className="text-sm text-red-400">{error}</p>}

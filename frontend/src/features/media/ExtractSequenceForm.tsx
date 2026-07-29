@@ -6,13 +6,15 @@ import { useSuggestSequenceName } from "../../entities/useSuggestSequenceName";
 
 export function ExtractSequenceForm({
   videoId,
+  procedureId: procedureIdProp,
   onCreated,
 }: {
   videoId: number;
+  procedureId?: number;
   onCreated: (sequenceId: number) => void;
 }) {
   const proceduresQuery = useProcedures();
-  const [procedureId, setProcedureId] = useState<number | undefined>(undefined);
+  const [procedureId, setProcedureId] = useState<number | undefined>(procedureIdProp);
   const suggestedNameQuery = useSuggestSequenceName(procedureId);
   const [name, setName] = useState("");
   const [startTime, setStartTime] = useState(0);
@@ -23,10 +25,15 @@ export function ExtractSequenceForm({
   const createSequence = useCreateSequenceFromVideo();
 
   useEffect(() => {
-    if (procedureId === undefined && proceduresQuery.data && proceduresQuery.data.length > 0) {
+    if (
+      procedureIdProp === undefined &&
+      procedureId === undefined &&
+      proceduresQuery.data &&
+      proceduresQuery.data.length > 0
+    ) {
       setProcedureId(proceduresQuery.data[0].id);
     }
-  }, [procedureId, proceduresQuery.data]);
+  }, [procedureIdProp, procedureId, proceduresQuery.data]);
 
   useEffect(() => {
     if (suggestedNameQuery.data?.name) {
@@ -37,7 +44,7 @@ export function ExtractSequenceForm({
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     createSequence.mutate(
-      { videoId, name, startTime, duration, fps, crop },
+      { videoId, name, procedureId, startTime, duration, fps, crop },
       {
         onSuccess: (sequence) => {
           if (sequence) onCreated(sequence.id);
