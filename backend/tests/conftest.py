@@ -21,7 +21,18 @@ def test_engine():
 def db_session(test_engine):
     connection = test_engine.connect()
     transaction = connection.begin()
-    SessionForTest = sessionmaker(bind=connection)
+    # join_transaction_mode="create_savepoint": without this, a
+    # session.commit() issued by code under test (e.g. a Celery task body
+    # patched to reuse this exact session) is nested directly inside the
+    # fixture's own outer `transaction`, so a later session.rollback() --
+    # e.g. a task's `except: session.rollback()` error-handling path --
+    # rolls back past that "committed" data too, not just the failed
+    # unit of work. Using a real SAVEPOINT means session.commit() releases
+    # the savepoint (durable within the outer transaction) and
+    # session.rollback() only undoes back to the next savepoint boundary.
+    # The fixture's own final `transaction.rollback()` still discards
+    # everything at test teardown either way.
+    SessionForTest = sessionmaker(bind=connection, join_transaction_mode="create_savepoint")
     session = SessionForTest()
     yield session
     session.close()
