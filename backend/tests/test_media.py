@@ -934,7 +934,8 @@ def test_patch_sequence_rename_leaves_frames_untouched():
     ).json()["id"]
     frames_before = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
 
-    client.patch(f"/media/sequences/{sequence_id}", json={"name": "renamed"}, headers=headers)
+    response = client.patch(f"/media/sequences/{sequence_id}", json={"name": "renamed"}, headers=headers)
+    assert response.status_code == 200
 
     frames_after = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
     assert [f["id"] for f in frames_before] == [f["id"] for f in frames_after]
