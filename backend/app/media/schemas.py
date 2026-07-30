@@ -39,7 +39,7 @@ class SequenceCreate(BaseModel):
     procedure_id: int | None = None
     start_time: int
     duration: int
-    fps: float = 1.0
+    fps: float = Field(default=1.0, gt=0)
     crop: CropBox | None = None
 
 
@@ -55,7 +55,7 @@ class SequenceUpdate(BaseModel):
     procedure_id: int | None = None
     start_time: int | None = None
     duration: int | None = None
-    fps: float | None = None
+    fps: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def _check_temporal_fields_are_all_or_nothing(self) -> "SequenceUpdate":
@@ -78,6 +78,7 @@ class SequenceRead(BaseModel):
     start_time: int
     duration: int
     annotation_count: int
+    crop_box: dict | None = None
 
 
 class SuggestSequenceNameResponse(BaseModel):

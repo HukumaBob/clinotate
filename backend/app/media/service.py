@@ -2,6 +2,7 @@ import hashlib
 import json
 import subprocess
 import tempfile
+import uuid
 from datetime import date
 from pathlib import Path
 
@@ -155,18 +156,30 @@ def recut_sequence(
     sequence's timing -- in that order, so a failure during extraction
     or upload leaves the sequence's existing frames and annotations
     untouched and the caller can simply retry.
+
+    Replays the sequence's persisted crop box (if any) so a re-cut
+    doesn't silently discard cropping applied at creation time. New
+    frames get storage keys unique to this re-cut operation (not just
+    to the sequence/frame_index pair) so a second re-cut can't overwrite
+    a first re-cut's still-referenced objects before the old Frame rows
+    are deleted. The old frames' storage objects are deleted from MinIO
+    only after the DB commit succeeds, so a storage failure here can't
+    roll back already-committed DB state.
     """
     video_bytes = storage.download(video.storage_key)
-    extracted = extract_frames(video_bytes, sample_fps=fps)
+    crop = CropBox(**sequence.crop_box) if sequence.crop_box else None
+    extracted = extract_frames(video_bytes, sample_fps=fps, crop=crop)
 
-    old_frame_ids = [
-        frame_id
-        for (frame_id,) in session.query(Frame.id).filter(Frame.sequence_id == sequence.id).all()
-    ]
+    old_frames = (
+        session.query(Frame.id, Frame.storage_key).filter(Frame.sequence_id == sequence.id).all()
+    )
+    old_frame_ids = [frame_id for frame_id, _ in old_frames]
+    old_storage_keys = [storage_key for _, storage_key in old_frames]
 
+    recut_batch = uuid.uuid4().hex
     new_frames = []
     for frame_index, png_bytes, width, height in extracted:
-        storage_key = f"frames/{sequence.id}/{frame_index}-recut.png"
+        storage_key = f"frames/{sequence.id}/{recut_batch}-{frame_index}.png"
         storage.upload(storage_key, png_bytes, content_type="image/png")
         new_frames.append(
             Frame(
@@ -190,3 +203,6 @@ def recut_sequence(
     sequence.start_time = start_time
     sequence.duration = duration
     session.commit()
+
+    for storage_key in old_storage_keys:
+        storage.delete(storage_key)

@@ -184,6 +184,7 @@ def create_sequence(
         name=payload.name,
         start_time=payload.start_time,
         duration=payload.duration,
+        crop_box=payload.crop.model_dump() if payload.crop else None,
     )
     session.add(sequence)
     session.commit()
@@ -373,6 +374,7 @@ def _sequence_read(sequence: Sequence, session: Session) -> SequenceRead:
         start_time=sequence.start_time,
         duration=sequence.duration,
         annotation_count=annotation_count,
+        crop_box=sequence.crop_box,
     )
 
 

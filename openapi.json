@@ -3034,6 +3034,7 @@
           },
           "fps": {
             "type": "number",
+            "exclusiveMinimum": 0.0,
             "title": "Fps",
             "default": 1.0
           },
@@ -3127,6 +3128,18 @@
           "annotation_count": {
             "type": "integer",
             "title": "Annotation Count"
+          },
+          "crop_box": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crop Box"
           }
         },
         "type": "object",
@@ -3190,7 +3203,8 @@
           "fps": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
