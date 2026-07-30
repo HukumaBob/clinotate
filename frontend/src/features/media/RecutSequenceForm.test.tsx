@@ -82,9 +82,22 @@ describe("RecutSequenceForm", () => {
       { wrapper }
     );
 
+    const fpsInput = screen.getByLabelText(/fps/i);
+    await userEvent.clear(fpsInput);
+    await userEvent.type(fpsInput, "2");
     await userEvent.click(screen.getByRole("button", { name: /re-cut/i }));
     await userEvent.click(await screen.findByRole("button", { name: /cancel/i }));
 
     expect(apiClient.PATCH).not.toHaveBeenCalled();
+  });
+
+  it("disables the Re-cut button when fps is empty", async () => {
+    render(
+      <RecutSequenceForm sequence={sequence} markStart={0} markEnd={15} onDone={vi.fn()} />,
+      { wrapper }
+    );
+
+    const recutButton = screen.getByRole("button", { name: /re-cut/i }) as HTMLButtonElement;
+    expect(recutButton.disabled).toBe(true);
   });
 });
