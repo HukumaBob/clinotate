@@ -9,8 +9,10 @@ import cv2
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.media.models import Sequence
+from app.annotation.models import Annotation
+from app.media.models import Frame, Sequence, Video
 from app.media.schemas import CropBox
+from app.storage import StorageService
 from app.taxonomy.models import Procedure
 
 
@@ -135,3 +137,56 @@ def extract_frames(
             source_frame_number += 1
         capture.release()
     return results
+
+
+def recut_sequence(
+    session: Session,
+    storage: StorageService,
+    sequence: Sequence,
+    video: Video,
+    start_time: int,
+    duration: int,
+    fps: float,
+) -> None:
+    """Re-extracts a Sequence's frames with new start/end/fps.
+
+    Extracts and uploads the new frames first, then deletes the old
+    Frame rows (cascading to their Annotation rows) and updates the
+    sequence's timing -- in that order, so a failure during extraction
+    or upload leaves the sequence's existing frames and annotations
+    untouched and the caller can simply retry.
+    """
+    video_bytes = storage.download(video.storage_key)
+    extracted = extract_frames(video_bytes, sample_fps=fps)
+
+    old_frame_ids = [
+        frame_id
+        for (frame_id,) in session.query(Frame.id).filter(Frame.sequence_id == sequence.id).all()
+    ]
+
+    new_frames = []
+    for frame_index, png_bytes, width, height in extracted:
+        storage_key = f"frames/{sequence.id}/{frame_index}-recut.png"
+        storage.upload(storage_key, png_bytes, content_type="image/png")
+        new_frames.append(
+            Frame(
+                sequence_id=sequence.id,
+                storage_key=storage_key,
+                frame_index=frame_index,
+                width=width,
+                height=height,
+            )
+        )
+
+    if old_frame_ids:
+        session.query(Annotation).filter(Annotation.frame_id.in_(old_frame_ids)).delete(
+            synchronize_session=False
+        )
+        session.query(Frame).filter(Frame.id.in_(old_frame_ids)).delete(synchronize_session=False)
+
+    for frame in new_frames:
+        session.add(frame)
+
+    sequence.start_time = start_time
+    sequence.duration = duration
+    session.commit()
