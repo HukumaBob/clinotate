@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
@@ -165,5 +165,61 @@ describe("VideoReviewPlayer", () => {
 
     expect(await screen.findByRole("button", { name: /mark start/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /mark end/i })).toBeInTheDocument();
+  });
+
+  it("wires sequencesQuery data into SequenceFromMarksForm so it inherits a real fetched crop_box", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/media/videos/{video_id}") {
+        return {
+          data: {
+            id: 5, filename: "a.mp4", title: "A", procedure_id: 1, fps: 1,
+            duration_seconds: 60, size_bytes: 100,
+            browser_playable: true, container: "mov,mp4,m4a,3gp,3g2,mj2", video_codec: "h264",
+            stream_url: "https://minio.local/videos/a.mp4?signed=1",
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/media/videos/{video_id}/sequences") {
+        return {
+          data: [
+            {
+              id: 1, name: "Larynx", video_id: 5, procedure_id: 1,
+              start_time: 0, duration: 10, annotation_count: 0,
+              crop_box: { left: 15, right: 0, top: 0, bottom: 0 },
+            },
+          ],
+          error: undefined,
+        } as never;
+      }
+      if (path === "/taxonomy/procedures") {
+        return { data: [{ id: 1, name: "EGD" }], error: undefined } as never;
+      }
+      if (path === "/media/sequences/suggest-name") {
+        return { data: { name: "EGD 2026-07-30 #1" }, error: undefined } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    render(<VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
+
+    const video = await waitFor(() => {
+      const el = document.querySelector("video");
+      expect(el).toBeInTheDocument();
+      return el as HTMLVideoElement;
+    });
+
+    // jsdom's video element always reports currentTime 0 and never fires
+    // loadedmetadata; stub/dispatch both so "Mark start" / "Mark end" are
+    // enabled and produce two distinct mark points.
+    let currentTime = 20;
+    Object.defineProperty(video, "currentTime", { get: () => currentTime, configurable: true });
+    fireEvent.loadedMetadata(video);
+
+    await userEvent.click(await screen.findByRole("button", { name: /mark start/i }));
+    currentTime = 40;
+    await userEvent.click(screen.getByRole("button", { name: /mark end/i }));
+
+    expect(await screen.findByLabelText(/left %/i)).toHaveValue(15);
   });
 });
