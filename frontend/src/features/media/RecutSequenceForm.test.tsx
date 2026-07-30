@@ -91,6 +91,31 @@ describe("RecutSequenceForm", () => {
     expect(apiClient.PATCH).not.toHaveBeenCalled();
   });
 
+  it("shows an error message and returns to the editable state when the PATCH fails", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: undefined,
+      error: { detail: "start_time + duration exceeds the video's duration" },
+    } as never);
+
+    const onDone = vi.fn();
+    render(
+      <RecutSequenceForm sequence={sequence} markStart={0} markEnd={15} onDone={onDone} />,
+      { wrapper }
+    );
+
+    const fpsInput = screen.getByLabelText(/fps/i);
+    await userEvent.clear(fpsInput);
+    await userEvent.type(fpsInput, "2");
+    await userEvent.click(screen.getByRole("button", { name: /re-cut/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /confirm/i }));
+
+    expect(await screen.findByText(/re-cut failed/i)).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+    // Returned to the editable state: the Re-cut button is showing again, not Confirm/Cancel.
+    expect(await screen.findByRole("button", { name: /re-cut/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
+  });
+
   it("disables the Re-cut button when fps is empty", async () => {
     render(
       <RecutSequenceForm sequence={sequence} markStart={0} markEnd={15} onDone={vi.fn()} />,

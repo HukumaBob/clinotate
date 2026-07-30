@@ -32,7 +32,10 @@ export function RecutSequenceForm({
     if (fps === "") return;
     updateSequence.mutate(
       { sequenceId: sequence.id, startTime, duration, fps },
-      { onSuccess: () => onDone() }
+      {
+        onSuccess: () => onDone(),
+        onError: () => setConfirming(false),
+      }
     );
   }
 
@@ -56,6 +59,9 @@ export function RecutSequenceForm({
           sequence&apos;s current frames.
         </p>
       )}
+      {updateSequence.isError && (
+        <p className="text-sm text-red-400">Re-cut failed. Please try again.</p>
+      )}
       {!confirming ? (
         <button
           type="submit"
@@ -69,7 +75,8 @@ export function RecutSequenceForm({
           <button
             type="button"
             onClick={handleConfirm}
-            className="rounded bg-red-600 px-3 py-2 font-medium text-white hover:bg-red-500"
+            disabled={updateSequence.isPending}
+            className="rounded bg-red-600 px-3 py-2 font-medium text-white hover:bg-red-500 disabled:opacity-50"
           >
             Confirm
           </button>
