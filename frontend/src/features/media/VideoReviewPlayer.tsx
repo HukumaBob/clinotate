@@ -22,17 +22,24 @@ export function VideoReviewPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [markStart, setMarkStart] = useState<number | null>(null);
   const [markEnd, setMarkEnd] = useState<number | null>(null);
+  // TODO(Task 7): videoReady gates the Mark start/end buttons once they
+  // move into this component's own JSX.
   const [videoReady, setVideoReady] = useState(false);
+  void videoReady;
   const [renamingSequenceId, setRenamingSequenceId] = useState<number | null>(null);
   const [recuttingSequenceId, setRecuttingSequenceId] = useState<number | null>(null);
 
+  // TODO(Task 7): wire these into the Mark start/end buttons being moved
+  // out of SequenceTimeline and into this component's own JSX.
   function handleMarkStart() {
     if (videoRef.current) setMarkStart(videoRef.current.currentTime);
   }
+  void handleMarkStart;
 
   function handleMarkEnd() {
     if (videoRef.current) setMarkEnd(videoRef.current.currentTime);
   }
+  void handleMarkEnd;
 
   function handleRenameSequence(sequenceId: number) {
     setRecuttingSequenceId(null);
@@ -90,13 +97,9 @@ export function VideoReviewPlayer({
             sequences={sequencesQuery.data ?? []}
             markStart={markStart}
             markEnd={markEnd}
-            onMarkStart={handleMarkStart}
-            onMarkEnd={handleMarkEnd}
             onOpenSequence={onOpenSequence}
             onRenameSequence={handleRenameSequence}
             onRecutSequence={handleRecutSequence}
-            markStartDisabled={!videoReady}
-            markEndDisabled={!videoReady}
           />
           {renamingSequenceId !== null && (() => {
             const target = sequencesQuery.data?.find((s) => s.id === renamingSequenceId);
