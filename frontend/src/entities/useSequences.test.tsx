@@ -127,4 +127,25 @@ describe("useUpdateSequence", () => {
       })
     );
   });
+
+  it("includes crop in the PATCH body when provided", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { id: 1, name: "cut", video_id: 5, procedure_id: 2, start_time: 5, duration: 20, annotation_count: 0, crop_box: { left: 10, right: 10, top: 5, bottom: 5 } },
+      error: undefined,
+    } as never);
+
+    const { result } = renderHook(() => useUpdateSequence(), { wrapper });
+    result.current.mutate({
+      sequenceId: 1, startTime: 5, duration: 20, fps: 2.0,
+      crop: { left: 10, right: 10, top: 5, bottom: 5 },
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.PATCH).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}",
+      expect.objectContaining({
+        body: expect.objectContaining({ crop: { left: 10, right: 10, top: 5, bottom: 5 } }),
+      })
+    );
+  });
 });

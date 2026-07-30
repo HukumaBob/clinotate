@@ -118,6 +118,7 @@ export function useUpdateSequence() {
       startTime?: number;
       duration?: number;
       fps?: number;
+      crop?: { left: number; right: number; top: number; bottom: number };
     }) => {
       const result = await apiClient.PATCH("/media/sequences/{sequence_id}", {
         params: { path: { sequence_id: params.sequenceId } },
@@ -127,6 +128,7 @@ export function useUpdateSequence() {
           start_time: params.startTime,
           duration: params.duration,
           fps: params.fps,
+          crop: params.crop,
         },
       });
       if (result.error) throw result.error;
