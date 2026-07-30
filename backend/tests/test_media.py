@@ -799,3 +799,92 @@ def test_transcode_video_409_when_already_pending():
 
     second = client.post(f"/media/videos/{video_id}/transcode", headers=headers)
     assert second.status_code == 409
+
+
+def test_get_sequence_reports_zero_annotation_count_when_none_exist():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "annotation count source"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+    sequence_response = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "count test sequence", "start_time": 0, "duration": 2},
+        headers=headers,
+    )
+    sequence_id = sequence_response.json()["id"]
+
+    response = client.get(f"/media/sequences/{sequence_id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["annotation_count"] == 0
+
+
+def test_get_sequence_reports_actual_annotation_count():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        upload_response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "annotation count source 2"},
+            headers=headers,
+        )
+    video_id = upload_response.json()["id"]
+    sequence_response = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "count test sequence 2", "start_time": 0, "duration": 2},
+        headers=headers,
+    )
+    sequence_id = sequence_response.json()["id"]
+    frame_id = client.get(
+        f"/media/sequences/{sequence_id}/frames", headers=headers
+    ).json()[0]["id"]
+
+    procedures = client.get("/taxonomy/procedures", headers=headers).json()
+    procedure = next((p for p in procedures if p["name"] == "seq-count-procedure"), None)
+    if procedure is None:
+        procedure = client.post(
+            "/taxonomy/procedures", json={"name": "seq-count-procedure"}, headers=headers
+        ).json()
+    categories = client.get(
+        f"/taxonomy/categories?procedure_id={procedure['id']}", headers=headers
+    ).json()
+    category = next((c for c in categories if c["name"] == "seq-count-category"), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": "seq-count-category", "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next(
+        (e for e in evaluation_types if e["name"] == "seq-count-evaluation-type"), None
+    )
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types",
+            json={"name": "seq-count-evaluation-type"},
+            headers=headers,
+        ).json()
+    label_id = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "seq-count-label",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()["id"]
+
+    client.post(
+        f"/annotation/frames/{frame_id}/annotations",
+        json={"label_id": label_id},
+        headers=headers,
+    )
+
+    response = client.get(f"/media/sequences/{sequence_id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["annotation_count"] == 1

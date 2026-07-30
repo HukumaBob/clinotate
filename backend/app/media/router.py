@@ -171,7 +171,7 @@ def create_sequence(
     payload: SequenceCreate,
     session: Session = Depends(get_session),
     storage: StorageService = Depends(get_storage_service),
-) -> Sequence:
+) -> SequenceRead:
     video = session.get(Video, video_id)
     if video is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
@@ -202,14 +202,14 @@ def create_sequence(
             )
         )
     session.commit()
-    return sequence
+    return _sequence_read(sequence, session)
 
 
 @router.post("/sequences", response_model=SequenceRead, status_code=status.HTTP_201_CREATED)
 def create_standalone_sequence(
     payload: SequenceCreateStandalone,
     session: Session = Depends(get_session),
-) -> Sequence:
+) -> SequenceRead:
     procedure = session.get(Procedure, payload.procedure_id)
     if procedure is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Procedure not found")
@@ -224,7 +224,7 @@ def create_standalone_sequence(
     session.add(sequence)
     session.commit()
     session.refresh(sequence)
-    return sequence
+    return _sequence_read(sequence, session)
 
 
 @router.get("/sequences/suggest-name", response_model=SuggestSequenceNameResponse)
@@ -245,7 +245,7 @@ async def upload_photo_sequence(
     procedure_id: int = Form(...),
     session: Session = Depends(get_session),
     storage: StorageService = Depends(get_storage_service),
-) -> Sequence:
+) -> SequenceRead:
     procedure = session.get(Procedure, procedure_id)
     if procedure is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Procedure not found")
@@ -282,7 +282,7 @@ async def upload_photo_sequence(
             )
         )
     session.commit()
-    return sequence
+    return _sequence_read(sequence, session)
 
 
 @router.post(
@@ -356,12 +356,30 @@ def _frame_read(frame: Frame, storage: StorageService) -> FrameRead:
     )
 
 
+def _sequence_read(sequence: Sequence, session: Session) -> SequenceRead:
+    annotation_count = (
+        session.query(Annotation)
+        .join(Frame, Annotation.frame_id == Frame.id)
+        .filter(Frame.sequence_id == sequence.id)
+        .count()
+    )
+    return SequenceRead(
+        id=sequence.id,
+        name=sequence.name,
+        video_id=sequence.video_id,
+        procedure_id=sequence.procedure_id,
+        start_time=sequence.start_time,
+        duration=sequence.duration,
+        annotation_count=annotation_count,
+    )
+
+
 @router.get("/sequences/{sequence_id}", response_model=SequenceRead)
-def get_sequence(sequence_id: int, session: Session = Depends(get_session)) -> Sequence:
+def get_sequence(sequence_id: int, session: Session = Depends(get_session)) -> SequenceRead:
     sequence = session.get(Sequence, sequence_id)
     if sequence is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
-    return sequence
+    return _sequence_read(sequence, session)
 
 
 @router.get("/sequences/{sequence_id}/frames", response_model=list[FrameRead])
@@ -375,13 +393,15 @@ def list_frames(
 
 
 @router.get("/videos/{video_id}/sequences", response_model=list[SequenceRead])
-def list_sequences_for_video(video_id: int, session: Session = Depends(get_session)) -> list[Sequence]:
-    return session.query(Sequence).filter(Sequence.video_id == video_id).all()
+def list_sequences_for_video(video_id: int, session: Session = Depends(get_session)) -> list[SequenceRead]:
+    sequences = session.query(Sequence).filter(Sequence.video_id == video_id).all()
+    return [_sequence_read(sequence, session) for sequence in sequences]
 
 
 @router.get("/procedures/{procedure_id}/sequences", response_model=list[SequenceRead])
-def list_sequences_for_procedure(procedure_id: int, session: Session = Depends(get_session)) -> list[Sequence]:
-    return session.query(Sequence).filter(Sequence.procedure_id == procedure_id).all()
+def list_sequences_for_procedure(procedure_id: int, session: Session = Depends(get_session)) -> list[SequenceRead]:
+    sequences = session.query(Sequence).filter(Sequence.procedure_id == procedure_id).all()
+    return [_sequence_read(sequence, session) for sequence in sequences]
 
 
 @router.get("/frames/{frame_id}", response_model=FrameRead)

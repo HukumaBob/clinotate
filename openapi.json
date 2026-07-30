@@ -3068,6 +3068,10 @@
           "duration": {
             "type": "integer",
             "title": "Duration"
+          },
+          "annotation_count": {
+            "type": "integer",
+            "title": "Annotation Count"
           }
         },
         "type": "object",
@@ -3077,7 +3081,8 @@
           "video_id",
           "procedure_id",
           "start_time",
-          "duration"
+          "duration",
+          "annotation_count"
         ],
         "title": "SequenceRead"
       },
