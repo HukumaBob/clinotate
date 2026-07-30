@@ -12,6 +12,8 @@ export function SequenceTimeline({
   onMarkStart,
   onMarkEnd,
   onOpenSequence,
+  onRenameSequence,
+  onRecutSequence,
   markStartDisabled,
   markEndDisabled,
 }: {
@@ -22,6 +24,8 @@ export function SequenceTimeline({
   onMarkStart: () => void;
   onMarkEnd: () => void;
   onOpenSequence: (id: number) => void;
+  onRenameSequence: (id: number) => void;
+  onRecutSequence: (id: number) => void;
   markStartDisabled: boolean;
   markEndDisabled: boolean;
 }) {
@@ -48,6 +52,22 @@ export function SequenceTimeline({
               className="ml-1 shrink-0 underline"
             >
               ↗
+            </button>
+            <button
+              type="button"
+              aria-label={`Rename ${sequence.name}`}
+              onClick={() => onRenameSequence(sequence.id)}
+              className="ml-1 shrink-0 underline"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              aria-label={`Re-cut ${sequence.name}`}
+              onClick={() => onRecutSequence(sequence.id)}
+              className="ml-1 shrink-0 underline"
+            >
+              ✂
             </button>
           </div>
         ))}
