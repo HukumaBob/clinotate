@@ -18,6 +18,14 @@ celery_app.conf.task_serializer = "json"
 celery_app.conf.result_serializer = "json"
 celery_app.conf.accept_content = ["json"]
 
+# Own queue, not the default "celery" queue -- the main API process's
+# app.celery_app and ml-worker's app.celery_app both also default to
+# "celery" on this same Redis broker, and ml-worker has no video_transcode
+# task registered, so a message landing there first is silently dropped.
+# This worker must be started with `-Q video_transcode` to consume it.
+celery_app.conf.task_default_queue = "video_transcode"
+celery_app.conf.task_routes = {"video_transcode": {"queue": "video_transcode"}}
+
 # tasks.py's @celery_app.task-decorated transcode_video is registered by
 # importing it here, mirroring ml-worker/app/celery_app.py's own comment
 # on why this import (not just defining tasks.py) is what makes the

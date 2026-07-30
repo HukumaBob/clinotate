@@ -2,6 +2,7 @@ import subprocess
 import tempfile
 from datetime import datetime, timezone
 
+from app.auth.models import User  # noqa: F401 -- registers `users` for Job.created_by_id's FK
 from app.db import SessionLocal
 from app.jobs.models import Job, JobStatus
 from app.media.models import Video

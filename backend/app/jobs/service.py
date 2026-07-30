@@ -115,5 +115,10 @@ def enqueue_video_transcode(session: Session, video_id: int, created_by: User) -
     session.commit()
     session.refresh(job)
 
-    celery_app.send_task("video_transcode", args=[job.id])
+    # Routed to its own queue, not the default "celery" queue that the
+    # ml-worker's Celery app also consumes from (same Redis broker) -- ml-worker
+    # has no `video_transcode` task registered, so a message landing there first
+    # is dropped with a NotRegistered/KeyError and never reaches the transcode
+    # worker. See app/worker/celery_app.py's matching queue declaration.
+    celery_app.send_task("video_transcode", args=[job.id], queue="video_transcode")
     return job
