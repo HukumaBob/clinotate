@@ -8,6 +8,7 @@ from app.media.service import probe_codec_compatibility
 client = TestClient(app)
 FIXTURE_VIDEO = Path(__file__).parent / "fixtures" / "tiny.mp4"
 FIXTURE_VIDEO_H264 = Path(__file__).parent / "fixtures" / "tiny_h264.mp4"
+FIXTURE_VIDEO_VP8_WEBM = Path(__file__).parent / "fixtures" / "tiny_vp8.webm"
 
 
 def test_sequence_update_rejects_partial_temporal_fields():
@@ -688,6 +689,15 @@ def test_probe_codec_compatibility_rejects_mpeg4():
     playable, container, codec = probe_codec_compatibility(data)
     assert playable is False
     assert codec == "mpeg4"
+
+
+def test_probe_codec_compatibility_accepts_vp8_webm():
+    with open(FIXTURE_VIDEO_VP8_WEBM, "rb") as f:
+        data = f.read()
+    playable, container, codec = probe_codec_compatibility(data)
+    assert playable is True
+    assert codec == "vp8"
+    assert container == "matroska,webm"
 
 
 def test_upload_video_computes_browser_playable_true_for_h264():

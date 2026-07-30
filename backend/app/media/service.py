@@ -45,13 +45,19 @@ def probe_video(video_bytes: bytes) -> tuple[float, float]:
     return fps, duration
 
 
-# Browsers reliably play H.264 video in an MP4/MOV-family container.
-# ffprobe reports this container family's format_name as this exact
-# comma-joined string (confirmed empirically against a real ffprobe
-# build, not assumed from documentation) -- verify against your ffprobe
-# version if this check ever starts rejecting normal MP4 uploads.
-_BROWSER_PLAYABLE_CONTAINERS = {"mov,mp4,m4a,3gp,3g2,mj2"}
-_BROWSER_PLAYABLE_CODECS = {"h264"}
+# Browsers reliably play H.264 in an MP4/MOV-family container, and
+# VP8/VP9 in a WebM (Matroska) container. ffprobe reports these container
+# families' format_name as these exact comma-joined strings (confirmed
+# empirically against a real ffprobe build, not assumed from
+# documentation) -- verify against your ffprobe version if this check
+# ever starts rejecting normal MP4/WebM uploads. `playable` below checks
+# container AND codec membership independently, not a matched pairing --
+# an unusual combination like VP9-in-MP4 would also read as playable,
+# which is a deliberate simplification (real-world uploads pair codecs
+# with their conventional container almost universally) rather than a
+# gap worth the added complexity of pairing them explicitly.
+_BROWSER_PLAYABLE_CONTAINERS = {"mov,mp4,m4a,3gp,3g2,mj2", "matroska,webm"}
+_BROWSER_PLAYABLE_CODECS = {"h264", "vp8", "vp9"}
 
 
 def probe_codec_compatibility(video_bytes: bytes) -> tuple[bool, str | None, str | None]:
