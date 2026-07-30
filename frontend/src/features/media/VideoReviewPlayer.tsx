@@ -111,6 +111,7 @@ export function VideoReviewPlayer({
                 sequence={target}
                 markStart={markStart}
                 markEnd={markEnd}
+                videoSrc={video.stream_url}
                 onDone={handleEditDone}
               />
             ) : null;

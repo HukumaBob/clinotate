@@ -18,7 +18,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const sequence = {
   id: 9, name: "To be re-cut", video_id: 5, procedure_id: 1,
-  start_time: 0, duration: 20, annotation_count: 3,
+  start_time: 0, duration: 20, annotation_count: 3, crop_box: null,
 };
 
 describe("RecutSequenceForm", () => {
@@ -26,7 +26,13 @@ describe("RecutSequenceForm", () => {
 
   it("shows the exact annotation count that will be deleted", async () => {
     render(
-      <RecutSequenceForm sequence={sequence} markStart={0} markEnd={15} onDone={vi.fn()} />,
+      <RecutSequenceForm
+        sequence={sequence}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={vi.fn()}
+      />,
       { wrapper }
     );
 
@@ -39,6 +45,7 @@ describe("RecutSequenceForm", () => {
         sequence={{ ...sequence, annotation_count: 0 }}
         markStart={0}
         markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
         onDone={vi.fn()}
       />,
       { wrapper }
@@ -55,7 +62,13 @@ describe("RecutSequenceForm", () => {
 
     const onDone = vi.fn();
     render(
-      <RecutSequenceForm sequence={sequence} markStart={0} markEnd={15} onDone={onDone} />,
+      <RecutSequenceForm
+        sequence={sequence}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={onDone}
+      />,
       { wrapper }
     );
 
@@ -78,7 +91,13 @@ describe("RecutSequenceForm", () => {
 
   it("does not submit if the confirmation is dismissed", async () => {
     render(
-      <RecutSequenceForm sequence={sequence} markStart={0} markEnd={15} onDone={vi.fn()} />,
+      <RecutSequenceForm
+        sequence={sequence}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={vi.fn()}
+      />,
       { wrapper }
     );
 
@@ -99,7 +118,13 @@ describe("RecutSequenceForm", () => {
 
     const onDone = vi.fn();
     render(
-      <RecutSequenceForm sequence={sequence} markStart={0} markEnd={15} onDone={onDone} />,
+      <RecutSequenceForm
+        sequence={sequence}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={onDone}
+      />,
       { wrapper }
     );
 
@@ -118,11 +143,104 @@ describe("RecutSequenceForm", () => {
 
   it("disables the Re-cut button when fps is empty", async () => {
     render(
-      <RecutSequenceForm sequence={sequence} markStart={0} markEnd={15} onDone={vi.fn()} />,
+      <RecutSequenceForm
+        sequence={sequence}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={vi.fn()}
+      />,
       { wrapper }
     );
 
     const recutButton = screen.getByRole("button", { name: /re-cut/i }) as HTMLButtonElement;
     expect(recutButton.disabled).toBe(true);
+  });
+
+  it("pre-fills crop fields from the sequence's existing crop_box", () => {
+    render(
+      <RecutSequenceForm
+        sequence={{ ...sequence, crop_box: { left: 12, right: 8, top: 4, bottom: 6 } }}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.getByLabelText(/left %/i)).toHaveValue(12);
+    expect(screen.getByLabelText(/right %/i)).toHaveValue(8);
+    expect(screen.getByLabelText(/top %/i)).toHaveValue(4);
+    expect(screen.getByLabelText(/bottom %/i)).toHaveValue(6);
+  });
+
+  it("defaults crop fields to zero when the sequence has no crop_box", () => {
+    render(
+      <RecutSequenceForm
+        sequence={{ ...sequence, crop_box: null }}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.getByLabelText(/left %/i)).toHaveValue(0);
+    expect(screen.getByLabelText(/right %/i)).toHaveValue(0);
+    expect(screen.getByLabelText(/top %/i)).toHaveValue(0);
+    expect(screen.getByLabelText(/bottom %/i)).toHaveValue(0);
+  });
+
+  it("submits the edited crop values via PATCH", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { ...sequence, start_time: 0, duration: 15, crop_box: { left: 20, right: 0, top: 0, bottom: 0 } },
+      error: undefined,
+    } as never);
+
+    const onDone = vi.fn();
+    render(
+      <RecutSequenceForm
+        sequence={sequence}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.clear(screen.getByLabelText(/fps/i));
+    await userEvent.type(screen.getByLabelText(/fps/i), "2");
+    await userEvent.clear(screen.getByLabelText(/left %/i));
+    await userEvent.type(screen.getByLabelText(/left %/i), "20");
+    await userEvent.click(screen.getByRole("button", { name: /re-cut/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /confirm/i }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(apiClient.PATCH).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          crop: { left: 20, right: 0, top: 0, bottom: 0 },
+        }),
+      })
+    );
+  });
+
+  it("renders a CropOverlay reflecting the current crop field values", () => {
+    render(
+      <RecutSequenceForm
+        sequence={{ ...sequence, crop_box: { left: 12, right: 8, top: 4, bottom: 6 } }}
+        markStart={0}
+        markEnd={15}
+        videoSrc="https://minio.local/videos/test.mp4"
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.getByTestId("crop-overlay-left")).toHaveStyle({ width: "12%" });
   });
 });
