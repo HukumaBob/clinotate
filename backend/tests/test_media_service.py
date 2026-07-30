@@ -175,6 +175,41 @@ def test_recut_sequence_reuses_the_persisted_crop_box():
     session.close()
 
 
+def test_recut_sequence_persists_a_new_crop_box_when_provided():
+    from app.media.schemas import CropBox
+
+    session = SessionLocal()
+    storage = get_storage_service()
+    old_crop_box = {"left": 20, "right": 20, "top": 10, "bottom": 10}
+    video, sequence = _make_video_and_sequence(session, crop_box=old_crop_box)
+
+    new_crop = CropBox(left=5, right=5, top=5, bottom=5)
+    recut_sequence(session, storage, sequence, video, start_time=0, duration=1, fps=1.0, crop=new_crop)
+
+    session.refresh(sequence)
+    assert sequence.crop_box == {"left": 5.0, "right": 5.0, "top": 5.0, "bottom": 5.0}
+
+    frames = session.query(Frame).filter(Frame.sequence_id == sequence.id).all()
+    no_crop_frames = extract_frames(FIXTURE_VIDEO.read_bytes(), sample_fps=1.0)
+    small_crop_frames = extract_frames(FIXTURE_VIDEO.read_bytes(), sample_fps=1.0, crop=new_crop)
+    assert frames[0].width == small_crop_frames[0][2]
+    assert frames[0].width != no_crop_frames[0][2]
+    session.close()
+
+
+def test_recut_sequence_keeps_old_crop_box_when_none_provided():
+    session = SessionLocal()
+    storage = get_storage_service()
+    old_crop_box = {"left": 20, "right": 20, "top": 10, "bottom": 10}
+    video, sequence = _make_video_and_sequence(session, crop_box=old_crop_box)
+
+    recut_sequence(session, storage, sequence, video, start_time=0, duration=1, fps=1.0)
+
+    session.refresh(sequence)
+    assert sequence.crop_box == old_crop_box
+    session.close()
+
+
 def test_recut_sequence_uses_unique_storage_keys_and_deletes_old_objects():
     session = SessionLocal()
     storage = get_storage_service()

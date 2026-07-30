@@ -977,6 +977,58 @@ def test_patch_sequence_recut_replaces_frames():
     assert len(frames_after) >= len(frames_before)
 
 
+def test_patch_sequence_recut_with_crop_persists_it():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "patch recut crop source"}, headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "recut crop test", "start_time": 0, "duration": 2, "fps": 1.0},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.patch(
+        f"/media/sequences/{sequence_id}",
+        json={
+            "start_time": 0, "duration": 2, "fps": 1.0,
+            "crop": {"left": 10, "right": 10, "top": 5, "bottom": 5},
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["crop_box"] == {"left": 10.0, "right": 10.0, "top": 5.0, "bottom": 5.0}
+
+
+def test_patch_sequence_recut_without_crop_keeps_existing_crop_box():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "patch recut no-crop source"}, headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={
+            "name": "recut no-crop test", "start_time": 0, "duration": 2, "fps": 1.0,
+            "crop": {"left": 15, "right": 15, "top": 8, "bottom": 8},
+        },
+        headers=headers,
+    ).json()["id"]
+
+    response = client.patch(
+        f"/media/sequences/{sequence_id}",
+        json={"start_time": 0, "duration": 2, "fps": 2.0},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["crop_box"] == {"left": 15.0, "right": 15.0, "top": 8.0, "bottom": 8.0}
+
+
 def test_patch_sequence_recut_on_standalone_sequence_returns_404():
     headers = _auth_headers()
     procedure_id = client.post(

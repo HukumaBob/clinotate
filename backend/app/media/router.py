@@ -433,6 +433,7 @@ def update_sequence(
     recut_sequence(
         session, storage, sequence, video,
         start_time=payload.start_time, duration=payload.duration, fps=payload.fps,
+        crop=payload.crop,
     )
     return _sequence_read(sequence, session)
 

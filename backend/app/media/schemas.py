@@ -56,6 +56,7 @@ class SequenceUpdate(BaseModel):
     start_time: int | None = None
     duration: int | None = None
     fps: float | None = Field(default=None, gt=0)
+    crop: CropBox | None = None
 
     @model_validator(mode="after")
     def _check_temporal_fields_are_all_or_nothing(self) -> "SequenceUpdate":
