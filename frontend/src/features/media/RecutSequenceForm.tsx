@@ -2,12 +2,9 @@ import { useState } from "react";
 
 import { useUpdateSequence } from "../../entities/useSequences";
 import type { components } from "../../shared/api/generated/schema";
-import { CropOverlay } from "./CropOverlay";
+import { CropFields, ZERO_CROP, type Crop } from "./CropFields";
 
 type SequenceRead = components["schemas"]["SequenceRead"];
-type Crop = { left: number; right: number; top: number; bottom: number };
-
-const ZERO_CROP: Crop = { left: 0, right: 0, top: 0, bottom: 0 };
 
 export function RecutSequenceForm({
   sequence,
@@ -50,10 +47,7 @@ export function RecutSequenceForm({
 
   return (
     <form onSubmit={handleRecutClick} className="flex flex-col gap-3 rounded border border-gray-800 bg-gray-900 p-4">
-      <div className="relative">
-        <video src={videoSrc} muted className="pointer-events-none max-h-[40vh] w-full rounded bg-black" />
-        <CropOverlay crop={crop} />
-      </div>
+      <CropFields crop={crop} onChange={setCrop} videoSrc={videoSrc} />
       <p className="text-sm text-gray-400">
         New range: {startTime}s – {startTime + duration}s ({duration}s)
       </p>
@@ -67,19 +61,6 @@ export function RecutSequenceForm({
           required
         />
       </label>
-      <div className="flex gap-3">
-        {(["left", "right", "top", "bottom"] as const).map((side) => (
-          <label key={side} className="flex flex-col gap-1 text-sm text-gray-300">
-            {side} %
-            <input
-              type="number"
-              value={crop[side]}
-              onChange={(e) => setCrop((c) => ({ ...c, [side]: Number(e.target.value) }))}
-              className="w-20 rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-            />
-          </label>
-        ))}
-      </div>
       {sequence.annotation_count > 0 && (
         <p className="text-sm text-red-400">
           This will delete {sequence.annotation_count} annotation{sequence.annotation_count === 1 ? "" : "s"} on this
