@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 
 import { useVideoSequences } from "../../entities/useSequences";
 import { useVideo } from "../../entities/useVideo";
+import { RecutSequenceForm } from "./RecutSequenceForm";
+import { RenameSequenceForm } from "./RenameSequenceForm";
 import { SequenceFromMarksForm } from "./SequenceFromMarksForm";
 import { SequenceTimeline } from "./SequenceTimeline";
 import { TranscodePrompt } from "./TranscodePrompt";
@@ -21,6 +23,8 @@ export function VideoReviewPlayer({
   const [markStart, setMarkStart] = useState<number | null>(null);
   const [markEnd, setMarkEnd] = useState<number | null>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [renamingSequenceId, setRenamingSequenceId] = useState<number | null>(null);
+  const [recuttingSequenceId, setRecuttingSequenceId] = useState<number | null>(null);
 
   function handleMarkStart() {
     if (videoRef.current) setMarkStart(videoRef.current.currentTime);
@@ -28,6 +32,29 @@ export function VideoReviewPlayer({
 
   function handleMarkEnd() {
     if (videoRef.current) setMarkEnd(videoRef.current.currentTime);
+  }
+
+  function handleRenameSequence(sequenceId: number) {
+    setRecuttingSequenceId(null);
+    setRenamingSequenceId(sequenceId);
+  }
+
+  function handleRecutSequence(sequenceId: number) {
+    setRenamingSequenceId(null);
+    setRecuttingSequenceId(sequenceId);
+    const target = sequencesQuery.data?.find((s) => s.id === sequenceId);
+    if (target) {
+      setMarkStart(target.start_time);
+      setMarkEnd(target.start_time + target.duration);
+    }
+  }
+
+  function handleEditDone() {
+    setRenamingSequenceId(null);
+    setRecuttingSequenceId(null);
+    setMarkStart(null);
+    setMarkEnd(null);
+    sequencesQuery.refetch();
   }
 
   function handleCreated() {
@@ -66,10 +93,29 @@ export function VideoReviewPlayer({
             onMarkStart={handleMarkStart}
             onMarkEnd={handleMarkEnd}
             onOpenSequence={onOpenSequence}
+            onRenameSequence={handleRenameSequence}
+            onRecutSequence={handleRecutSequence}
             markStartDisabled={!videoReady}
             markEndDisabled={!videoReady}
           />
-          {markStart !== null && markEnd !== null && markEnd !== markStart && (
+          {renamingSequenceId !== null && (() => {
+            const target = sequencesQuery.data?.find((s) => s.id === renamingSequenceId);
+            return target ? (
+              <RenameSequenceForm sequence={target} onDone={handleEditDone} />
+            ) : null;
+          })()}
+          {recuttingSequenceId !== null && markStart !== null && markEnd !== null && (() => {
+            const target = sequencesQuery.data?.find((s) => s.id === recuttingSequenceId);
+            return target ? (
+              <RecutSequenceForm
+                sequence={target}
+                markStart={markStart}
+                markEnd={markEnd}
+                onDone={handleEditDone}
+              />
+            ) : null;
+          })()}
+          {recuttingSequenceId === null && markStart !== null && markEnd !== null && markEnd !== markStart && (
             <SequenceFromMarksForm
               videoId={videoId}
               markStart={markStart}
@@ -78,7 +124,7 @@ export function VideoReviewPlayer({
               onCreated={handleCreated}
             />
           )}
-          {markStart !== null && markEnd !== null && markEnd === markStart && (
+          {recuttingSequenceId === null && markStart !== null && markEnd !== null && markEnd === markStart && (
             <p className="text-sm text-red-400">Start and end can&apos;t be the same point.</p>
           )}
         </>
