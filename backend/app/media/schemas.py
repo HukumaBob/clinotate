@@ -50,6 +50,25 @@ class SequenceCreateStandalone(BaseModel):
     duration: int = 0
 
 
+class SequenceUpdate(BaseModel):
+    name: str | None = None
+    procedure_id: int | None = None
+    start_time: int | None = None
+    duration: int | None = None
+    fps: float | None = None
+
+    @model_validator(mode="after")
+    def _check_temporal_fields_are_all_or_nothing(self) -> "SequenceUpdate":
+        temporal = (self.start_time, self.duration, self.fps)
+        provided = sum(1 for value in temporal if value is not None)
+        if provided not in (0, 3):
+            raise ValueError(
+                "start_time, duration, and fps must all be provided together (a re-cut) "
+                "or all omitted (a rename) — partial temporal updates are not allowed"
+            )
+        return self
+
+
 class SequenceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -58,6 +77,7 @@ class SequenceRead(BaseModel):
     procedure_id: int | None
     start_time: int
     duration: int
+    annotation_count: int
 
 
 class SuggestSequenceNameResponse(BaseModel):

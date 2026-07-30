@@ -10,6 +10,37 @@ FIXTURE_VIDEO = Path(__file__).parent / "fixtures" / "tiny.mp4"
 FIXTURE_VIDEO_H264 = Path(__file__).parent / "fixtures" / "tiny_h264.mp4"
 
 
+def test_sequence_update_rejects_partial_temporal_fields():
+    from pydantic import ValidationError
+
+    from app.media.schemas import SequenceUpdate
+
+    # start_time without duration/fps must fail validation -- a partial
+    # re-cut would leave timing/frame_index inconsistent.
+    try:
+        SequenceUpdate(start_time=5)
+        assert False, "expected a validation error"
+    except ValidationError as exc:
+        assert "start_time" in str(exc) or "duration" in str(exc) or "fps" in str(exc)
+
+
+def test_sequence_update_allows_name_only():
+    from app.media.schemas import SequenceUpdate
+
+    update = SequenceUpdate(name="Renamed")
+    assert update.name == "Renamed"
+    assert update.start_time is None
+
+
+def test_sequence_update_allows_all_three_temporal_fields_together():
+    from app.media.schemas import SequenceUpdate
+
+    update = SequenceUpdate(start_time=0, duration=10, fps=2.0)
+    assert update.start_time == 0
+    assert update.duration == 10
+    assert update.fps == 2.0
+
+
 def _auth_headers() -> dict[str, str]:
     client.post("/auth/register", json={"email": "media1@example.com", "password": "pass1234", "role": "admin"})
     login = client.post("/auth/login", json={"email": "media1@example.com", "password": "pass1234"})
