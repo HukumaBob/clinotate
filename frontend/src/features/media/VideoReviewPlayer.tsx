@@ -83,10 +83,10 @@ export function VideoReviewPlayer({
               ref={videoRef}
               src={video.stream_url}
               controls
-              className="max-h-[40vh] flex-[3] rounded bg-black"
+              className="min-w-0 max-h-[40vh] flex-[3] rounded bg-black"
               onLoadedMetadata={() => setVideoReady(true)}
             />
-            <div className="flex flex-[2] flex-col gap-3 rounded border border-gray-800 bg-gray-950 p-3">
+            <div className="flex min-w-0 flex-[2] flex-col gap-3 rounded border border-gray-800 bg-gray-950 p-3">
               <div className="flex gap-3">
                 <button
                   type="button"
