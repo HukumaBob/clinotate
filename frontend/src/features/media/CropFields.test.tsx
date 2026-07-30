@@ -14,20 +14,13 @@ function ControlledCropFields({ onChange }: { onChange: (crop: Crop) => void }) 
         setCrop(next);
         onChange(next);
       }}
-      videoSrc="https://minio.local/videos/test.mp4"
     />
   );
 }
 
 describe("CropFields", () => {
   it("renders four inputs with values from the crop prop", () => {
-    render(
-      <CropFields
-        crop={{ left: 12, right: 8, top: 4, bottom: 6 }}
-        onChange={vi.fn()}
-        videoSrc="https://minio.local/videos/test.mp4"
-      />
-    );
+    render(<CropFields crop={{ left: 12, right: 8, top: 4, bottom: 6 }} onChange={vi.fn()} />);
 
     expect(screen.getByLabelText(/left %/i)).toHaveValue(12);
     expect(screen.getByLabelText(/right %/i)).toHaveValue(8);
@@ -45,38 +38,8 @@ describe("CropFields", () => {
     expect(onChange).toHaveBeenLastCalledWith({ left: 20, right: 0, top: 0, bottom: 0 });
   });
 
-  it("renders a CropOverlay reflecting the current crop", () => {
-    render(
-      <CropFields
-        crop={{ left: 15, right: 0, top: 0, bottom: 0 }}
-        onChange={vi.fn()}
-        videoSrc="https://minio.local/videos/test.mp4"
-      />
-    );
-
-    expect(screen.getByTestId("crop-overlay-left")).toHaveStyle({ width: "15%" });
-  });
-
-  it("sets preload=metadata on the video element", () => {
-    render(
-      <CropFields
-        crop={{ left: 0, right: 0, top: 0, bottom: 0 }}
-        onChange={vi.fn()}
-        videoSrc="https://minio.local/videos/test.mp4"
-      />
-    );
-
-    expect(document.querySelector("video")).toHaveAttribute("preload", "metadata");
-  });
-
   it("sets min=0 and max=100 on the crop inputs", () => {
-    render(
-      <CropFields
-        crop={{ left: 0, right: 0, top: 0, bottom: 0 }}
-        onChange={vi.fn()}
-        videoSrc="https://minio.local/videos/test.mp4"
-      />
-    );
+    render(<CropFields crop={{ left: 0, right: 0, top: 0, bottom: 0 }} onChange={vi.fn()} />);
 
     expect(screen.getByLabelText(/left %/i)).toHaveAttribute("min", "0");
     expect(screen.getByLabelText(/left %/i)).toHaveAttribute("max", "100");

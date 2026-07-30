@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useUpdateSequence } from "../../entities/useSequences";
 import type { components } from "../../shared/api/generated/schema";
@@ -10,13 +10,13 @@ export function RecutSequenceForm({
   sequence,
   markStart,
   markEnd,
-  videoSrc,
+  onCropChange,
   onDone,
 }: {
   sequence: SequenceRead;
   markStart: number;
   markEnd: number;
-  videoSrc: string;
+  onCropChange: (crop: Crop) => void;
   onDone: () => void;
 }) {
   const [fps, setFps] = useState<number | "">("");
@@ -25,6 +25,10 @@ export function RecutSequenceForm({
   );
   const [confirming, setConfirming] = useState(false);
   const updateSequence = useUpdateSequence();
+
+  useEffect(() => {
+    onCropChange(crop);
+  }, [crop, onCropChange]);
 
   const startTime = Math.round(Math.min(markStart, markEnd));
   const duration = Math.round(Math.abs(markEnd - markStart));
@@ -47,7 +51,7 @@ export function RecutSequenceForm({
 
   return (
     <form onSubmit={handleRecutClick} className="flex flex-col gap-3 rounded border border-gray-800 bg-gray-900 p-4">
-      <CropFields crop={crop} onChange={setCrop} videoSrc={videoSrc} />
+      <CropFields crop={crop} onChange={setCrop} />
       <p className="text-sm text-gray-400">
         New range: {startTime}s – {startTime + duration}s ({duration}s)
       </p>

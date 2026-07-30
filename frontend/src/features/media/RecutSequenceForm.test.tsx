@@ -30,7 +30,7 @@ describe("RecutSequenceForm", () => {
         sequence={sequence}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={vi.fn()}
       />,
       { wrapper }
@@ -45,7 +45,7 @@ describe("RecutSequenceForm", () => {
         sequence={{ ...sequence, annotation_count: 0 }}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={vi.fn()}
       />,
       { wrapper }
@@ -66,7 +66,7 @@ describe("RecutSequenceForm", () => {
         sequence={sequence}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={onDone}
       />,
       { wrapper }
@@ -95,7 +95,7 @@ describe("RecutSequenceForm", () => {
         sequence={sequence}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={vi.fn()}
       />,
       { wrapper }
@@ -122,7 +122,7 @@ describe("RecutSequenceForm", () => {
         sequence={sequence}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={onDone}
       />,
       { wrapper }
@@ -147,7 +147,7 @@ describe("RecutSequenceForm", () => {
         sequence={sequence}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={vi.fn()}
       />,
       { wrapper }
@@ -163,7 +163,7 @@ describe("RecutSequenceForm", () => {
         sequence={{ ...sequence, crop_box: { left: 12, right: 8, top: 4, bottom: 6 } }}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={vi.fn()}
       />,
       { wrapper }
@@ -181,7 +181,7 @@ describe("RecutSequenceForm", () => {
         sequence={{ ...sequence, crop_box: null }}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={vi.fn()}
       />,
       { wrapper }
@@ -205,7 +205,7 @@ describe("RecutSequenceForm", () => {
         sequence={sequence}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         onDone={onDone}
       />,
       { wrapper }
@@ -229,18 +229,28 @@ describe("RecutSequenceForm", () => {
     );
   });
 
-  it("renders a CropOverlay reflecting the current crop field values", () => {
+  it("reports crop changes to the parent via onCropChange", async () => {
+    const onCropChange = vi.fn();
     render(
       <RecutSequenceForm
         sequence={{ ...sequence, crop_box: { left: 12, right: 8, top: 4, bottom: 6 } }}
         markStart={0}
         markEnd={15}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={onCropChange}
         onDone={vi.fn()}
       />,
       { wrapper }
     );
 
-    expect(screen.getByTestId("crop-overlay-left")).toHaveStyle({ width: "12%" });
+    await waitFor(() =>
+      expect(onCropChange).toHaveBeenCalledWith({ left: 12, right: 8, top: 4, bottom: 6 })
+    );
+
+    await userEvent.clear(screen.getByLabelText(/left %/i));
+    await userEvent.type(screen.getByLabelText(/left %/i), "20");
+
+    await waitFor(() =>
+      expect(onCropChange).toHaveBeenLastCalledWith({ left: 20, right: 8, top: 4, bottom: 6 })
+    );
   });
 });

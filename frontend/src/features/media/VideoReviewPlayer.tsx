@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 
 import { useVideoSequences } from "../../entities/useSequences";
 import { useVideo } from "../../entities/useVideo";
+import type { Crop } from "./CropFields";
+import { CropOverlay } from "./CropOverlay";
 import { RecutSequenceForm } from "./RecutSequenceForm";
 import { RenameSequenceForm } from "./RenameSequenceForm";
 import { SequenceFromMarksForm } from "./SequenceFromMarksForm";
@@ -25,6 +27,7 @@ export function VideoReviewPlayer({
   const [videoReady, setVideoReady] = useState(false);
   const [renamingSequenceId, setRenamingSequenceId] = useState<number | null>(null);
   const [recuttingSequenceId, setRecuttingSequenceId] = useState<number | null>(null);
+  const [activeCrop, setActiveCrop] = useState<Crop | null>(null);
 
   function handleMarkStart() {
     if (videoRef.current) setMarkStart(videoRef.current.currentTime);
@@ -37,6 +40,7 @@ export function VideoReviewPlayer({
   function handleRenameSequence(sequenceId: number) {
     setRecuttingSequenceId(null);
     setRenamingSequenceId(sequenceId);
+    setActiveCrop(null);
   }
 
   function handleRecutSequence(sequenceId: number) {
@@ -54,12 +58,14 @@ export function VideoReviewPlayer({
     setRecuttingSequenceId(null);
     setMarkStart(null);
     setMarkEnd(null);
+    setActiveCrop(null);
     sequencesQuery.refetch();
   }
 
   function handleCreated() {
     setMarkStart(null);
     setMarkEnd(null);
+    setActiveCrop(null);
     sequencesQuery.refetch();
   }
 
@@ -79,13 +85,16 @@ export function VideoReviewPlayer({
       ) : video ? (
         <>
           <div className="flex flex-col gap-4 lg:flex-row">
-            <video
-              ref={videoRef}
-              src={video.stream_url}
-              controls
-              className="min-w-0 max-h-[40vh] flex-[3] rounded bg-black"
-              onLoadedMetadata={() => setVideoReady(true)}
-            />
+            <div className="relative min-w-0 flex-[3]">
+              <video
+                ref={videoRef}
+                src={video.stream_url}
+                controls
+                className="max-h-[40vh] w-full rounded bg-black"
+                onLoadedMetadata={() => setVideoReady(true)}
+              />
+              {activeCrop !== null && <CropOverlay crop={activeCrop} />}
+            </div>
             <div className="flex min-w-0 flex-[2] flex-col gap-3 rounded border border-gray-800 bg-gray-950 p-3">
               <div className="flex gap-3">
                 <button
@@ -118,7 +127,7 @@ export function VideoReviewPlayer({
                     sequence={target}
                     markStart={markStart}
                     markEnd={markEnd}
-                    videoSrc={video.stream_url}
+                    onCropChange={setActiveCrop}
                     onDone={handleEditDone}
                   />
                 ) : null;
@@ -129,8 +138,8 @@ export function VideoReviewPlayer({
                   markStart={markStart}
                   markEnd={markEnd}
                   procedureId={video.procedure_id ?? undefined}
-                  videoSrc={video.stream_url}
                   existingSequences={sequencesQuery.data ?? []}
+                  onCropChange={setActiveCrop}
                   onCreated={handleCreated}
                 />
               )}

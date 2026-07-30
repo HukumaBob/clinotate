@@ -18,16 +18,16 @@ export function SequenceFromMarksForm({
   markStart,
   markEnd,
   procedureId: procedureIdProp,
-  videoSrc,
   existingSequences,
+  onCropChange,
   onCreated,
 }: {
   videoId: number;
   markStart: number;
   markEnd: number;
   procedureId?: number;
-  videoSrc: string;
   existingSequences: SequenceRead[];
+  onCropChange: (crop: Crop) => void;
   onCreated: () => void;
 }) {
   const proceduresQuery = useProcedures();
@@ -37,6 +37,10 @@ export function SequenceFromMarksForm({
   const [fps, setFps] = useState(1);
   const [crop, setCrop] = useState<Crop>(() => mostRecentCrop(existingSequences));
   const createSequence = useCreateSequenceFromVideo();
+
+  useEffect(() => {
+    onCropChange(crop);
+  }, [crop, onCropChange]);
 
   useEffect(() => {
     if (
@@ -70,7 +74,7 @@ export function SequenceFromMarksForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded border border-gray-800 bg-gray-900 p-4">
-      <CropFields crop={crop} onChange={setCrop} videoSrc={videoSrc} />
+      <CropFields crop={crop} onChange={setCrop} />
       <p className="text-sm text-gray-400">
         Range: {startTime}s – {startTime + duration}s ({duration}s)
       </p>

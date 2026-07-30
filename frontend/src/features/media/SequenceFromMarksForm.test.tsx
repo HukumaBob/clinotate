@@ -41,7 +41,7 @@ describe("SequenceFromMarksForm", () => {
         markStart={10}
         markEnd={30}
         procedureId={1}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         existingSequences={[]}
         onCreated={onCreated}
       />,
@@ -68,7 +68,7 @@ describe("SequenceFromMarksForm", () => {
         markStart={10}
         markEnd={30}
         procedureId={1}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         existingSequences={[
           { id: 1, name: "First", video_id: 5, procedure_id: 1, start_time: 0, duration: 10, annotation_count: 0, crop_box: { left: 5, right: 5, top: 0, bottom: 0 } },
           { id: 2, name: "Second", video_id: 5, procedure_id: 1, start_time: 10, duration: 10, annotation_count: 0, crop_box: { left: 20, right: 15, top: 10, bottom: 8 } },
@@ -93,7 +93,7 @@ describe("SequenceFromMarksForm", () => {
         markStart={10}
         markEnd={30}
         procedureId={1}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         existingSequences={[]}
         onCreated={vi.fn()}
       />,
@@ -103,8 +103,9 @@ describe("SequenceFromMarksForm", () => {
     expect(await screen.findByLabelText(/left %/i)).toHaveValue(0);
   });
 
-  it("renders a CropOverlay reflecting the inherited crop", async () => {
+  it("reports the inherited crop to the parent via onCropChange", async () => {
     vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+    const onCropChange = vi.fn();
 
     render(
       <SequenceFromMarksForm
@@ -112,7 +113,7 @@ describe("SequenceFromMarksForm", () => {
         markStart={10}
         markEnd={30}
         procedureId={1}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={onCropChange}
         existingSequences={[
           { id: 1, name: "First", video_id: 5, procedure_id: 1, start_time: 0, duration: 10, annotation_count: 0, crop_box: { left: 5, right: 5, top: 0, bottom: 0 } },
         ]}
@@ -121,7 +122,9 @@ describe("SequenceFromMarksForm", () => {
       { wrapper }
     );
 
-    expect(await screen.findByTestId("crop-overlay-left")).toHaveStyle({ width: "5%" });
+    await waitFor(() =>
+      expect(onCropChange).toHaveBeenCalledWith({ left: 5, right: 5, top: 0, bottom: 0 })
+    );
   });
 
   it("shows an error message when creating the sequence fails", async () => {
@@ -145,7 +148,7 @@ describe("SequenceFromMarksForm", () => {
         markStart={10}
         markEnd={30}
         procedureId={1}
-        videoSrc="https://minio.local/videos/test.mp4"
+        onCropChange={vi.fn()}
         existingSequences={[]}
         onCreated={vi.fn()}
       />,
