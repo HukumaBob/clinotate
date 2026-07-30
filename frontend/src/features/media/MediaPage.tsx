@@ -16,7 +16,6 @@ export function MediaPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 p-8 text-gray-100">
-      <h1 className="mb-6 text-xl font-semibold">Media</h1>
       <div className="mb-8">
         {selectedVideoId !== null ? (
           <VideoReviewPlayer
