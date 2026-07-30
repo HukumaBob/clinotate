@@ -1,10 +1,25 @@
 export function CropOverlay({
   crop,
+  mediaRect,
 }: {
   crop: { left: number; right: number; top: number; bottom: number };
+  mediaRect?: { left: number; top: number; width: number; height: number };
 }) {
+  const rootStyle = mediaRect
+    ? {
+        left: `${mediaRect.left}px`,
+        top: `${mediaRect.top}px`,
+        width: `${mediaRect.width}px`,
+        height: `${mediaRect.height}px`,
+      }
+    : undefined;
+
   return (
-    <div className="pointer-events-none absolute inset-0">
+    <div
+      data-testid="crop-overlay-root"
+      className={`pointer-events-none absolute${mediaRect ? "" : " inset-0"}`}
+      style={rootStyle}
+    >
       <div
         data-testid="crop-overlay-left"
         className="absolute inset-y-0 left-0 bg-black/60"

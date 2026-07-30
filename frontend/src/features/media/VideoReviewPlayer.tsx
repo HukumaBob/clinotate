@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useVideoSequences } from "../../entities/useSequences";
 import { useVideo } from "../../entities/useVideo";
+import { computeVideoMediaRect } from "./computeVideoMediaRect";
 import type { Crop } from "./CropFields";
 import { CropOverlay } from "./CropOverlay";
 import { RecutSequenceForm } from "./RecutSequenceForm";
@@ -28,6 +29,20 @@ export function VideoReviewPlayer({
   const [renamingSequenceId, setRenamingSequenceId] = useState<number | null>(null);
   const [recuttingSequenceId, setRecuttingSequenceId] = useState<number | null>(null);
   const [activeCrop, setActiveCrop] = useState<Crop | null>(null);
+  const [mediaRect, setMediaRect] = useState<{ left: number; top: number; width: number; height: number } | null>(
+    null
+  );
+
+  const recomputeMediaRect = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    setMediaRect(computeVideoMediaRect(el.videoWidth, el.videoHeight, el.clientWidth, el.clientHeight));
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("resize", recomputeMediaRect);
+    return () => window.removeEventListener("resize", recomputeMediaRect);
+  }, [recomputeMediaRect]);
 
   function handleMarkStart() {
     if (videoRef.current) setMarkStart(videoRef.current.currentTime);
@@ -91,9 +106,14 @@ export function VideoReviewPlayer({
                 src={video.stream_url}
                 controls
                 className="max-h-[40vh] w-full rounded bg-black"
-                onLoadedMetadata={() => setVideoReady(true)}
+                onLoadedMetadata={() => {
+                  setVideoReady(true);
+                  recomputeMediaRect();
+                }}
               />
-              {activeCrop !== null && <CropOverlay crop={activeCrop} />}
+              {activeCrop !== null && (
+                <CropOverlay crop={activeCrop} mediaRect={mediaRect ?? undefined} />
+              )}
             </div>
             <div className="flex min-w-0 flex-[2] flex-col gap-3 rounded border border-gray-800 bg-gray-950 p-3">
               <div className="flex gap-3">

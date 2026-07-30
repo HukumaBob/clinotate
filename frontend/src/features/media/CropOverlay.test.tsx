@@ -36,4 +36,23 @@ describe("CropOverlay", () => {
     const border = screen.getByTestId("crop-overlay-border");
     expect(border).toHaveStyle({ left: "0%", right: "0%", top: "0%", bottom: "0%" });
   });
+
+  it("positions itself over the given mediaRect instead of the full container when letterboxing is present", () => {
+    render(
+      <CropOverlay
+        crop={{ left: 10, right: 0, top: 0, bottom: 0 }}
+        mediaRect={{ left: 50, top: 0, width: 200, height: 100 }}
+      />
+    );
+
+    const root = screen.getByTestId("crop-overlay-root");
+    expect(root).toHaveStyle({ left: "50px", top: "0px", width: "200px", height: "100px" });
+  });
+
+  it("fills the entire container when no mediaRect is given (no letterboxing)", () => {
+    render(<CropOverlay crop={{ left: 0, right: 0, top: 0, bottom: 0 }} />);
+
+    const root = screen.getByTestId("crop-overlay-root");
+    expect(root).toHaveClass("inset-0");
+  });
 });
