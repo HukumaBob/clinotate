@@ -107,3 +107,35 @@ export function useCreatePhotoSequence() {
     },
   });
 }
+
+export function useUpdateSequence() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      sequenceId: number;
+      name?: string;
+      procedureId?: number;
+      startTime?: number;
+      duration?: number;
+      fps?: number;
+    }) => {
+      const result = await apiClient.PATCH("/media/sequences/{sequence_id}", {
+        params: { path: { sequence_id: params.sequenceId } },
+        body: {
+          name: params.name,
+          procedure_id: params.procedureId,
+          start_time: params.startTime,
+          duration: params.duration,
+          fps: params.fps,
+        },
+      });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sequences"] });
+      queryClient.invalidateQueries({ queryKey: ["video-sequences"] });
+      queryClient.invalidateQueries({ queryKey: ["media-library"] });
+    },
+  });
+}
