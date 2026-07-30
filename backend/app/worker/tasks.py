@@ -1,3 +1,4 @@
+import logging
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -10,6 +11,8 @@ from app.media.service import compute_checksum
 from app.storage import get_storage_service
 from app.worker.celery_app import celery_app
 
+logger = logging.getLogger(__name__)
+
 
 @celery_app.task(name="video_transcode")
 def transcode_video(job_id: int) -> None:
@@ -17,6 +20,13 @@ def transcode_video(job_id: int) -> None:
     storage = get_storage_service()
 
     job = session.get(Job, job_id)
+    if job is None:
+        # A stale message from a broker queue can outlive the database it
+        # referenced (e.g. pointing at a job_id from a different/reset DB
+        # behind the same Redis instance) -- log and drop rather than
+        # crashing the worker on an AttributeError.
+        logger.warning("video_transcode: job_id=%s not found, skipping", job_id)
+        return
     job.status = JobStatus.RUNNING
     job.started_at = datetime.now(timezone.utc)
     session.commit()

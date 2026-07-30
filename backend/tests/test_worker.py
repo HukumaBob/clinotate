@@ -86,3 +86,10 @@ def test_transcode_video_failure_marks_job_failed(db_session):
     db_session.refresh(job)
     assert job.status == JobStatus.FAILED
     assert job.error is not None
+
+
+def test_transcode_video_skips_missing_job_without_raising(db_session):
+    from app.worker.tasks import transcode_video
+
+    with patch("app.worker.tasks.SessionLocal", return_value=db_session):
+        transcode_video(999999999)  # nonexistent job_id -- must not raise
