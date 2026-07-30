@@ -893,7 +893,7 @@ def test_get_sequence_reports_actual_annotation_count():
 def test_patch_sequence_rename_updates_name_and_procedure():
     headers = _auth_headers()
     procedure_id = client.post(
-        "/taxonomy/procedures", json={"name": f"patch-rename-procedure"}, headers=headers
+        "/taxonomy/procedures", json={"name": "patch-rename-procedure"}, headers=headers
     ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
@@ -1016,3 +1016,25 @@ def test_patch_sequence_404_for_missing_sequence():
         "/media/sequences/999999999", json={"name": "x"}, headers=headers
     )
     assert response.status_code == 404
+
+
+def test_patch_sequence_recut_with_zero_fps_returns_422():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "patch recut zero fps source"}, headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "zero fps recut test", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.patch(
+        f"/media/sequences/{sequence_id}",
+        json={"start_time": 0, "duration": 1, "fps": 0},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
