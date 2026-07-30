@@ -122,6 +122,8 @@ export function VideoReviewPlayer({
               markStart={markStart}
               markEnd={markEnd}
               procedureId={video.procedure_id ?? undefined}
+              videoSrc={video.stream_url}
+              existingSequences={sequencesQuery.data ?? []}
               onCreated={handleCreated}
             />
           )}

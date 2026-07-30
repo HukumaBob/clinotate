@@ -36,7 +36,15 @@ describe("SequenceFromMarksForm", () => {
 
     const onCreated = vi.fn();
     render(
-      <SequenceFromMarksForm videoId={5} markStart={10} markEnd={30} procedureId={1} onCreated={onCreated} />,
+      <SequenceFromMarksForm
+        videoId={5}
+        markStart={10}
+        markEnd={30}
+        procedureId={1}
+        videoSrc="https://minio.local/videos/test.mp4"
+        existingSequences={[]}
+        onCreated={onCreated}
+      />,
       { wrapper }
     );
 
@@ -49,5 +57,70 @@ describe("SequenceFromMarksForm", () => {
         body: expect.objectContaining({ start_time: 10, duration: 20 }),
       })
     );
+  });
+
+  it("inherits crop from the most-recently-created existing sequence", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+
+    render(
+      <SequenceFromMarksForm
+        videoId={5}
+        markStart={10}
+        markEnd={30}
+        procedureId={1}
+        videoSrc="https://minio.local/videos/test.mp4"
+        existingSequences={[
+          { id: 1, name: "First", video_id: 5, procedure_id: 1, start_time: 0, duration: 10, annotation_count: 0, crop_box: { left: 5, right: 5, top: 0, bottom: 0 } },
+          { id: 2, name: "Second", video_id: 5, procedure_id: 1, start_time: 10, duration: 10, annotation_count: 0, crop_box: { left: 20, right: 15, top: 10, bottom: 8 } },
+        ]}
+        onCreated={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(await screen.findByLabelText(/left %/i)).toHaveValue(20);
+    expect(screen.getByLabelText(/right %/i)).toHaveValue(15);
+    expect(screen.getByLabelText(/top %/i)).toHaveValue(10);
+    expect(screen.getByLabelText(/bottom %/i)).toHaveValue(8);
+  });
+
+  it("defaults crop to zero when the video has no existing sequences", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+
+    render(
+      <SequenceFromMarksForm
+        videoId={5}
+        markStart={10}
+        markEnd={30}
+        procedureId={1}
+        videoSrc="https://minio.local/videos/test.mp4"
+        existingSequences={[]}
+        onCreated={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(await screen.findByLabelText(/left %/i)).toHaveValue(0);
+  });
+
+  it("renders a CropOverlay reflecting the inherited crop", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+
+    render(
+      <SequenceFromMarksForm
+        videoId={5}
+        markStart={10}
+        markEnd={30}
+        procedureId={1}
+        videoSrc="https://minio.local/videos/test.mp4"
+        existingSequences={[
+          { id: 1, name: "First", video_id: 5, procedure_id: 1, start_time: 0, duration: 10, annotation_count: 0, crop_box: { left: 5, right: 5, top: 0, bottom: 0 } },
+        ]}
+        onCreated={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(await screen.findByTestId("crop-overlay-left")).toHaveStyle({ width: "5%" });
   });
 });
