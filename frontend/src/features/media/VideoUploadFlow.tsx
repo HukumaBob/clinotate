@@ -2,32 +2,20 @@ import { useState } from "react";
 
 import { useUploadVideo } from "../../entities/useVideos";
 import { useProcedures } from "../../entities/useProcedures";
-import { ExtractSequenceForm } from "./ExtractSequenceForm";
 
-export function VideoUploadFlow({ onSequenceCreated }: { onSequenceCreated: (sequenceId: number) => void }) {
+export function VideoUploadFlow({ onVideoUploaded }: { onVideoUploaded: (videoId: number) => void }) {
   const proceduresQuery = useProcedures();
   const [title, setTitle] = useState("");
   const [procedureId, setProcedureId] = useState<number | undefined>(undefined);
   const [file, setFile] = useState<File | null>(null);
   const uploadVideo = useUploadVideo();
-  const [uploadedVideoId, setUploadedVideoId] = useState<number | null>(null);
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!file) return;
     uploadVideo.mutate(
       { file, title, procedureId },
-      { onSuccess: (video) => video && setUploadedVideoId(video.id) }
-    );
-  }
-
-  if (uploadedVideoId !== null) {
-    return (
-      <ExtractSequenceForm
-        videoId={uploadedVideoId}
-        procedureId={procedureId}
-        onCreated={onSequenceCreated}
-      />
+      { onSuccess: (video) => video && onVideoUploaded(video.id) }
     );
   }
 

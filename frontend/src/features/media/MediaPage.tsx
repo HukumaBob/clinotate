@@ -26,7 +26,7 @@ export function MediaPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <VideoUploadFlow onSequenceCreated={goToSequence} />
+            <VideoUploadFlow onVideoUploaded={setSelectedVideoId} />
             <PhotosUploadFlow onCreated={goToSequence} />
           </div>
         )}
