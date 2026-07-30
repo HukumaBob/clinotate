@@ -20,6 +20,7 @@ from app.media.schemas import (
     SequenceCreate,
     SequenceCreateStandalone,
     SequenceRead,
+    SequenceUpdate,
     SuggestSequenceNameResponse,
     VideoRead,
 )
@@ -28,6 +29,7 @@ from app.media.service import (
     extract_frames,
     probe_codec_compatibility,
     probe_video,
+    recut_sequence,
     suggest_sequence_name,
 )
 from app.storage import StorageService, get_storage_service
@@ -379,6 +381,57 @@ def get_sequence(sequence_id: int, session: Session = Depends(get_session)) -> S
     sequence = session.get(Sequence, sequence_id)
     if sequence is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
+    return _sequence_read(sequence, session)
+
+
+@router.patch("/sequences/{sequence_id}", response_model=SequenceRead)
+def update_sequence(
+    sequence_id: int,
+    payload: SequenceUpdate,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> SequenceRead:
+    sequence = session.get(Sequence, sequence_id)
+    if sequence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
+
+    is_recut = payload.start_time is not None
+    if not is_recut:
+        if payload.name is not None:
+            sequence.name = payload.name
+        if payload.procedure_id is not None:
+            sequence.procedure_id = payload.procedure_id
+        session.commit()
+        return _sequence_read(sequence, session)
+
+    if sequence.video_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This sequence has no source video to re-cut from",
+        )
+    video = session.get(Video, sequence.video_id)
+    if video is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    if payload.duration <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="duration must be positive"
+        )
+    if payload.start_time + payload.duration > video.duration_seconds:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="start_time + duration exceeds the video's duration",
+        )
+
+    if payload.name is not None:
+        sequence.name = payload.name
+    if payload.procedure_id is not None:
+        sequence.procedure_id = payload.procedure_id
+
+    recut_sequence(
+        session, storage, sequence, video,
+        start_time=payload.start_time, duration=payload.duration, fps=payload.fps,
+    )
     return _sequence_read(sequence, session)
 
 

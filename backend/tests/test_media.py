@@ -888,3 +888,130 @@ def test_get_sequence_reports_actual_annotation_count():
     response = client.get(f"/media/sequences/{sequence_id}", headers=headers)
     assert response.status_code == 200
     assert response.json()["annotation_count"] == 1
+
+
+def test_patch_sequence_rename_updates_name_and_procedure():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": f"patch-rename-procedure"}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "patch rename source"}, headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "before rename", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.patch(
+        f"/media/sequences/{sequence_id}",
+        json={"name": "after rename", "procedure_id": procedure_id},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "after rename"
+    assert body["procedure_id"] == procedure_id
+    assert body["start_time"] == 0
+    assert body["duration"] == 2
+
+
+def test_patch_sequence_rename_leaves_frames_untouched():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "patch rename frames source"}, headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "rename frames test", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frames_before = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+
+    client.patch(f"/media/sequences/{sequence_id}", json={"name": "renamed"}, headers=headers)
+
+    frames_after = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+    assert [f["id"] for f in frames_before] == [f["id"] for f in frames_after]
+
+
+def test_patch_sequence_recut_replaces_frames():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "patch recut source"}, headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "recut test", "start_time": 0, "duration": 2, "fps": 1.0},
+        headers=headers,
+    ).json()["id"]
+    frames_before = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+
+    response = client.patch(
+        f"/media/sequences/{sequence_id}",
+        json={"start_time": 0, "duration": 2, "fps": 2.0},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    frames_after = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+    assert [f["id"] for f in frames_before] != [f["id"] for f in frames_after]
+    assert len(frames_after) >= len(frames_before)
+
+
+def test_patch_sequence_recut_on_standalone_sequence_returns_404():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "patch-standalone-procedure"}, headers=headers
+    ).json()["id"]
+    sequence_id = client.post(
+        "/media/sequences",
+        json={"name": "standalone", "procedure_id": procedure_id},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.patch(
+        f"/media/sequences/{sequence_id}",
+        json={"start_time": 0, "duration": 1, "fps": 1.0},
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+
+
+def test_patch_sequence_recut_with_out_of_bounds_range_returns_422():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "patch recut oob source"}, headers=headers,
+        ).json()["id"]
+    video_duration = client.get(f"/media/videos/{video_id}", headers=headers).json()["duration_seconds"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "oob recut test", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.patch(
+        f"/media/sequences/{sequence_id}",
+        json={"start_time": 0, "duration": int(video_duration) + 100, "fps": 1.0},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_patch_sequence_404_for_missing_sequence():
+    headers = _auth_headers()
+    response = client.patch(
+        "/media/sequences/999999999", json={"name": "x"}, headers=headers
+    )
+    assert response.status_code == 404
