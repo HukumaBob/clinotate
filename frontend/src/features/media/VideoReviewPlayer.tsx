@@ -22,24 +22,17 @@ export function VideoReviewPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [markStart, setMarkStart] = useState<number | null>(null);
   const [markEnd, setMarkEnd] = useState<number | null>(null);
-  // TODO(Task 7): videoReady gates the Mark start/end buttons once they
-  // move into this component's own JSX.
   const [videoReady, setVideoReady] = useState(false);
-  void videoReady;
   const [renamingSequenceId, setRenamingSequenceId] = useState<number | null>(null);
   const [recuttingSequenceId, setRecuttingSequenceId] = useState<number | null>(null);
 
-  // TODO(Task 7): wire these into the Mark start/end buttons being moved
-  // out of SequenceTimeline and into this component's own JSX.
   function handleMarkStart() {
     if (videoRef.current) setMarkStart(videoRef.current.currentTime);
   }
-  void handleMarkStart;
 
   function handleMarkEnd() {
     if (videoRef.current) setMarkEnd(videoRef.current.currentTime);
   }
-  void handleMarkEnd;
 
   function handleRenameSequence(sequenceId: number) {
     setRecuttingSequenceId(null);
@@ -85,13 +78,67 @@ export function VideoReviewPlayer({
         <TranscodePrompt videoId={videoId} onTranscodeComplete={() => videoQuery.refetch()} />
       ) : video ? (
         <>
-          <video
-            ref={videoRef}
-            src={video.stream_url}
-            controls
-            className="max-h-[40vh] w-full rounded bg-black"
-            onLoadedMetadata={() => setVideoReady(true)}
-          />
+          <div className="flex flex-col gap-4 lg:flex-row">
+            <video
+              ref={videoRef}
+              src={video.stream_url}
+              controls
+              className="max-h-[40vh] flex-[3] rounded bg-black"
+              onLoadedMetadata={() => setVideoReady(true)}
+            />
+            <div className="flex flex-[2] flex-col gap-3 rounded border border-gray-800 bg-gray-950 p-3">
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleMarkStart}
+                  disabled={!videoReady}
+                  className="rounded border border-gray-700 px-3 py-1 text-sm hover:bg-gray-800 disabled:opacity-50"
+                >
+                  Mark start
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMarkEnd}
+                  disabled={!videoReady}
+                  className="rounded border border-gray-700 px-3 py-1 text-sm hover:bg-gray-800 disabled:opacity-50"
+                >
+                  Mark end
+                </button>
+              </div>
+              {renamingSequenceId !== null && (() => {
+                const target = sequencesQuery.data?.find((s) => s.id === renamingSequenceId);
+                return target ? (
+                  <RenameSequenceForm sequence={target} onDone={handleEditDone} />
+                ) : null;
+              })()}
+              {recuttingSequenceId !== null && markStart !== null && markEnd !== null && (() => {
+                const target = sequencesQuery.data?.find((s) => s.id === recuttingSequenceId);
+                return target ? (
+                  <RecutSequenceForm
+                    sequence={target}
+                    markStart={markStart}
+                    markEnd={markEnd}
+                    videoSrc={video.stream_url}
+                    onDone={handleEditDone}
+                  />
+                ) : null;
+              })()}
+              {recuttingSequenceId === null && renamingSequenceId === null && markStart !== null && markEnd !== null && markEnd !== markStart && (
+                <SequenceFromMarksForm
+                  videoId={videoId}
+                  markStart={markStart}
+                  markEnd={markEnd}
+                  procedureId={video.procedure_id ?? undefined}
+                  videoSrc={video.stream_url}
+                  existingSequences={sequencesQuery.data ?? []}
+                  onCreated={handleCreated}
+                />
+              )}
+              {recuttingSequenceId === null && renamingSequenceId === null && markStart !== null && markEnd !== null && markEnd === markStart && (
+                <p className="text-sm text-red-400">Start and end can&apos;t be the same point.</p>
+              )}
+            </div>
+          </div>
           <SequenceTimeline
             durationSeconds={video.duration_seconds}
             sequences={sequencesQuery.data ?? []}
@@ -101,38 +148,6 @@ export function VideoReviewPlayer({
             onRenameSequence={handleRenameSequence}
             onRecutSequence={handleRecutSequence}
           />
-          {renamingSequenceId !== null && (() => {
-            const target = sequencesQuery.data?.find((s) => s.id === renamingSequenceId);
-            return target ? (
-              <RenameSequenceForm sequence={target} onDone={handleEditDone} />
-            ) : null;
-          })()}
-          {recuttingSequenceId !== null && markStart !== null && markEnd !== null && (() => {
-            const target = sequencesQuery.data?.find((s) => s.id === recuttingSequenceId);
-            return target ? (
-              <RecutSequenceForm
-                sequence={target}
-                markStart={markStart}
-                markEnd={markEnd}
-                videoSrc={video.stream_url}
-                onDone={handleEditDone}
-              />
-            ) : null;
-          })()}
-          {recuttingSequenceId === null && markStart !== null && markEnd !== null && markEnd !== markStart && (
-            <SequenceFromMarksForm
-              videoId={videoId}
-              markStart={markStart}
-              markEnd={markEnd}
-              procedureId={video.procedure_id ?? undefined}
-              videoSrc={video.stream_url}
-              existingSequences={sequencesQuery.data ?? []}
-              onCreated={handleCreated}
-            />
-          )}
-          {recuttingSequenceId === null && markStart !== null && markEnd !== null && markEnd === markStart && (
-            <p className="text-sm text-red-400">Start and end can&apos;t be the same point.</p>
-          )}
         </>
       ) : null}
     </div>
