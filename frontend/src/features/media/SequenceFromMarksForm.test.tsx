@@ -123,4 +123,37 @@ describe("SequenceFromMarksForm", () => {
 
     expect(await screen.findByTestId("crop-overlay-left")).toHaveStyle({ width: "5%" });
   });
+
+  it("shows an error message when creating the sequence fails", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/taxonomy/procedures") {
+        return { data: [{ id: 1, name: "EGD" }], error: undefined } as never;
+      }
+      if (path === "/media/sequences/suggest-name") {
+        return { data: { name: "EGD 2026-07-29 #1" }, error: undefined } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: undefined,
+      error: { detail: "start_time + duration exceeds the video's duration" },
+    } as never);
+
+    render(
+      <SequenceFromMarksForm
+        videoId={5}
+        markStart={10}
+        markEnd={30}
+        procedureId={1}
+        videoSrc="https://minio.local/videos/test.mp4"
+        existingSequences={[]}
+        onCreated={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /create sequence/i }));
+
+    expect(await screen.findByText(/failed to create sequence/i)).toBeInTheDocument();
+  });
 });
