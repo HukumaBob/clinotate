@@ -55,7 +55,7 @@ export function VideoReviewPlayer({
             ref={videoRef}
             src={video.stream_url}
             controls
-            className="w-full rounded bg-black"
+            className="max-h-[40vh] w-full rounded bg-black"
             onLoadedMetadata={() => setVideoReady(true)}
           />
           <SequenceTimeline
