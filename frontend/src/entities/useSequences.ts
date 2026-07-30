@@ -73,6 +73,7 @@ export function useCreateSequenceFromVideo() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sequences"] });
+      queryClient.invalidateQueries({ queryKey: ["video-sequences"] });
       queryClient.invalidateQueries({ queryKey: ["media-library"] });
     },
   });

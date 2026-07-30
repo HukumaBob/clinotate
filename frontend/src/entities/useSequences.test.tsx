@@ -44,6 +44,29 @@ describe("useCreateSequenceFromVideo", () => {
       },
     });
   });
+
+  it("invalidates the video-sequences query on success", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({ data: { id: 9 }, error: undefined } as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    function localWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+
+    const { result } = renderHook(() => useCreateSequenceFromVideo(), { wrapper: localWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        videoId: 4,
+        name: "My seq",
+        startTime: 0,
+        duration: 10,
+        fps: 2,
+      });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["video-sequences"] });
+  });
 });
 
 describe("useCreatePhotoSequence", () => {
