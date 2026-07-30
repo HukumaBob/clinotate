@@ -66,7 +66,7 @@ decided during execution — it's the map between "what the plan said" and
 ## Running the stack
 
 ```bash
-docker compose up -d                                    # postgres, redis, minio
+docker compose up -d                                    # postgres, redis, minio, ml-worker (GPU, SAM2/SAM3)
 cd backend && uv run uvicorn app.main:app --reload       # :8000
 cd frontend && npm install --legacy-peer-deps && npm run dev  # :5173
 cd backend && uv run celery -A app.worker.celery_app worker --loglevel=info -Q video_transcode  # transcode worker
@@ -74,10 +74,29 @@ cd backend && uv run celery -A app.worker.celery_app worker --loglevel=info -Q v
 
 The transcode worker is a separate CPU-only process needed for video transcode jobs to actually run; without it, `POST /media/videos/{id}/transcode` creates a `Job` row but it stays `pending` forever.
 
+Three independent Celery apps exist in this stack: the main API process's
+`app.celery_app`, the containerized `ml-worker`'s own `app.celery_app`
+(SAM2/SAM3 jobs), and the transcode worker's `app.worker.celery_app`. All
+three share the same Redis broker, so the `-Q video_transcode` flag above
+is load-bearing, not optional — the transcode task is routed to its own
+queue specifically because `ml-worker` also defaults to the plain `celery`
+queue on that broker and has no `video_transcode` task registered; a
+message that lands there first is silently dropped. Never start the
+transcode worker without `-Q video_transcode`.
+
 `npm run build`/`dev`/`test`/`test:e2e` all auto-run `generate-api` first
 (via `prebuild`/`predev`/`pretest`/`pretest:e2e` hooks) — the generated
 schema is gitignored by design, regenerated from the committed `openapi.json`
 at repo root. Don't hand-edit anything under `frontend/src/shared/api/generated/`.
+
+After any backend schema/route change, regenerate the committed `openapi.json`
+before the frontend's `generate-api` hook will pick it up:
+```bash
+cd backend && PYTHONPATH=. uv run python scripts/export_openapi.py
+```
+(`PYTHONPATH=.` is required — the script imports `app.main` and fails
+without it when run standalone.) Verify with `git diff --stat openapi.json`
+that it actually changed.
 
 `npm install` currently needs `--legacy-peer-deps` (a stale peer-range in
 `openapi-typescript` vs. the installed TypeScript version — not a real
