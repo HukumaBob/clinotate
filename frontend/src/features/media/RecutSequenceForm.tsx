@@ -75,13 +75,22 @@ export function RecutSequenceForm({
         <p className="text-sm text-red-400">Re-cut failed. Please try again.</p>
       )}
       {!confirming ? (
-        <button
-          type="submit"
-          disabled={fps === ""}
-          className="rounded bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-        >
-          Re-cut
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={fps === ""}
+            className="rounded bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+          >
+            Re-cut
+          </button>
+          <button
+            type="button"
+            onClick={onDone}
+            className="rounded border border-gray-700 px-3 py-2 text-sm hover:bg-gray-800"
+          >
+            Close
+          </button>
+        </div>
       ) : (
         <div className="flex gap-2">
           <button

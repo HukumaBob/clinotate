@@ -5,11 +5,27 @@ import { useVideo } from "../../entities/useVideo";
 import { computeVideoMediaRect } from "./computeVideoMediaRect";
 import type { Crop } from "./CropFields";
 import { CropOverlay } from "./CropOverlay";
+import { formatTimestamp } from "./formatTimestamp";
 import { RecutSequenceForm } from "./RecutSequenceForm";
 import { RenameSequenceForm } from "./RenameSequenceForm";
 import { SequenceFromMarksForm } from "./SequenceFromMarksForm";
 import { SequenceTimeline } from "./SequenceTimeline";
 import { TranscodePrompt } from "./TranscodePrompt";
+
+function marksStorageKey(videoId: number): string {
+  return `video-marks-${videoId}`;
+}
+
+function loadStoredMarks(videoId: number): { markStart: number | null; markEnd: number | null } {
+  try {
+    const raw = localStorage.getItem(marksStorageKey(videoId));
+    if (!raw) return { markStart: null, markEnd: null };
+    const parsed = JSON.parse(raw) as { markStart: number | null; markEnd: number | null };
+    return { markStart: parsed.markStart ?? null, markEnd: parsed.markEnd ?? null };
+  } catch {
+    return { markStart: null, markEnd: null };
+  }
+}
 
 export function VideoReviewPlayer({
   videoId,
@@ -23,8 +39,8 @@ export function VideoReviewPlayer({
   const videoQuery = useVideo(videoId);
   const sequencesQuery = useVideoSequences(videoId);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [markStart, setMarkStart] = useState<number | null>(null);
-  const [markEnd, setMarkEnd] = useState<number | null>(null);
+  const [markStart, setMarkStart] = useState<number | null>(() => loadStoredMarks(videoId).markStart);
+  const [markEnd, setMarkEnd] = useState<number | null>(() => loadStoredMarks(videoId).markEnd);
   const [videoReady, setVideoReady] = useState(false);
   const [renamingSequenceId, setRenamingSequenceId] = useState<number | null>(null);
   const [recuttingSequenceId, setRecuttingSequenceId] = useState<number | null>(null);
@@ -43,6 +59,14 @@ export function VideoReviewPlayer({
     window.addEventListener("resize", recomputeMediaRect);
     return () => window.removeEventListener("resize", recomputeMediaRect);
   }, [recomputeMediaRect]);
+
+  useEffect(() => {
+    if (markStart === null && markEnd === null) {
+      localStorage.removeItem(marksStorageKey(videoId));
+      return;
+    }
+    localStorage.setItem(marksStorageKey(videoId), JSON.stringify({ markStart, markEnd }));
+  }, [videoId, markStart, markEnd]);
 
   function handleMarkStart() {
     if (videoRef.current) setMarkStart(videoRef.current.currentTime);
@@ -117,22 +141,32 @@ export function VideoReviewPlayer({
             </div>
             <div className="flex min-w-0 flex-[2] flex-col gap-3 rounded border border-gray-800 bg-gray-950 p-3">
               <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={handleMarkStart}
-                  disabled={!videoReady}
-                  className="rounded border border-gray-700 px-3 py-1 text-sm hover:bg-gray-800 disabled:opacity-50"
-                >
-                  Mark start
-                </button>
-                <button
-                  type="button"
-                  onClick={handleMarkEnd}
-                  disabled={!videoReady}
-                  className="rounded border border-gray-700 px-3 py-1 text-sm hover:bg-gray-800 disabled:opacity-50"
-                >
-                  Mark end
-                </button>
+                <div className="flex flex-col items-start gap-1">
+                  <button
+                    type="button"
+                    onClick={handleMarkStart}
+                    disabled={!videoReady}
+                    className="rounded border border-gray-700 px-3 py-1 text-sm hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    Mark start
+                  </button>
+                  <span className="text-xs text-gray-400">
+                    {markStart !== null ? formatTimestamp(markStart) : "—"}
+                  </span>
+                </div>
+                <div className="flex flex-col items-start gap-1">
+                  <button
+                    type="button"
+                    onClick={handleMarkEnd}
+                    disabled={!videoReady}
+                    className="rounded border border-gray-700 px-3 py-1 text-sm hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    Mark end
+                  </button>
+                  <span className="text-xs text-gray-400">
+                    {markEnd !== null ? formatTimestamp(markEnd) : "—"}
+                  </span>
+                </div>
               </div>
               {renamingSequenceId !== null && (() => {
                 const target = sequencesQuery.data?.find((s) => s.id === renamingSequenceId);

@@ -17,7 +17,10 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("VideoReviewPlayer", () => {
-  afterEach(() => vi.clearAllMocks());
+  afterEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
 
   it("renders the native player when the video is browser-playable", async () => {
     vi.mocked(apiClient.GET).mockImplementation(async (path) => {
@@ -221,5 +224,81 @@ describe("VideoReviewPlayer", () => {
     await userEvent.click(screen.getByRole("button", { name: /mark end/i }));
 
     expect(await screen.findByLabelText(/left %/i)).toHaveValue(15);
+  });
+
+  it("shows the marked timestamp next to Mark start/Mark end after clicking, and persists marks across a remount for the same video", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/media/videos/{video_id}") {
+        return {
+          data: {
+            id: 5, filename: "a.mp4", title: "A", procedure_id: 1, fps: 1,
+            duration_seconds: 60, size_bytes: 100,
+            browser_playable: true, container: "mov,mp4,m4a,3gp,3g2,mj2", video_codec: "h264",
+            stream_url: "https://minio.local/videos/a.mp4?signed=1",
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/media/videos/{video_id}/sequences") {
+        return { data: [], error: undefined } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    const { unmount } = render(
+      <VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />,
+      { wrapper }
+    );
+
+    const video = await waitFor(() => {
+      const el = document.querySelector("video");
+      expect(el).toBeInTheDocument();
+      return el as HTMLVideoElement;
+    });
+
+    let currentTime = 135;
+    Object.defineProperty(video, "currentTime", { get: () => currentTime, configurable: true });
+    fireEvent.loadedMetadata(video);
+
+    await userEvent.click(screen.getByRole("button", { name: /mark start/i }));
+    expect(await screen.findByText("02:15")).toBeInTheDocument();
+
+    currentTime = 200;
+    await userEvent.click(screen.getByRole("button", { name: /mark end/i }));
+    expect(await screen.findByText("03:20")).toBeInTheDocument();
+
+    unmount();
+
+    render(<VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
+
+    expect(await screen.findByText("02:15")).toBeInTheDocument();
+    expect(await screen.findByText("03:20")).toBeInTheDocument();
+  });
+
+  it("does not restore marks from a different video's storage", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/media/videos/{video_id}") {
+        return {
+          data: {
+            id: 7, filename: "c.mp4", title: "C", procedure_id: 1, fps: 1,
+            duration_seconds: 60, size_bytes: 100,
+            browser_playable: true, container: "mov,mp4,m4a,3gp,3g2,mj2", video_codec: "h264",
+            stream_url: "https://minio.local/videos/c.mp4?signed=1",
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/media/videos/{video_id}/sequences") {
+        return { data: [], error: undefined } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    localStorage.setItem("video-marks-5", JSON.stringify({ markStart: 15, markEnd: 30 }));
+
+    render(<VideoReviewPlayer videoId={7} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
+
+    await waitFor(() => expect(document.querySelector("video")).toBeInTheDocument());
+    expect(screen.queryByText("00:15")).not.toBeInTheDocument();
   });
 });

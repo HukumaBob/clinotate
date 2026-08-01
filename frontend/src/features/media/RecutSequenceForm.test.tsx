@@ -141,6 +141,25 @@ describe("RecutSequenceForm", () => {
     expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
   });
 
+  it("lets the user leave recut mode without performing a re-cut via a top-level Close button", async () => {
+    const onDone = vi.fn();
+    render(
+      <RecutSequenceForm
+        sequence={sequence}
+        markStart={0}
+        markEnd={15}
+        onCropChange={vi.fn()}
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^close$/i }));
+
+    expect(onDone).toHaveBeenCalled();
+    expect(apiClient.PATCH).not.toHaveBeenCalled();
+  });
+
   it("disables the Re-cut button when fps is empty", async () => {
     render(
       <RecutSequenceForm
