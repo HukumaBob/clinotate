@@ -210,6 +210,11 @@ export function VideoReviewPlayer({
             onOpenSequence={onOpenSequence}
             onRenameSequence={handleRenameSequence}
             onRecutSequence={handleRecutSequence}
+            onMarkStartChange={setMarkStart}
+            onMarkEndChange={setMarkEnd}
+            onScrub={(seconds) => {
+              if (videoRef.current) videoRef.current.currentTime = seconds;
+            }}
           />
         </>
       ) : null}
