@@ -10,9 +10,14 @@ being made ad hoc per component.
 
 Scope: pure documentation. No `tailwind.config.ts` changes, no new
 components — this is a reference for writing Tailwind classes consistently,
-not a new abstraction layer. `Media` and `Sequences`/frame editor (already
-built) are not being retrofitted as part of this doc; new work (`Tags`,
-`Dataset`, `Train`, `Results`) follows it from the start.
+not a new abstraction layer. `Media` is the first screen to be brought in
+line with it (see "Retrofit scope" below) since it's the newest, most
+representative real screen — proving the system reads correctly against
+real code before new screens (`Tags`, `Dataset`, `Train`, `Results`) are
+built against it from the start. `Sequences`/frame editor is not part of
+this retrofit — its layout is pixel-approved in the UI/UX spec and it's a
+denser, more custom surface (canvas, tool panel); revisit separately if
+needed.
 
 ## Constraints
 
@@ -143,14 +148,39 @@ Four roles — a fixed hierarchy, replacing today's undifferentiated
 - **Status badge/pill:** `rounded-full px-2 py-0.5 text-xs`, colored by
   semantic role (success/warning/danger/neutral) from the table above.
 
+## Retrofit scope: Media
+
+`Media` (`MediaPage.tsx`, `MediaLibraryTable.tsx`, `VideoUploadFlow.tsx`,
+`PhotosUploadFlow.tsx`, `ExtractSequenceForm.tsx`, `RecutSequenceForm.tsx`,
+`RenameSequenceForm.tsx`, `CropFields.tsx`, `SequenceTimeline.tsx`) gets
+brought in line with the tokens above as a styling-only pass:
+
+- Swap ad hoc `text-xs`/`text-sm`/`text-lg` usage for the four typography
+  roles (`page-title` once per screen, `section-heading` for form/panel
+  headers, `body` for table data and labels, `caption` for secondary
+  metadata).
+- Normalize the mixed `red-500`/`red-600`/`red-700` and `py-2`/`py-1.5`/
+  `py-1`/`py-0.5` usage found across these files to the fixed shade
+  pairings and density tokens above.
+- Reshape `MediaLibraryTable`'s row/action markup to the canonical table
+  pattern (including its existing two-step inline delete-confirm, which
+  is already correct and should not change).
+- Reshape button usage across the upload/extract/recut/rename forms into
+  the three fixed variants (primary/secondary/danger) — no new variants.
+
+No behavior, layout structure, or component boundaries change — this is a
+class-level pass, not a rewrite. Verify with the same real-browser check
+this codebase already requires for frontend work (see `CLAUDE.md`'s
+testing philosophy): log in, walk through upload → extract → library table,
+confirm nothing visually broke and delete-confirm still works.
+
 ## What this document does not cover
 
 - No `tailwind.config.ts` changes — these are documented class
   combinations to copy, not named config tokens. A future pass could
   promote stable patterns into config or shared components once several
   screens have used them; not decided here.
-- No retrofit of `Media` or `Sequences`/frame editor — they predate this
-  doc and are not being changed as part of it.
+- No retrofit of `Sequences`/frame editor — see above.
 - No light theme variant — out of scope per `CLAUDE.md`.
 - No new shared React component library (`Button`, `Table`, etc.) — this
   is a class-level styling reference; componentizing these patterns is a
