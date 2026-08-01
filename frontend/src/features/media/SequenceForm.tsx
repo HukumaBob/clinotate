@@ -84,13 +84,32 @@ export function SequenceForm({
     );
   }
 
-  // Edit-mode submit/confirm logic is implemented in Task 2.
+  const rangeChanged = isEdit && (startTime !== sequence!.start_time || duration !== sequence!.duration);
+  const cropChanged =
+    isEdit && JSON.stringify(crop) !== JSON.stringify((sequence!.crop_box as Crop | null) ?? ZERO_CROP);
+  const needsRecut = rangeChanged || cropChanged;
+
   function handleEditSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (needsRecut) {
+      setConfirming(true);
+      return;
+    }
+    updateSequence.mutate(
+      { sequenceId: sequence!.id, name, procedureId },
+      { onSuccess: () => onDone() }
+    );
   }
 
   function handleConfirm() {
-    // Implemented in Task 2.
+    if (fps === "") return;
+    updateSequence.mutate(
+      { sequenceId: sequence!.id, name, procedureId, startTime, duration, fps, crop },
+      {
+        onSuccess: () => onDone(),
+        onError: () => setConfirming(false),
+      }
+    );
   }
 
   if (isEdit) {
@@ -141,22 +160,42 @@ export function SequenceForm({
           </p>
         )}
         {isError && <p className="text-sm text-red-400">Save failed. Please try again.</p>}
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={isPending}
-            className="rounded bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
-            className="rounded border border-gray-700 px-3 py-2 text-sm hover:bg-gray-800"
-          >
-            Close
-          </button>
-        </div>
+        {!confirming ? (
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={isPending || (needsRecut && fps === "")}
+              className="rounded bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={onDone}
+              className="rounded border border-gray-700 px-3 py-2 text-sm hover:bg-gray-800"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={isPending}
+              className="rounded bg-red-600 px-3 py-2 font-medium text-white hover:bg-red-500 disabled:opacity-50"
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="rounded border border-gray-700 px-3 py-2 text-sm hover:bg-gray-800"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </form>
     );
   }

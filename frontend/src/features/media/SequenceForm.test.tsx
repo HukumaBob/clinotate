@@ -181,3 +181,328 @@ describe("SequenceForm create mode (no sequence prop)", () => {
     });
   });
 });
+
+describe("SequenceForm edit mode (sequence prop present)", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  const sequence = {
+    id: 9, name: "To be edited", video_id: 5, procedure_id: 1,
+    start_time: 0, duration: 20, annotation_count: 3, crop_box: null,
+  };
+
+  it("shows the exact annotation count that will be deleted, only once confirming", async () => {
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={15}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.queryByText(/3 annotation/i)).not.toBeInTheDocument();
+
+    const fpsInput = screen.getByLabelText(/fps/i);
+    await userEvent.type(fpsInput, "2");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText(/3 annotation/i)).toBeInTheDocument();
+  });
+
+  it("saves name/procedure changes directly, with no confirmation step, when range and crop are unchanged", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { ...sequence, name: "Renamed" },
+      error: undefined,
+    } as never);
+
+    const onDone = vi.fn();
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    const nameInput = screen.getByLabelText(/^name$/i);
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Renamed");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(apiClient.PATCH).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}",
+      expect.objectContaining({
+        params: { path: { sequence_id: 9 } },
+        body: expect.objectContaining({ name: "Renamed" }),
+      })
+    );
+    // No confirm dialog ever appeared.
+    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
+  });
+
+  it("requires confirmation and submits full re-cut payload when the range changed", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { ...sequence, start_time: 0, duration: 15 },
+      error: undefined,
+    } as never);
+
+    const onDone = vi.fn();
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={15}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    const fpsInput = screen.getByLabelText(/fps/i);
+    await userEvent.type(fpsInput, "2");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /confirm/i }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(apiClient.PATCH).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}",
+      expect.objectContaining({
+        params: { path: { sequence_id: 9 } },
+        body: expect.objectContaining({ start_time: 0, duration: 15, fps: 2 }),
+      })
+    );
+  });
+
+  it("does not submit if the range-change confirmation is cancelled, and returns to the editable state", async () => {
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={15}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    const fpsInput = screen.getByLabelText(/fps/i);
+    await userEvent.type(fpsInput, "2");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /cancel/i }));
+
+    expect(apiClient.PATCH).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: /^save$/i })).toBeInTheDocument();
+  });
+
+  it("shows an error and returns to the editable state when the confirmed save fails", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: undefined,
+      error: { detail: "start_time + duration exceeds the video's duration" },
+    } as never);
+
+    const onDone = vi.fn();
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={15}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    const fpsInput = screen.getByLabelText(/fps/i);
+    await userEvent.type(fpsInput, "2");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /confirm/i }));
+
+    expect(await screen.findByText(/save failed/i)).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: /^save$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
+  });
+
+  it("lets the user leave edit mode without saving via a top-level Close button", async () => {
+    const onDone = vi.fn();
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={15}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^close$/i }));
+
+    expect(onDone).toHaveBeenCalled();
+    expect(apiClient.PATCH).not.toHaveBeenCalled();
+  });
+
+  it("disables the Save button when fps is empty and the range or crop changed", async () => {
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={15}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    const saveButton = screen.getByRole("button", { name: /^save$/i }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
+  });
+
+  it("does not require fps when only name/procedure changed (range and crop untouched)", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { ...sequence, name: "Renamed" },
+      error: undefined,
+    } as never);
+
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    const saveButton = screen.getByRole("button", { name: /^save$/i }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(false);
+  });
+
+  it("pre-fills crop fields from the sequence's existing crop_box", () => {
+    render(
+      <SequenceForm
+        sequence={{ ...sequence, crop_box: { left: 12, right: 8, top: 4, bottom: 6 } }}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.getByLabelText(/left %/i)).toHaveValue(12);
+    expect(screen.getByLabelText(/right %/i)).toHaveValue(8);
+    expect(screen.getByLabelText(/top %/i)).toHaveValue(4);
+    expect(screen.getByLabelText(/bottom %/i)).toHaveValue(6);
+  });
+
+  it("defaults crop fields to zero when the sequence has no crop_box", () => {
+    render(
+      <SequenceForm
+        sequence={{ ...sequence, crop_box: null }}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.getByLabelText(/left %/i)).toHaveValue(0);
+    expect(screen.getByLabelText(/right %/i)).toHaveValue(0);
+    expect(screen.getByLabelText(/top %/i)).toHaveValue(0);
+    expect(screen.getByLabelText(/bottom %/i)).toHaveValue(0);
+  });
+
+  it("requires confirmation when only the crop changed, even if the range did not", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { ...sequence, crop_box: { left: 20, right: 0, top: 0, bottom: 0 } },
+      error: undefined,
+    } as never);
+
+    const onDone = vi.fn();
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.clear(screen.getByLabelText(/fps/i));
+    await userEvent.type(screen.getByLabelText(/fps/i), "2");
+    await userEvent.clear(screen.getByLabelText(/left %/i));
+    await userEvent.type(screen.getByLabelText(/left %/i), "20");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /confirm/i }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(apiClient.PATCH).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          crop: { left: 20, right: 0, top: 0, bottom: 0 },
+        }),
+      })
+    );
+  });
+
+  it("reports crop changes to the parent via onCropChange", async () => {
+    const onCropChange = vi.fn();
+    render(
+      <SequenceForm
+        sequence={{ ...sequence, crop_box: { left: 12, right: 8, top: 4, bottom: 6 } }}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={onCropChange}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    await waitFor(() =>
+      expect(onCropChange).toHaveBeenCalledWith({ left: 12, right: 8, top: 4, bottom: 6 })
+    );
+
+    await userEvent.clear(screen.getByLabelText(/left %/i));
+    await userEvent.type(screen.getByLabelText(/left %/i), "20");
+
+    await waitFor(() =>
+      expect(onCropChange).toHaveBeenLastCalledWith({ left: 20, right: 8, top: 4, bottom: 6 })
+    );
+  });
+});
