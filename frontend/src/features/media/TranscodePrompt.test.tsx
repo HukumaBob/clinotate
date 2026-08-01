@@ -64,6 +64,25 @@ describe("TranscodePrompt", () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
+  it("shows an indeterminate message instead of a stuck 0% when progress is -1 (duration unknown)", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { id: 3, job_type: "video_transcode", status: "pending", progress: 0, result_ref: null, error: null, created_by_id: 1, started_at: null, finished_at: null },
+      error: undefined,
+    } as never);
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: { id: 3, job_type: "video_transcode", status: "running", progress: -1, result_ref: null, error: null, created_by_id: 1, started_at: "2026-07-29T00:00:00Z", finished_at: null },
+      error: undefined,
+    } as never);
+
+    render(<TranscodePrompt videoId={7} onTranscodeComplete={vi.fn()} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: /convert video/i }));
+
+    await waitFor(() => expect(screen.getByText(/converting…/i)).toBeInTheDocument());
+    expect(screen.queryByText(/-1%/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Converting… 0%$/)).not.toBeInTheDocument();
+  });
+
   it("shows the error and a retry option when the job fails", async () => {
     vi.mocked(apiClient.POST).mockResolvedValue({
       data: { id: 2, job_type: "video_transcode", status: "pending", progress: 0, result_ref: null, error: null, created_by_id: 1, started_at: null, finished_at: null },

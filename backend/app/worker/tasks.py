@@ -1,5 +1,4 @@
 import logging
-import subprocess
 import tempfile
 from datetime import datetime, timezone
 
@@ -7,9 +6,10 @@ from app.auth.models import User  # noqa: F401 -- registers `users` for Job.crea
 from app.db import SessionLocal
 from app.jobs.models import Job, JobStatus
 from app.media.models import Video
-from app.media.service import compute_checksum
+from app.media.service import compute_checksum, probe_video
 from app.storage import get_storage_service
 from app.worker.celery_app import celery_app
+from app.worker.ffmpeg_progress import run_ffmpeg_with_progress
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,11 @@ def transcode_video(job_id: int) -> None:
             source_tmp.write(source_bytes)
             source_tmp.flush()
 
-            subprocess.run(
+            def on_progress(percent: int) -> None:
+                job.progress = percent
+                session.commit()
+
+            run_ffmpeg_with_progress(
                 [
                     "ffmpeg", "-y",
                     "-i", source_tmp.name,
@@ -54,8 +58,8 @@ def transcode_video(job_id: int) -> None:
                     "-movflags", "+faststart",
                     output_tmp.name,
                 ],
-                capture_output=True,
-                check=True,
+                duration_seconds=video.duration_seconds or 0,
+                on_progress=on_progress,
                 timeout=600,
             )
 
@@ -70,6 +74,16 @@ def transcode_video(job_id: int) -> None:
         video.browser_playable = True
         video.container = "mov,mp4,m4a,3gp,3g2,mj2"
         video.video_codec = "h264"
+
+        if not video.duration_seconds or not video.fps:
+            # The source's own metadata was unreadable (the same codec
+            # limitation that made it need transcoding in the first place),
+            # so duration_seconds/fps were never populated at upload time.
+            # The transcoded output is always a standard H.264 MP4, so
+            # OpenCV can reliably re-probe it now.
+            fps, duration_seconds = probe_video(output_bytes)
+            video.fps = fps
+            video.duration_seconds = duration_seconds
 
         job.status = JobStatus.SUCCEEDED
         job.progress = 100

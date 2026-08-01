@@ -34,7 +34,11 @@ export function TranscodePrompt({
     <div className="flex flex-col items-center gap-3 rounded border border-gray-800 bg-gray-900 p-8 text-center text-gray-300">
       <p>This video&apos;s format isn&apos;t supported by the browser player.</p>
       {status === "pending" || status === "running" ? (
-        <p className="text-sm text-gray-400">Converting… {jobQuery.data?.progress ?? 0}%</p>
+        <p className="text-sm text-gray-400">
+          {jobQuery.data && jobQuery.data.progress >= 0
+            ? `Converting… ${jobQuery.data.progress}%`
+            : "Converting… this may take a while for large files"}
+        </p>
       ) : (
         <button
           type="button"

@@ -117,9 +117,20 @@ def _apply_crop(frame, crop: "CropBox | None"):
 
 
 def extract_frames(
-    video_bytes: bytes, sample_fps: float = 1.0, crop: "CropBox | None" = None
+    video_bytes: bytes,
+    sample_fps: float = 1.0,
+    crop: "CropBox | None" = None,
+    start_time: float | None = None,
+    duration: float | None = None,
 ) -> list[tuple[int, bytes, int, int]]:
-    """Extracts frames at `sample_fps`, returns (frame_index, png_bytes, width, height)."""
+    """Extracts frames at `sample_fps`, returns (frame_index, png_bytes, width, height).
+
+    If `start_time`/`duration` are given, only source frames within that
+    window (in seconds, relative to the start of `video_bytes`) are
+    sampled -- otherwise the whole video is walked, as before. Windowing
+    is done by source frame number (not `CAP_PROP_POS_MSEC` seeking) to
+    reuse the same fps-derived `step` sampling as the unwindowed path.
+    """
     results: list[tuple[int, bytes, int, int]] = []
     with tempfile.NamedTemporaryFile(suffix=".mp4") as tmp:
         tmp.write(video_bytes)
@@ -128,13 +139,22 @@ def extract_frames(
         source_fps = capture.get(cv2.CAP_PROP_FPS) or sample_fps
         step = max(int(round(source_fps / sample_fps)), 1)
 
+        start_frame = int(round(start_time * source_fps)) if start_time is not None else 0
+        end_frame = (
+            int(round((start_time or 0) * source_fps + duration * source_fps))
+            if duration is not None
+            else None
+        )
+
         frame_index = 0
         source_frame_number = 0
         while True:
             success, frame = capture.read()
             if not success:
                 break
-            if source_frame_number % step == 0:
+            if end_frame is not None and source_frame_number >= end_frame:
+                break
+            if source_frame_number >= start_frame and source_frame_number % step == 0:
                 frame = _apply_crop(frame, crop)
                 height, width = frame.shape[:2]
                 success_encode, buffer = cv2.imencode(".png", frame)
@@ -179,7 +199,13 @@ def recut_sequence(
     resolved_crop = crop if crop is not None else (
         CropBox(**sequence.crop_box) if sequence.crop_box else None
     )
-    extracted = extract_frames(video_bytes, sample_fps=fps, crop=resolved_crop)
+    extracted = extract_frames(
+        video_bytes,
+        sample_fps=fps,
+        crop=resolved_crop,
+        start_time=start_time,
+        duration=duration,
+    )
 
     old_frames = (
         session.query(Frame.id, Frame.storage_key).filter(Frame.sequence_id == sequence.id).all()

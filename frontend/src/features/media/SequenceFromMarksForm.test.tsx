@@ -159,4 +159,50 @@ describe("SequenceFromMarksForm", () => {
 
     expect(await screen.findByText(/failed to create sequence/i)).toBeInTheDocument();
   });
+
+  it("disables the submit button while the create request is pending, so a slow request can't be double-submitted", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/taxonomy/procedures") {
+        return { data: [{ id: 1, name: "EGD" }], error: undefined } as never;
+      }
+      if (path === "/media/sequences/suggest-name") {
+        return { data: { name: "EGD 2026-07-29 #1" }, error: undefined } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+    let resolvePost!: (value: unknown) => void;
+    vi.mocked(apiClient.POST).mockReturnValue(
+      new Promise((resolve) => {
+        resolvePost = resolve;
+      }) as never
+    );
+
+    render(
+      <SequenceFromMarksForm
+        videoId={5}
+        markStart={10}
+        markEnd={30}
+        procedureId={1}
+        onCropChange={vi.fn()}
+        existingSequences={[]}
+        onCreated={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    const button = await screen.findByRole("button", { name: /create sequence/i });
+    await userEvent.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(apiClient.POST).toHaveBeenCalledTimes(1);
+
+    // A second click while pending must not fire a second request.
+    await userEvent.click(button);
+    expect(apiClient.POST).toHaveBeenCalledTimes(1);
+
+    resolvePost({
+      data: { id: 42, name: "EGD 2026-07-29 #1", video_id: 5, procedure_id: 1, start_time: 10, duration: 20 },
+      error: undefined,
+    });
+  });
 });

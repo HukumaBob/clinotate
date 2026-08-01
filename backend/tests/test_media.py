@@ -457,6 +457,23 @@ def test_extract_frames_applies_crop_box_as_percentage_insets():
     assert cropped[0][3] == expected_height
 
 
+def test_extract_frames_windows_by_start_time_and_duration():
+    from app.media.service import extract_frames
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny_10s.mp4"
+    with open(fixture, "rb") as f:
+        video_bytes = f.read()
+
+    # 10s @ 10fps source, sampled at 1fps -- unwindowed extraction covers
+    # the full 10 seconds (10 frames); windowed to [3, 3+4) must cover only
+    # that 4-second slice (4 frames), not the whole video.
+    full = extract_frames(video_bytes, sample_fps=1.0)
+    assert len(full) == 10
+
+    windowed = extract_frames(video_bytes, sample_fps=1.0, start_time=3.0, duration=4.0)
+    assert len(windowed) == 4
+
+
 def test_extract_frames_all_zero_crop_is_a_no_op():
     from app.media.schemas import CropBox
     from app.media.service import extract_frames
