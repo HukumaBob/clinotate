@@ -6,9 +6,7 @@ import { computeVideoMediaRect } from "./computeVideoMediaRect";
 import type { Crop } from "./CropFields";
 import { CropOverlay } from "./CropOverlay";
 import { formatTimestamp } from "./formatTimestamp";
-import { RecutSequenceForm } from "./RecutSequenceForm";
-import { RenameSequenceForm } from "./RenameSequenceForm";
-import { SequenceFromMarksForm } from "./SequenceFromMarksForm";
+import { SequenceForm } from "./SequenceForm";
 import { SequenceTimeline } from "./SequenceTimeline";
 import { TranscodePrompt } from "./TranscodePrompt";
 
@@ -42,8 +40,7 @@ export function VideoReviewPlayer({
   const [markStart, setMarkStart] = useState<number | null>(() => loadStoredMarks(videoId).markStart);
   const [markEnd, setMarkEnd] = useState<number | null>(() => loadStoredMarks(videoId).markEnd);
   const [videoReady, setVideoReady] = useState(false);
-  const [renamingSequenceId, setRenamingSequenceId] = useState<number | null>(null);
-  const [recuttingSequenceId, setRecuttingSequenceId] = useState<number | null>(null);
+  const [editingSequenceId, setEditingSequenceId] = useState<number | null>(null);
   const [activeCrop, setActiveCrop] = useState<Crop | null>(null);
   const [mediaRect, setMediaRect] = useState<{ left: number; top: number; width: number; height: number } | null>(
     null
@@ -76,25 +73,18 @@ export function VideoReviewPlayer({
     if (videoRef.current) setMarkEnd(videoRef.current.currentTime);
   }
 
-  function handleRenameSequence(sequenceId: number) {
-    setRecuttingSequenceId(null);
-    setRenamingSequenceId(sequenceId);
-    setActiveCrop(null);
+  function handleSegmentClick(sequenceId: number, startTime: number, endTime: number) {
+    setEditingSequenceId(sequenceId);
+    setMarkStart(startTime);
+    setMarkEnd(endTime);
   }
 
-  function handleRecutSequence(sequenceId: number) {
-    setRenamingSequenceId(null);
-    setRecuttingSequenceId(sequenceId);
-    const target = sequencesQuery.data?.find((s) => s.id === sequenceId);
-    if (target) {
-      setMarkStart(target.start_time);
-      setMarkEnd(target.start_time + target.duration);
-    }
+  function handleEmptyBackgroundClick() {
+    setEditingSequenceId(null);
   }
 
   function handleEditDone() {
-    setRenamingSequenceId(null);
-    setRecuttingSequenceId(null);
+    setEditingSequenceId(null);
     setMarkStart(null);
     setMarkEnd(null);
     setActiveCrop(null);
@@ -124,7 +114,7 @@ export function VideoReviewPlayer({
       ) : video ? (
         <>
           <div className="flex flex-col gap-4 lg:flex-row">
-            <div className="relative min-w-0 flex-[3]">
+            <div className="relative min-w-0 flex-[2]">
               <video
                 ref={videoRef}
                 src={video.stream_url}
@@ -139,7 +129,7 @@ export function VideoReviewPlayer({
                 <CropOverlay crop={activeCrop} mediaRect={mediaRect ?? undefined} />
               )}
             </div>
-            <div className="flex min-w-0 flex-[2] flex-col gap-3 rounded border border-gray-800 bg-gray-950 p-3">
+            <div className="flex min-w-0 flex-[3] flex-col gap-3 rounded border border-gray-800 bg-gray-950 p-3">
               <div className="flex gap-3">
                 <div className="flex flex-col items-start gap-1">
                   <button
@@ -168,36 +158,32 @@ export function VideoReviewPlayer({
                   </span>
                 </div>
               </div>
-              {renamingSequenceId !== null && (() => {
-                const target = sequencesQuery.data?.find((s) => s.id === renamingSequenceId);
+              {editingSequenceId !== null && markStart !== null && markEnd !== null && (() => {
+                const target = sequencesQuery.data?.find((s) => s.id === editingSequenceId);
                 return target ? (
-                  <RenameSequenceForm sequence={target} onDone={handleEditDone} />
-                ) : null;
-              })()}
-              {recuttingSequenceId !== null && markStart !== null && markEnd !== null && (() => {
-                const target = sequencesQuery.data?.find((s) => s.id === recuttingSequenceId);
-                return target ? (
-                  <RecutSequenceForm
+                  <SequenceForm
                     sequence={target}
+                    videoId={videoId}
                     markStart={markStart}
                     markEnd={markEnd}
+                    existingSequences={sequencesQuery.data ?? []}
                     onCropChange={setActiveCrop}
                     onDone={handleEditDone}
                   />
                 ) : null;
               })()}
-              {recuttingSequenceId === null && renamingSequenceId === null && markStart !== null && markEnd !== null && markEnd !== markStart && (
-                <SequenceFromMarksForm
+              {editingSequenceId === null && markStart !== null && markEnd !== null && markEnd !== markStart && (
+                <SequenceForm
                   videoId={videoId}
                   markStart={markStart}
                   markEnd={markEnd}
                   procedureId={video.procedure_id ?? undefined}
                   existingSequences={sequencesQuery.data ?? []}
                   onCropChange={setActiveCrop}
-                  onCreated={handleCreated}
+                  onDone={handleCreated}
                 />
               )}
-              {recuttingSequenceId === null && renamingSequenceId === null && markStart !== null && markEnd !== null && markEnd === markStart && (
+              {editingSequenceId === null && markStart !== null && markEnd !== null && markEnd === markStart && (
                 <p className="text-sm text-red-400">Start and end can&apos;t be the same point.</p>
               )}
             </div>
@@ -208,8 +194,8 @@ export function VideoReviewPlayer({
             markStart={markStart}
             markEnd={markEnd}
             onOpenSequence={onOpenSequence}
-            onRenameSequence={handleRenameSequence}
-            onRecutSequence={handleRecutSequence}
+            onSegmentClick={handleSegmentClick}
+            onEmptyBackgroundClick={handleEmptyBackgroundClick}
             onMarkStartChange={setMarkStart}
             onMarkEndChange={setMarkEnd}
             onScrub={(seconds) => {

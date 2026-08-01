@@ -126,12 +126,16 @@ describe("VideoReviewPlayer", () => {
 
     render(<VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
 
-    await userEvent.click(await screen.findByRole("button", { name: /re-cut larynx/i }));
+    fireEvent.mouseDown(await screen.findByTitle("Larynx"));
     expect(await screen.findByText(/10s – 30s/)).toBeInTheDocument();
 
     const fpsInput = screen.getByLabelText(/fps/i);
     await userEvent.type(fpsInput, "3");
-    await userEvent.click(screen.getByRole("button", { name: /^re-cut$/i }));
+    // Nudge the crop so the range/crop comparison flags this as a re-cut
+    // (SequenceForm only asks for confirmation when range or crop changed;
+    // fps alone never does, since there's no "previous fps" to compare to).
+    await userEvent.type(screen.getByLabelText(/left %/i), "5");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
     await userEvent.click(await screen.findByRole("button", { name: /confirm/i }));
 
     await waitFor(() =>
@@ -170,7 +174,7 @@ describe("VideoReviewPlayer", () => {
     expect(screen.getByRole("button", { name: /mark end/i })).toBeInTheDocument();
   });
 
-  it("wires sequencesQuery data into SequenceFromMarksForm so it inherits a real fetched crop_box", async () => {
+  it("wires sequencesQuery data into SequenceForm's create mode so it inherits a real fetched crop_box", async () => {
     vi.mocked(apiClient.GET).mockImplementation(async (path) => {
       if (path === "/media/videos/{video_id}") {
         return {
