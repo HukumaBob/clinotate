@@ -6,9 +6,27 @@ import type { components } from "../../shared/api/generated/schema";
 const SEGMENT_COLORS = ["bg-blue-600", "bg-emerald-600", "bg-amber-600", "bg-purple-600", "bg-pink-600"];
 const SNAP_PIXELS = 8;
 const MIN_REGION_SECONDS = 1;
+const CLICK_THRESHOLD_PIXELS = 3;
 
 type SequenceRead = components["schemas"]["SequenceRead"];
-type DragState = { edge: "start" | "end" | "new"; anchorSeconds: number };
+type DragState =
+  | { edge: "start" | "end"; anchorSeconds: number }
+  | { edge: "new"; anchorSeconds: number; mouseDownClientX: number };
+
+function computeGapBounds(
+  clickSeconds: number,
+  sequences: SequenceRead[],
+  durationSeconds: number
+): [number, number] {
+  let left = 0;
+  let right = durationSeconds;
+  for (const s of sequences) {
+    const segEnd = s.start_time + s.duration;
+    if (segEnd <= clickSeconds && segEnd > left) left = segEnd;
+    if (s.start_time >= clickSeconds && s.start_time < right) right = s.start_time;
+  }
+  return [left, right];
+}
 
 export function SequenceTimeline({
   durationSeconds,
@@ -16,8 +34,8 @@ export function SequenceTimeline({
   markStart,
   markEnd,
   onOpenSequence,
-  onRenameSequence,
-  onRecutSequence,
+  onSegmentClick,
+  onEmptyBackgroundClick,
   onMarkStartChange,
   onMarkEndChange,
   onScrub,
@@ -27,8 +45,8 @@ export function SequenceTimeline({
   markStart: number | null;
   markEnd: number | null;
   onOpenSequence: (id: number) => void;
-  onRenameSequence: (id: number) => void;
-  onRecutSequence: (id: number) => void;
+  onSegmentClick: (sequenceId: number, startTime: number, endTime: number) => void;
+  onEmptyBackgroundClick: () => void;
   onMarkStartChange: (seconds: number) => void;
   onMarkEndChange: (seconds: number) => void;
   onScrub: (seconds: number) => void;
@@ -81,7 +99,14 @@ export function SequenceTimeline({
       }
     }
 
-    function handleMouseUp() {
+    function handleMouseUp(event: MouseEvent) {
+      const current = dragState!;
+      if (current.edge === "new" && Math.abs(event.clientX - current.mouseDownClientX) < CLICK_THRESHOLD_PIXELS) {
+        const [left, right] = computeGapBounds(current.anchorSeconds, sequences, durationSeconds);
+        onMarkStartChange(left);
+        onMarkEndChange(right);
+        onEmptyBackgroundClick();
+      }
       setDragState(null);
     }
 
@@ -91,14 +116,14 @@ export function SequenceTimeline({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [dragState, sequences, markStart, markEnd, durationSeconds, onMarkStartChange, onMarkEndChange, onScrub]);
+  }, [dragState, sequences, markStart, markEnd, durationSeconds, onMarkStartChange, onMarkEndChange, onScrub, onEmptyBackgroundClick]);
 
   function handleRootMouseDown(event: React.MouseEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) return;
     const rect = rootRef.current?.getBoundingClientRect();
     if (!rect) return;
     const anchorSeconds = pixelToSeconds(event.clientX, rect, durationSeconds);
-    setDragState({ edge: "new", anchorSeconds });
+    setDragState({ edge: "new", anchorSeconds, mouseDownClientX: event.clientX });
   }
 
   return (
@@ -107,33 +132,23 @@ export function SequenceTimeline({
         <div
           key={sequence.id}
           title={sequence.name}
+          onMouseDown={(event) => {
+            event.stopPropagation();
+            onSegmentClick(sequence.id, sequence.start_time, sequence.start_time + sequence.duration);
+          }}
           className={`absolute top-0 flex h-full items-center justify-center overflow-hidden whitespace-nowrap px-1 text-xs text-white ${SEGMENT_COLORS[sequence.id % SEGMENT_COLORS.length]}`}
           style={{ left: `${pct(sequence.start_time)}%`, width: `${pct(sequence.duration)}%` }}
         >
-          <span className="truncate">{sequence.name}</span>
           <button
             type="button"
-            aria-label={`Open ${sequence.name}`}
-            onClick={() => onOpenSequence(sequence.id)}
-            className="ml-1 shrink-0 underline"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenSequence(sequence.id);
+            }}
+            className="truncate underline"
           >
-            ↗
-          </button>
-          <button
-            type="button"
-            aria-label={`Rename ${sequence.name}`}
-            onClick={() => onRenameSequence(sequence.id)}
-            className="ml-1 shrink-0 underline"
-          >
-            ✎
-          </button>
-          <button
-            type="button"
-            aria-label={`Re-cut ${sequence.name}`}
-            onClick={() => onRecutSequence(sequence.id)}
-            className="ml-1 shrink-0 underline"
-          >
-            ✂
+            {sequence.name}
           </button>
         </div>
       ))}

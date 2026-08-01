@@ -18,8 +18,8 @@ describe("SequenceTimeline", () => {
         markStart={null}
         markEnd={null}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
         onMarkEndChange={vi.fn()}
         onScrub={vi.fn()}
@@ -39,58 +39,16 @@ describe("SequenceTimeline", () => {
         markStart={null}
         markEnd={null}
         onOpenSequence={onOpen}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
         onMarkEndChange={vi.fn()}
         onScrub={vi.fn()}
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /open larynx/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Larynx" }));
     expect(onOpen).toHaveBeenCalledWith(1);
-  });
-
-  it("calls onRenameSequence with the right id when a segment's rename action is used", async () => {
-    const onRename = vi.fn();
-    render(
-      <SequenceTimeline
-        durationSeconds={100}
-        sequences={sequences}
-        markStart={null}
-        markEnd={null}
-        onOpenSequence={vi.fn()}
-        onRenameSequence={onRename}
-        onRecutSequence={vi.fn()}
-        onMarkStartChange={vi.fn()}
-        onMarkEndChange={vi.fn()}
-        onScrub={vi.fn()}
-      />
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: /rename larynx/i }));
-    expect(onRename).toHaveBeenCalledWith(1);
-  });
-
-  it("calls onRecutSequence with the right id when a segment's re-cut action is used", async () => {
-    const onRecut = vi.fn();
-    render(
-      <SequenceTimeline
-        durationSeconds={100}
-        sequences={sequences}
-        markStart={null}
-        markEnd={null}
-        onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={onRecut}
-        onMarkStartChange={vi.fn()}
-        onMarkEndChange={vi.fn()}
-        onScrub={vi.fn()}
-      />
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: /re-cut esophagus/i }));
-    expect(onRecut).toHaveBeenCalledWith(2);
   });
 
   it("renders the in-progress mark overlay only when both marks are set", () => {
@@ -101,8 +59,8 @@ describe("SequenceTimeline", () => {
         markStart={10}
         markEnd={null}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
         onMarkEndChange={vi.fn()}
         onScrub={vi.fn()}
@@ -117,8 +75,8 @@ describe("SequenceTimeline", () => {
         markStart={10}
         markEnd={40}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
         onMarkEndChange={vi.fn()}
         onScrub={vi.fn()}
@@ -141,8 +99,8 @@ describe("SequenceTimeline", () => {
         markStart={null}
         markEnd={null}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
         onMarkEndChange={onMarkEndChange}
         onScrub={onScrub}
@@ -175,8 +133,8 @@ describe("SequenceTimeline", () => {
         markStart={10}
         markEnd={60}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
         onMarkEndChange={onMarkEndChange}
         onScrub={vi.fn()}
@@ -207,8 +165,8 @@ describe("SequenceTimeline", () => {
         markStart={10}
         markEnd={60}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
         onMarkEndChange={onMarkEndChange}
         onScrub={vi.fn()}
@@ -238,8 +196,8 @@ describe("SequenceTimeline", () => {
         markStart={10}
         markEnd={60}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
         onMarkEndChange={onMarkEndChange}
         onScrub={vi.fn()}
@@ -268,8 +226,8 @@ describe("SequenceTimeline", () => {
         markStart={10}
         markEnd={20}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
         onMarkEndChange={vi.fn()}
         onScrub={vi.fn()}
@@ -301,8 +259,8 @@ describe("SequenceTimeline", () => {
         markStart={null}
         markEnd={null}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
         onMarkEndChange={onMarkEndChange}
         onScrub={onScrub}
@@ -339,8 +297,8 @@ describe("SequenceTimeline", () => {
         markStart={10}
         markEnd={60}
         onOpenSequence={vi.fn()}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
         onMarkEndChange={onMarkEndChange}
         onScrub={vi.fn()}
@@ -372,17 +330,167 @@ describe("SequenceTimeline", () => {
         markStart={null}
         markEnd={null}
         onOpenSequence={onOpen}
-        onRenameSequence={vi.fn()}
-        onRecutSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
         onMarkEndChange={vi.fn()}
         onScrub={vi.fn()}
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /open larynx/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Larynx" }));
 
     expect(onOpen).toHaveBeenCalledWith(1);
     expect(onMarkStartChange).not.toHaveBeenCalled();
+  });
+
+  it("clicking a segment's name calls onOpenSequence, not onSegmentClick", async () => {
+    const onOpen = vi.fn();
+    const onSegmentClick = vi.fn();
+    render(
+      <SequenceTimeline
+        durationSeconds={100}
+        sequences={sequences}
+        markStart={null}
+        markEnd={null}
+        onOpenSequence={onOpen}
+        onSegmentClick={onSegmentClick}
+        onEmptyBackgroundClick={vi.fn()}
+        onMarkStartChange={vi.fn()}
+        onMarkEndChange={vi.fn()}
+        onScrub={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Larynx" }));
+
+    expect(onOpen).toHaveBeenCalledWith(1);
+    expect(onSegmentClick).not.toHaveBeenCalled();
+  });
+
+  it("clicking a segment's body (not its name) calls onSegmentClick with the segment's bounds", () => {
+    const onSegmentClick = vi.fn();
+    render(
+      <SequenceTimeline
+        durationSeconds={100}
+        sequences={sequences}
+        markStart={null}
+        markEnd={null}
+        onOpenSequence={vi.fn()}
+        onSegmentClick={onSegmentClick}
+        onEmptyBackgroundClick={vi.fn()}
+        onMarkStartChange={vi.fn()}
+        onMarkEndChange={vi.fn()}
+        onScrub={vi.fn()}
+      />
+    );
+
+    // Esophagus: start_time=20, duration=30 -> bounds [20, 50].
+    fireEvent.mouseDown(screen.getByTitle("Esophagus"));
+
+    expect(onSegmentClick).toHaveBeenCalledWith(2, 20, 50);
+  });
+
+  it("a true click on empty background (no meaningful mouse movement) sets marks to the gap between neighbors and calls onEmptyBackgroundClick", () => {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 0, right: 200, top: 0, bottom: 40, width: 200, height: 40, x: 0, y: 0, toJSON: () => {},
+    });
+    const onMarkStartChange = vi.fn();
+    const onMarkEndChange = vi.fn();
+    const onEmptyBackgroundClick = vi.fn();
+    const { container } = render(
+      <SequenceTimeline
+        durationSeconds={100}
+        sequences={sequences}
+        markStart={null}
+        markEnd={null}
+        onOpenSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={onEmptyBackgroundClick}
+        onMarkStartChange={onMarkStartChange}
+        onMarkEndChange={onMarkEndChange}
+        onScrub={vi.fn()}
+      />
+    );
+
+    // sequences: Larynx [0,20), Esophagus [20,50). Click in the gap after
+    // Esophagus, e.g. clientX=140 -> 70s (200px/100s = 2px/s). Gap bounds:
+    // left=50 (Esophagus's end), right=100 (durationSeconds, no next segment).
+    const root = container.firstChild as HTMLElement;
+    fireEvent.mouseDown(root, { clientX: 140, target: root, currentTarget: root });
+    // No mousemove at all -- or one within the 3px threshold; mouseup at the same clientX.
+    fireEvent.mouseUp(window, { clientX: 140 });
+
+    expect(onMarkStartChange).toHaveBeenLastCalledWith(50);
+    expect(onMarkEndChange).toHaveBeenLastCalledWith(100);
+    expect(onEmptyBackgroundClick).toHaveBeenCalled();
+  });
+
+  it("a click between two segments sets marks to the gap bounded by both neighbors", () => {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 0, right: 200, top: 0, bottom: 40, width: 200, height: 40, x: 0, y: 0, toJSON: () => {},
+    });
+    const onMarkStartChange = vi.fn();
+    const onMarkEndChange = vi.fn();
+    const threeSequences = [
+      { id: 1, name: "A", video_id: 5, procedure_id: 1, start_time: 0, duration: 20, annotation_count: 0 },
+      { id: 2, name: "B", video_id: 5, procedure_id: 1, start_time: 40, duration: 10, annotation_count: 0 },
+    ];
+    const { container } = render(
+      <SequenceTimeline
+        durationSeconds={100}
+        sequences={threeSequences}
+        markStart={null}
+        markEnd={null}
+        onOpenSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={vi.fn()}
+        onMarkStartChange={onMarkStartChange}
+        onMarkEndChange={onMarkEndChange}
+        onScrub={vi.fn()}
+      />
+    );
+
+    // Gap is [20, 40). Click at 30s -> clientX=60.
+    const root = container.firstChild as HTMLElement;
+    fireEvent.mouseDown(root, { clientX: 60, target: root, currentTarget: root });
+    fireEvent.mouseUp(window, { clientX: 60 });
+
+    expect(onMarkStartChange).toHaveBeenLastCalledWith(20);
+    expect(onMarkEndChange).toHaveBeenLastCalledWith(40);
+  });
+
+  it("a real drag (movement past the 3px click threshold) still behaves as today's drag-to-create, not a click", () => {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 0, right: 200, top: 0, bottom: 40, width: 200, height: 40, x: 0, y: 0, toJSON: () => {},
+    });
+    const onMarkStartChange = vi.fn();
+    const onMarkEndChange = vi.fn();
+    const onEmptyBackgroundClick = vi.fn();
+    const { container } = render(
+      <SequenceTimeline
+        durationSeconds={100}
+        sequences={[]}
+        markStart={null}
+        markEnd={null}
+        onOpenSequence={vi.fn()}
+        onSegmentClick={vi.fn()}
+        onEmptyBackgroundClick={onEmptyBackgroundClick}
+        onMarkStartChange={onMarkStartChange}
+        onMarkEndChange={onMarkEndChange}
+        onScrub={vi.fn()}
+      />
+    );
+
+    const root = container.firstChild as HTMLElement;
+    fireEvent.mouseDown(root, { clientX: 40, target: root, currentTarget: root });
+    fireEvent.mouseMove(window, { clientX: 100 });
+    fireEvent.mouseUp(window, { clientX: 100 });
+
+    // Drag-to-create result (anchor=20s, dragged to 50s) must be preserved as-is.
+    expect(onMarkStartChange).toHaveBeenLastCalledWith(20);
+    expect(onMarkEndChange).toHaveBeenLastCalledWith(50);
+    // The click-only callback must NOT fire for a real drag.
+    expect(onEmptyBackgroundClick).not.toHaveBeenCalled();
   });
 });
