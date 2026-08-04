@@ -39,6 +39,8 @@ export function useDeleteSequence() {
       return result.data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sequences"] });
+      queryClient.invalidateQueries({ queryKey: ["video-sequences"] });
       queryClient.invalidateQueries({ queryKey: ["media-library"] });
     },
   });

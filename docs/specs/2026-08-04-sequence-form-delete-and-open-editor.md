@@ -68,19 +68,22 @@ Add two things to the button row, alongside the existing Save/Close (and
 Confirm/Cancel for re-cut):
 
 - **"Open in editor" button** — placed with Save/Close in the primary
-  left-hand button group. Calls a new `onOpenEditor: () => void` prop (parent
-  wires it to the existing `navigate(/sequences/{id})` logic that
-  `onOpenSequence` used to trigger from the timeline). Always enabled in edit
-  mode; no confirmation needed since it's non-destructive.
+  left-hand button group. Calls a new `onOpenEditor?: (sequenceId: number) => void`
+  prop (optional, and takes the sequence id so callers can reuse an id-keyed
+  navigation function; parent wires it to the existing `navigate(/sequences/{id})`
+  logic that `onOpenSequence` used to trigger from the timeline). Always
+  enabled in edit mode; no confirmation needed since it's non-destructive.
 - **"Delete" button** — placed separately on the right of the button row,
   visually set apart as a destructive action (matches `MediaLibraryTable`'s
   right-aligned Delete column). Uses its own `confirmingDelete` boolean state
   (independent from the existing `confirming` re-cut state):
   - First click: button reads "Delete" (neutral/outlined style, matching
     `MediaLibraryTable`'s idle Delete button).
-  - Click again: swaps to "Confirm" (red, matching the existing red
-    Confirm button style already used for re-cut) plus a "Cancel" button that
-    resets `confirmingDelete` to false.
+  - Click again: swaps to "Delete confirm" (not a bare "Confirm", to avoid
+    an accessible-name collision with the pre-existing re-cut flow's Confirm
+    button; red, matching the existing red Confirm button style already used
+    for re-cut) plus a "Cancel" button that resets `confirmingDelete` to
+    false.
   - Confirm calls `useDeleteSequence().mutate(sequence.id, ...)`.
   - On success: call `onDone()` (same as Save/Close — closes the form; the
     parent's `sequencesQuery.refetch()` already runs in `handleEditDone`).

@@ -4,7 +4,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { apiClient } from "../shared/api/client";
-import { useDeleteVideo, useMediaLibrary } from "./useMediaLibrary";
+import { useDeleteSequence, useDeleteVideo, useMediaLibrary } from "./useMediaLibrary";
 
 vi.mock("../shared/api/client", () => ({
   apiClient: { GET: vi.fn(), DELETE: vi.fn() },
@@ -45,5 +45,28 @@ describe("useDeleteVideo", () => {
     expect(apiClient.DELETE).toHaveBeenCalledWith("/media/videos/{video_id}", {
       params: { path: { video_id: 7 } },
     });
+  });
+});
+
+describe("useDeleteSequence", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("invalidates sequences, video-sequences, and media-library queries on success", async () => {
+    vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    function localWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+
+    const { result } = renderHook(() => useDeleteSequence(), { wrapper: localWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync(3);
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["sequences"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["video-sequences"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["media-library"] });
   });
 });
