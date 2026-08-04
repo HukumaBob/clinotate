@@ -82,6 +82,18 @@ class SequenceRead(BaseModel):
     crop_box: dict | None = None
 
 
+class SequenceStatsLabel(BaseModel):
+    label_name: str
+    count: int
+
+
+class SequenceStats(BaseModel):
+    frame_count: int
+    frame_width: int | None
+    frame_height: int | None
+    labels: list[SequenceStatsLabel]
+
+
 class SuggestSequenceNameResponse(BaseModel):
     name: str
 

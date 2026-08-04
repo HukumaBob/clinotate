@@ -1495,6 +1495,53 @@
         }
       }
     },
+    "/media/sequences/{sequence_id}/stats": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Get Sequence Stats",
+        "operationId": "get_sequence_stats_media_sequences__sequence_id__stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceStats"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/media/sequences/{sequence_id}/frames": {
       "get": {
         "tags": [
@@ -3153,6 +3200,69 @@
           "annotation_count"
         ],
         "title": "SequenceRead"
+      },
+      "SequenceStats": {
+        "properties": {
+          "frame_count": {
+            "type": "integer",
+            "title": "Frame Count"
+          },
+          "frame_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Width"
+          },
+          "frame_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Height"
+          },
+          "labels": {
+            "items": {
+              "$ref": "#/components/schemas/SequenceStatsLabel"
+            },
+            "type": "array",
+            "title": "Labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_count",
+          "frame_width",
+          "frame_height",
+          "labels"
+        ],
+        "title": "SequenceStats"
+      },
+      "SequenceStatsLabel": {
+        "properties": {
+          "label_name": {
+            "type": "string",
+            "title": "Label Name"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label_name",
+          "count"
+        ],
+        "title": "SequenceStatsLabel"
       },
       "SequenceUpdate": {
         "properties": {
