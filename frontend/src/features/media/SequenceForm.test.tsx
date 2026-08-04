@@ -8,7 +8,7 @@ import { apiClient } from "../../shared/api/client";
 import { SequenceForm } from "./SequenceForm";
 
 vi.mock("../../shared/api/client", () => ({
-  apiClient: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn() },
+  apiClient: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -588,5 +588,102 @@ describe("SequenceForm edit mode (sequence prop present)", () => {
     );
 
     expect(await screen.findByText("7 frames · 640×480")).toBeInTheDocument();
+  });
+
+  it("shows a Delete button that requires a second click to confirm", async () => {
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.queryByRole("button", { name: /^delete confirm$/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+
+    expect(await screen.findByRole("button", { name: /^delete confirm$/i })).toBeInTheDocument();
+    expect(apiClient.DELETE).not.toHaveBeenCalled();
+  });
+
+  it("deletes the sequence and calls onDone when delete is confirmed", async () => {
+    vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
+
+    const onDone = vi.fn();
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /^delete confirm$/i }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(apiClient.DELETE).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}",
+      expect.objectContaining({ params: { path: { sequence_id: 9 } } })
+    );
+  });
+
+  it("cancels the delete confirmation without calling the API", async () => {
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /^cancel$/i }));
+
+    expect(screen.queryByRole("button", { name: /^delete confirm$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^delete$/i })).toBeInTheDocument();
+    expect(apiClient.DELETE).not.toHaveBeenCalled();
+  });
+
+  it("shows an error and stays open when delete fails", async () => {
+    vi.mocked(apiClient.DELETE).mockResolvedValue({
+      data: undefined,
+      error: { detail: "This sequence has annotated frames — remove annotations before deleting it" },
+    } as never);
+
+    const onDone = vi.fn();
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={onDone}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /^delete confirm$/i }));
+
+    expect(await screen.findByText(/remove annotations before deleting/i)).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
   });
 });

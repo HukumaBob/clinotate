@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useProcedures } from "../../entities/useProcedures";
+import { useDeleteSequence } from "../../entities/useMediaLibrary";
 import { useCreateSequenceFromVideo, useUpdateSequence } from "../../entities/useSequences";
 import { useSuggestSequenceName } from "../../entities/useSuggestSequenceName";
 import type { components } from "../../shared/api/generated/schema";
@@ -46,7 +47,10 @@ export function SequenceForm({
     isEdit ? ((sequence!.crop_box as Crop | null) ?? ZERO_CROP) : mostRecentCrop(existingSequences)
   );
   const [confirming, setConfirming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const deleteSequence = useDeleteSequence();
   const createSequence = useCreateSequenceFromVideo();
   const updateSequence = useUpdateSequence();
   const isPending = isEdit ? updateSequence.isPending : createSequence.isPending;
@@ -113,6 +117,18 @@ export function SequenceForm({
     );
   }
 
+  function handleDeleteConfirm() {
+    setDeleteError(null);
+    deleteSequence.mutate(sequence!.id, {
+      onSuccess: () => onDone(),
+      onError: (error: unknown) => {
+        const detail = (error as { detail?: string } | undefined)?.detail ?? "Delete failed";
+        setDeleteError(detail);
+        setConfirmingDelete(false);
+      },
+    });
+  }
+
   if (isEdit) {
     return (
       <div className="flex gap-3">
@@ -164,42 +180,73 @@ export function SequenceForm({
             </p>
           )}
           {isError && <p className="text-xs text-red-400">Save failed. Please try again.</p>}
-          {!confirming ? (
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={isPending || (needsRecut && fps === "")}
-                className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={onDone}
-                className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
-              >
-                Close
-              </button>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleConfirm}
-                disabled={isPending}
-                className="rounded bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-600 disabled:opacity-50"
-              >
-                Confirm
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+          {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+          <div className="flex items-center justify-between gap-2">
+            {!confirming ? (
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={isPending || (needsRecut && fps === "")}
+                  className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={onDone}
+                  className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirm}
+                  disabled={isPending}
+                  className="rounded bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+            {!confirming &&
+              (!confirmingDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(true)}
+                  className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
+                >
+                  Delete
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDeleteConfirm}
+                    disabled={deleteSequence.isPending}
+                    className="rounded bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                  >
+                    Delete confirm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(false)}
+                    className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ))}
+          </div>
         </form>
         <div className="w-48 shrink-0 rounded border border-gray-800 bg-gray-900 p-3">
           <SequenceStatsPanel sequenceId={sequence!.id} />
