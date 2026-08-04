@@ -917,6 +917,143 @@ def test_get_sequence_reports_actual_annotation_count():
     assert response.json()["annotation_count"] == 1
 
 
+def test_sequence_stats_reports_zero_for_empty_sequence():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "stats-empty-procedure"}, headers=headers
+    ).json()["id"]
+    sequence_id = client.post(
+        "/media/sequences",
+        json={"procedure_id": procedure_id, "name": "stats empty sequence"},
+        headers=headers,
+    ).json()["id"]
+
+    response = client.get(f"/media/sequences/{sequence_id}/stats", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["frame_count"] == 0
+    assert body["frame_width"] is None
+    assert body["frame_height"] is None
+    assert body["labels"] == []
+
+
+def test_sequence_stats_reports_frame_count_and_resolution_from_first_frame():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "stats resolution source"}, headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "stats resolution sequence", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frames = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+
+    response = client.get(f"/media/sequences/{sequence_id}/stats", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["frame_count"] == len(frames)
+    first_frame = min(frames, key=lambda f: f["frame_index"])
+    assert body["frame_width"] == first_frame["width"]
+    assert body["frame_height"] == first_frame["height"]
+
+
+def test_sequence_stats_groups_annotations_by_label_across_types():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "stats label source"}, headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "stats label sequence", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frame_ids = [
+        f["id"]
+        for f in client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+    ]
+    assert len(frame_ids) >= 2, "fixture must yield at least 2 frames for this test"
+
+    procedures = client.get("/taxonomy/procedures", headers=headers).json()
+    procedure = next((p for p in procedures if p["name"] == "stats-label-procedure"), None)
+    if procedure is None:
+        procedure = client.post(
+            "/taxonomy/procedures", json={"name": "stats-label-procedure"}, headers=headers
+        ).json()
+    categories = client.get(
+        f"/taxonomy/categories?procedure_id={procedure['id']}", headers=headers
+    ).json()
+    category = next((c for c in categories if c["name"] == "stats-label-category"), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": "stats-label-category", "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next(
+        (e for e in evaluation_types if e["name"] == "stats-label-evaluation-type"), None
+    )
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types",
+            json={"name": "stats-label-evaluation-type"},
+            headers=headers,
+        ).json()
+
+    def _get_or_create_label(name: str) -> int:
+        # Labels have no list-by-name lookup endpoint, so create and rely on
+        # this test's unique name to avoid needing a search.
+        return client.post(
+            "/taxonomy/labels",
+            json={
+                "name": name,
+                "category_id": category["id"],
+                "evaluation_type_id": evaluation_type["id"],
+            },
+            headers=headers,
+        ).json()["id"]
+
+    polyp_label_id = _get_or_create_label("stats-test-polyp")
+    blood_label_id = _get_or_create_label("stats-test-blood")
+
+    # Two annotations on "polyp" (across two different frames), one on "blood".
+    client.post(
+        f"/annotation/frames/{frame_ids[0]}/annotations",
+        json={"label_id": polyp_label_id},
+        headers=headers,
+    )
+    client.post(
+        f"/annotation/frames/{frame_ids[1]}/annotations",
+        json={"label_id": polyp_label_id},
+        headers=headers,
+    )
+    client.post(
+        f"/annotation/frames/{frame_ids[0]}/annotations",
+        json={"label_id": blood_label_id},
+        headers=headers,
+    )
+
+    response = client.get(f"/media/sequences/{sequence_id}/stats", headers=headers)
+
+    assert response.status_code == 200
+    labels_by_name = {entry["label_name"]: entry["count"] for entry in response.json()["labels"]}
+    assert labels_by_name["stats-test-polyp"] == 2
+    assert labels_by_name["stats-test-blood"] == 1
+
+
+def test_sequence_stats_404_for_missing_sequence():
+    headers = _auth_headers()
+    response = client.get("/media/sequences/999999999/stats", headers=headers)
+    assert response.status_code == 404
+
+
 def test_patch_sequence_rename_updates_name_and_procedure():
     headers = _auth_headers()
     procedure_id = client.post(

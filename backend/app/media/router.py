@@ -20,6 +20,8 @@ from app.media.schemas import (
     SequenceCreate,
     SequenceCreateStandalone,
     SequenceRead,
+    SequenceStats,
+    SequenceStatsLabel,
     SequenceUpdate,
     SuggestSequenceNameResponse,
     VideoRead,
@@ -33,7 +35,7 @@ from app.media.service import (
     suggest_sequence_name,
 )
 from app.storage import StorageService, get_storage_service
-from app.taxonomy.models import Procedure
+from app.taxonomy.models import Label, Procedure
 
 router = APIRouter(prefix="/media", tags=["media"], dependencies=[Depends(get_current_user)])
 
@@ -390,6 +392,39 @@ def get_sequence(sequence_id: int, session: Session = Depends(get_session)) -> S
     if sequence is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
     return _sequence_read(sequence, session)
+
+
+@router.get("/sequences/{sequence_id}/stats", response_model=SequenceStats)
+def get_sequence_stats(sequence_id: int, session: Session = Depends(get_session)) -> SequenceStats:
+    sequence = session.get(Sequence, sequence_id)
+    if sequence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
+
+    frame_count = session.query(Frame).filter(Frame.sequence_id == sequence_id).count()
+
+    first_frame = (
+        session.query(Frame)
+        .filter(Frame.sequence_id == sequence_id)
+        .order_by(Frame.frame_index.asc())
+        .first()
+    )
+
+    label_rows = (
+        session.query(Label.name, func.count(Annotation.id))
+        .join(Annotation, Annotation.label_id == Label.id)
+        .join(Frame, Annotation.frame_id == Frame.id)
+        .filter(Frame.sequence_id == sequence_id)
+        .group_by(Label.name)
+        .order_by(func.count(Annotation.id).desc())
+        .all()
+    )
+
+    return SequenceStats(
+        frame_count=frame_count,
+        frame_width=first_frame.width if first_frame else None,
+        frame_height=first_frame.height if first_frame else None,
+        labels=[SequenceStatsLabel(label_name=name, count=count) for name, count in label_rows],
+    )
 
 
 @router.patch("/sequences/{sequence_id}", response_model=SequenceRead)

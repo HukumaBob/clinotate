@@ -171,4 +171,24 @@ describe("useUpdateSequence", () => {
       })
     );
   });
+
+  it("invalidates the sequence-stats query on success", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { id: 1, name: "renamed", video_id: 5, procedure_id: 2, start_time: 0, duration: 10, annotation_count: 0 },
+      error: undefined,
+    } as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    function localWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+
+    const { result } = renderHook(() => useUpdateSequence(), { wrapper: localWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ sequenceId: 1, name: "renamed" });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["sequence-stats"] });
+  });
 });

@@ -139,6 +139,7 @@ export function useUpdateSequence() {
       queryClient.invalidateQueries({ queryKey: ["sequences"] });
       queryClient.invalidateQueries({ queryKey: ["video-sequences"] });
       queryClient.invalidateQueries({ queryKey: ["media-library"] });
+      queryClient.invalidateQueries({ queryKey: ["sequence-stats"] });
     },
   });
 }
