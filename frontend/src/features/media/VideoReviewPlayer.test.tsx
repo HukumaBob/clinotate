@@ -390,4 +390,42 @@ describe("VideoReviewPlayer", () => {
     fireEvent.mouseLeave(container);
     expect(video).not.toHaveAttribute("controls");
   });
+
+  it("passes onOpenSequence through to the edit-mode SequenceForm as onOpenEditor, not to the timeline", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/media/videos/{video_id}") {
+        return {
+          data: {
+            id: 5, filename: "a.mp4", title: "A", procedure_id: 1, fps: 1,
+            duration_seconds: 60, size_bytes: 100,
+            browser_playable: true, container: "mov,mp4,m4a,3gp,3g2,mj2", video_codec: "h264",
+            stream_url: "https://minio.local/videos/a.mp4?signed=1",
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/media/videos/{video_id}/sequences") {
+        return {
+          data: [
+            { id: 1, name: "Larynx", video_id: 5, procedure_id: 1, start_time: 10, duration: 20, annotation_count: 2, crop_box: null },
+          ],
+          error: undefined,
+        } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    const onOpenSequence = vi.fn();
+    render(
+      <VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={onOpenSequence} />,
+      { wrapper }
+    );
+
+    fireEvent.mouseDown(await screen.findByTitle("Larynx"));
+    expect(await screen.findByText(/10s – 30s/)).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: /open in editor/i }));
+
+    expect(onOpenSequence).toHaveBeenCalledWith(1);
+  });
 });

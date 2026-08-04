@@ -174,6 +174,7 @@ export function VideoReviewPlayer({
                     existingSequences={sequencesQuery.data ?? []}
                     onCropChange={setActiveCrop}
                     onDone={handleEditDone}
+                    onOpenEditor={onOpenSequence}
                   />
                 ) : null;
               })()}

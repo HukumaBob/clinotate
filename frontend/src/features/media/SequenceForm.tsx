@@ -24,6 +24,7 @@ export function SequenceForm({
   existingSequences,
   onCropChange,
   onDone,
+  onOpenEditor,
 }: {
   sequence?: SequenceRead;
   videoId: number;
@@ -33,6 +34,7 @@ export function SequenceForm({
   existingSequences: SequenceRead[];
   onCropChange: (crop: Crop) => void;
   onDone: () => void;
+  onOpenEditor?: (sequenceId: number) => void;
 }) {
   const proceduresQuery = useProcedures();
   const isEdit = sequence !== undefined;
@@ -198,6 +200,15 @@ export function SequenceForm({
                 >
                   Close
                 </button>
+                {onOpenEditor && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenEditor(sequence!.id)}
+                    className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
+                  >
+                    Open in editor
+                  </button>
+                )}
               </div>
             ) : (
               <div className="flex gap-2">

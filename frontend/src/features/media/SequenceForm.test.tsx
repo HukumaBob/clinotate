@@ -686,4 +686,42 @@ describe("SequenceForm edit mode (sequence prop present)", () => {
     expect(await screen.findByText(/remove annotations before deleting/i)).toBeInTheDocument();
     expect(onDone).not.toHaveBeenCalled();
   });
+
+  it("calls onOpenEditor with the sequence id when Open in editor is clicked", async () => {
+    const onOpenEditor = vi.fn();
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+        onOpenEditor={onOpenEditor}
+      />,
+      { wrapper }
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /open in editor/i }));
+
+    expect(onOpenEditor).toHaveBeenCalledWith(9);
+  });
+
+  it("does not render an Open in editor button when onOpenEditor is not provided", async () => {
+    render(
+      <SequenceForm
+        sequence={sequence}
+        videoId={5}
+        markStart={0}
+        markEnd={20}
+        existingSequences={[]}
+        onCropChange={vi.fn()}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.queryByRole("button", { name: /open in editor/i })).not.toBeInTheDocument();
+  });
 });
