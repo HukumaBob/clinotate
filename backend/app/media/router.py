@@ -533,7 +533,7 @@ def delete_video(video_id: int, session: Session = Depends(get_session)) -> None
 @router.delete("/sequences/{sequence_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_sequence(sequence_id: int, session: Session = Depends(get_session)) -> None:
     sequence = session.get(Sequence, sequence_id)
-    if sequence is None or sequence.video_id is not None:
+    if sequence is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
 
     has_annotations = (

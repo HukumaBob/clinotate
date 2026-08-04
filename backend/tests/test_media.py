@@ -693,16 +693,16 @@ def test_delete_photo_sequence_without_annotations_succeeds():
     assert response.status_code == 204
 
 
-def test_delete_video_derived_sequence_via_media_endpoint_returns_404():
+def test_delete_video_derived_sequence_succeeds():
     headers = _auth_headers()
     procedure_id = client.post(
-        "/taxonomy/procedures", json={"name": "not-deletable-here-procedure"}, headers=headers
+        "/taxonomy/procedures", json={"name": "deletable-derived-seq-procedure"}, headers=headers
     ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos",
-            files={"file": ("not_deletable_here.mp4", f, "video/mp4")},
-            data={"title": "Not deletable here", "procedure_id": procedure_id},
+            files={"file": ("deletable_derived.mp4", f, "video/mp4")},
+            data={"title": "Deletable derived", "procedure_id": procedure_id},
             headers=headers,
         ).json()["id"]
     sequence_id = client.post(
@@ -713,7 +713,78 @@ def test_delete_video_derived_sequence_via_media_endpoint_returns_404():
 
     response = client.delete(f"/media/sequences/{sequence_id}", headers=headers)
 
-    assert response.status_code == 404
+    assert response.status_code == 204
+    assert client.get(f"/media/sequences/{sequence_id}", headers=headers).status_code == 404
+
+
+def test_delete_video_derived_sequence_with_annotations_returns_409():
+    headers = _auth_headers()
+
+    # Mirrors backend/tests/test_annotation.py's _create_label get-or-create
+    # pattern: Procedure/Category/EvaluationType creation 500s on a unique-
+    # constraint collision instead of returning a JSON error, so look each
+    # up first rather than assuming a fresh POST will succeed.
+    procedures = client.get("/taxonomy/procedures", headers=headers).json()
+    procedure = next((p for p in procedures if p["name"] == "delete-guard-procedure"), None)
+    if procedure is None:
+        procedure = client.post(
+            "/taxonomy/procedures", json={"name": "delete-guard-procedure"}, headers=headers
+        ).json()
+
+    categories = client.get(
+        f"/taxonomy/categories?procedure_id={procedure['id']}", headers=headers
+    ).json()
+    category = next((c for c in categories if c["name"] == "delete-guard-category"), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": "delete-guard-category", "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next(
+        (e for e in evaluation_types if e["name"] == "delete-guard-evaluation-type"), None
+    )
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types", json={"name": "delete-guard-evaluation-type"}, headers=headers
+        ).json()
+
+    label_id = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "Delete-guard label",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()["id"]
+
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("not_deletable_annotated.mp4", f, "video/mp4")},
+            data={"title": "Not deletable annotated", "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Annotated video-derived seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frame_id = client.get(
+        f"/media/sequences/{sequence_id}/frames", headers=headers
+    ).json()[0]["id"]
+    client.post(
+        f"/annotation/frames/{frame_id}/annotations",
+        json={"label_id": label_id},
+        headers=headers,
+    )
+
+    response = client.delete(f"/media/sequences/{sequence_id}", headers=headers)
+
+    assert response.status_code == 409
 
 
 def test_video_model_has_codec_compatibility_columns():
