@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 
 import { SequenceTimeline } from "./SequenceTimeline";
 
@@ -17,7 +16,6 @@ describe("SequenceTimeline", () => {
         sequences={sequences}
         markStart={null}
         markEnd={null}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
@@ -30,27 +28,6 @@ describe("SequenceTimeline", () => {
     expect(screen.getByText("Esophagus")).toBeInTheDocument();
   });
 
-  it("calls onOpenSequence with the right id when a segment's open action is used", async () => {
-    const onOpen = vi.fn();
-    render(
-      <SequenceTimeline
-        durationSeconds={100}
-        sequences={sequences}
-        markStart={null}
-        markEnd={null}
-        onOpenSequence={onOpen}
-        onSegmentClick={vi.fn()}
-        onEmptyBackgroundClick={vi.fn()}
-        onMarkStartChange={vi.fn()}
-        onMarkEndChange={vi.fn()}
-        onScrub={vi.fn()}
-      />
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: "Larynx" }));
-    expect(onOpen).toHaveBeenCalledWith(1);
-  });
-
   it("renders the in-progress mark overlay only when both marks are set", () => {
     const { rerender } = render(
       <SequenceTimeline
@@ -58,7 +35,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={10}
         markEnd={null}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
@@ -74,7 +50,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={10}
         markEnd={40}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
@@ -98,7 +73,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={null}
         markEnd={null}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
@@ -132,7 +106,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={10}
         markEnd={60}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
@@ -164,7 +137,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={10}
         markEnd={60}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
@@ -195,7 +167,6 @@ describe("SequenceTimeline", () => {
         sequences={[{ id: 1, name: "Larynx", video_id: 5, procedure_id: 1, start_time: 0, duration: 76, annotation_count: 0 }]}
         markStart={10}
         markEnd={60}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
@@ -225,7 +196,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={10}
         markEnd={20}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
@@ -258,7 +228,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={null}
         markEnd={null}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
@@ -296,7 +265,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={10}
         markEnd={60}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
@@ -320,54 +288,6 @@ describe("SequenceTimeline", () => {
     fireEvent.mouseUp(window);
   });
 
-  it("clicking a segment's action button does not start a drag", async () => {
-    const onOpen = vi.fn();
-    const onMarkStartChange = vi.fn();
-    render(
-      <SequenceTimeline
-        durationSeconds={100}
-        sequences={sequences}
-        markStart={null}
-        markEnd={null}
-        onOpenSequence={onOpen}
-        onSegmentClick={vi.fn()}
-        onEmptyBackgroundClick={vi.fn()}
-        onMarkStartChange={onMarkStartChange}
-        onMarkEndChange={vi.fn()}
-        onScrub={vi.fn()}
-      />
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: "Larynx" }));
-
-    expect(onOpen).toHaveBeenCalledWith(1);
-    expect(onMarkStartChange).not.toHaveBeenCalled();
-  });
-
-  it("clicking a segment's name calls onOpenSequence, not onSegmentClick", async () => {
-    const onOpen = vi.fn();
-    const onSegmentClick = vi.fn();
-    render(
-      <SequenceTimeline
-        durationSeconds={100}
-        sequences={sequences}
-        markStart={null}
-        markEnd={null}
-        onOpenSequence={onOpen}
-        onSegmentClick={onSegmentClick}
-        onEmptyBackgroundClick={vi.fn()}
-        onMarkStartChange={vi.fn()}
-        onMarkEndChange={vi.fn()}
-        onScrub={vi.fn()}
-      />
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: "Larynx" }));
-
-    expect(onOpen).toHaveBeenCalledWith(1);
-    expect(onSegmentClick).not.toHaveBeenCalled();
-  });
-
   it("clicking a segment's body (not its name) calls onSegmentClick with the segment's bounds", () => {
     const onSegmentClick = vi.fn();
     render(
@@ -376,7 +296,6 @@ describe("SequenceTimeline", () => {
         sequences={sequences}
         markStart={null}
         markEnd={null}
-        onOpenSequence={vi.fn()}
         onSegmentClick={onSegmentClick}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={vi.fn()}
@@ -404,7 +323,6 @@ describe("SequenceTimeline", () => {
         sequences={sequences}
         markStart={null}
         markEnd={null}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={onEmptyBackgroundClick}
         onMarkStartChange={onMarkStartChange}
@@ -442,7 +360,6 @@ describe("SequenceTimeline", () => {
         sequences={threeSequences}
         markStart={null}
         markEnd={null}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={vi.fn()}
         onMarkStartChange={onMarkStartChange}
@@ -473,7 +390,6 @@ describe("SequenceTimeline", () => {
         sequences={[]}
         markStart={null}
         markEnd={null}
-        onOpenSequence={vi.fn()}
         onSegmentClick={vi.fn()}
         onEmptyBackgroundClick={onEmptyBackgroundClick}
         onMarkStartChange={onMarkStartChange}

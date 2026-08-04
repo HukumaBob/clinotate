@@ -33,7 +33,6 @@ export function SequenceTimeline({
   sequences,
   markStart,
   markEnd,
-  onOpenSequence,
   onSegmentClick,
   onEmptyBackgroundClick,
   onMarkStartChange,
@@ -44,7 +43,6 @@ export function SequenceTimeline({
   sequences: SequenceRead[];
   markStart: number | null;
   markEnd: number | null;
-  onOpenSequence: (id: number) => void;
   onSegmentClick: (sequenceId: number, startTime: number, endTime: number) => void;
   onEmptyBackgroundClick: () => void;
   onMarkStartChange: (seconds: number) => void;
@@ -139,17 +137,7 @@ export function SequenceTimeline({
           className={`absolute top-0 flex h-full items-center justify-center overflow-hidden whitespace-nowrap px-1 text-xs text-white ${SEGMENT_COLORS[sequence.id % SEGMENT_COLORS.length]}`}
           style={{ left: `${pct(sequence.start_time)}%`, width: `${pct(sequence.duration)}%` }}
         >
-          <button
-            type="button"
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenSequence(sequence.id);
-            }}
-            className="truncate underline"
-          >
-            {sequence.name}
-          </button>
+          <span className="truncate">{sequence.name}</span>
         </div>
       ))}
       {markStart !== null && markEnd !== null && (

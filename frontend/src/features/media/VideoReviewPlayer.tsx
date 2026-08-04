@@ -199,7 +199,6 @@ export function VideoReviewPlayer({
             sequences={sequencesQuery.data ?? []}
             markStart={markStart}
             markEnd={markEnd}
-            onOpenSequence={onOpenSequence}
             onSegmentClick={handleSegmentClick}
             onEmptyBackgroundClick={handleEmptyBackgroundClick}
             onMarkStartChange={setMarkStart}
