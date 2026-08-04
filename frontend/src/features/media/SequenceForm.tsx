@@ -114,45 +114,49 @@ export function SequenceForm({
 
   if (isEdit) {
     return (
-      <form onSubmit={handleEditSubmit} className="flex flex-col gap-3 rounded border border-gray-800 bg-gray-900 p-4">
+      <form onSubmit={handleEditSubmit} className="flex flex-col gap-2 rounded border border-gray-800 bg-gray-900 p-4">
         <CropFields crop={crop} onChange={setCrop} />
-        <p className="text-sm text-gray-400">
-          Range: {startTime}s – {startTime + duration}s ({duration}s)
-        </p>
-        <label className="flex flex-col gap-1 text-sm text-gray-300">
-          Name
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-            required
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-300">
-          Procedure
-          <select
-            value={procedureId ?? ""}
-            onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-          >
-            <option value="">None</option>
-            {(proceduresQuery.data ?? []).map((procedure) => (
-              <option key={procedure.id} value={procedure.id}>
-                {procedure.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex w-24 flex-col gap-1 text-sm text-gray-300">
-          FPS
-          <input
-            type="number"
-            value={fps}
-            onChange={(e) => setFps(e.target.value === "" ? "" : Number(e.target.value))}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-          />
-        </label>
+        <div className="flex items-end gap-3">
+          <p className="text-sm text-gray-400">
+            Range: {startTime}s – {startTime + duration}s ({duration}s)
+          </p>
+          <label className="flex w-20 flex-col gap-1 text-sm text-gray-300">
+            FPS
+            <input
+              type="number"
+              value={fps}
+              onChange={(e) => setFps(e.target.value === "" ? "" : Number(e.target.value))}
+              className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+            />
+          </label>
+        </div>
+        <div className="flex gap-3">
+          <label className="flex flex-1 flex-col gap-1 text-sm text-gray-300">
+            Name
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+              required
+            />
+          </label>
+          <label className="flex flex-1 flex-col gap-1 text-sm text-gray-300">
+            Procedure
+            <select
+              value={procedureId ?? ""}
+              onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
+              className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+            >
+              <option value="">None</option>
+              {(proceduresQuery.data ?? []).map((procedure) => (
+                <option key={procedure.id} value={procedure.id}>
+                  {procedure.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         {confirming && sequence!.annotation_count > 0 && (
           <p className="text-sm text-red-400">
             This will delete {sequence!.annotation_count} annotation{sequence!.annotation_count === 1 ? "" : "s"} on
@@ -201,48 +205,52 @@ export function SequenceForm({
   }
 
   return (
-    <form onSubmit={handleCreateSubmit} className="flex flex-col gap-3 rounded border border-gray-800 bg-gray-900 p-4">
+    <form onSubmit={handleCreateSubmit} className="flex flex-col gap-2 rounded border border-gray-800 bg-gray-900 p-4">
       <CropFields crop={crop} onChange={setCrop} />
-      <p className="text-sm text-gray-400">
-        Range: {startTime}s – {startTime + duration}s ({duration}s)
-      </p>
-      <label className="flex flex-col gap-1 text-sm text-gray-300">
-        Procedure
-        <select
-          value={procedureId ?? ""}
-          onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
-          className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-          required
-        >
-          <option value="" disabled>
-            Select a procedure
-          </option>
-          {(proceduresQuery.data ?? []).map((procedure) => (
-            <option key={procedure.id} value={procedure.id}>
-              {procedure.name}
+      <div className="flex items-end gap-3">
+        <p className="text-sm text-gray-400">
+          Range: {startTime}s – {startTime + duration}s ({duration}s)
+        </p>
+        <label className="flex w-20 flex-col gap-1 text-sm text-gray-300">
+          FPS
+          <input
+            type="number"
+            value={fps === "" ? 1 : fps}
+            onChange={(e) => setFps(Number(e.target.value))}
+            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+          />
+        </label>
+      </div>
+      <div className="flex gap-3">
+        <label className="flex flex-1 flex-col gap-1 text-sm text-gray-300">
+          Name
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+            required
+          />
+        </label>
+        <label className="flex flex-1 flex-col gap-1 text-sm text-gray-300">
+          Procedure
+          <select
+            value={procedureId ?? ""}
+            onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
+            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+            required
+          >
+            <option value="" disabled>
+              Select a procedure
             </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-gray-300">
-        Name
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-          required
-        />
-      </label>
-      <label className="flex w-24 flex-col gap-1 text-sm text-gray-300">
-        FPS
-        <input
-          type="number"
-          value={fps === "" ? 1 : fps}
-          onChange={(e) => setFps(Number(e.target.value))}
-          className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-        />
-      </label>
+            {(proceduresQuery.data ?? []).map((procedure) => (
+              <option key={procedure.id} value={procedure.id}>
+                {procedure.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {isError && <p className="text-sm text-red-400">Failed to create sequence. Please try again.</p>}
       <button
         type="submit"
