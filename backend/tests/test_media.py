@@ -51,11 +51,14 @@ def _auth_headers() -> dict[str, str]:
 
 def test_upload_video_creates_record():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "upload-test-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Test procedure"},
+            data={"title": "Test procedure", "procedure_id": procedure_id},
             headers=headers,
         )
     assert response.status_code == 201
@@ -64,14 +67,29 @@ def test_upload_video_creates_record():
     assert body["id"] > 0
 
 
+def test_upload_video_requires_procedure_id():
+    headers = _auth_headers()
+    with open(FIXTURE_VIDEO, "rb") as f:
+        response = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "No procedure"},
+            headers=headers,
+        )
+    assert response.status_code == 422
+
+
 def test_upload_video_stores_filename_and_size():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "filename-size-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         data = f.read()
     response = client.post(
         "/media/videos",
         files={"file": ("tiny.mp4", data, "video/mp4")},
-        data={"title": "Filename test"},
+        data={"title": "Filename test", "procedure_id": procedure_id},
         headers=headers,
     )
     assert response.status_code == 201
@@ -81,11 +99,14 @@ def test_upload_video_stores_filename_and_size():
 
 def test_list_videos_includes_uploaded():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "list-videos-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Listed procedure"},
+            data={"title": "Listed procedure", "procedure_id": procedure_id},
             headers=headers,
         )
     response = client.get("/media/videos", headers=headers)
@@ -96,11 +117,14 @@ def test_list_videos_includes_uploaded():
 
 def test_create_sequence_extracts_frames():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "extracts-frames-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Sequence source"},
+            data={"title": "Sequence source", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -131,7 +155,7 @@ def test_create_sequence_from_video_persists_selected_procedure_id():
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Procedure-tagged source"},
+            data={"title": "Procedure-tagged source", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -152,11 +176,14 @@ def test_create_sequence_from_video_persists_selected_procedure_id():
 
 def test_create_sequence_with_invalid_crop_box_returns_422_and_creates_no_sequence():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "invalid-crop-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Invalid crop source"},
+            data={"title": "Invalid crop source", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -181,11 +208,14 @@ def test_create_sequence_with_invalid_crop_box_returns_422_and_creates_no_sequen
 
 def test_create_sequence_with_negative_crop_value_returns_422():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "negative-crop-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Negative crop source"},
+            data={"title": "Negative crop source", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -228,11 +258,14 @@ def test_sequence_can_be_created_without_a_video():
 
 def test_get_frame_returns_browser_loadable_image_url():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "single-frame-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Single frame source"},
+            data={"title": "Single frame source", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -334,11 +367,14 @@ def test_create_standalone_sequence_requires_procedure_id():
 
 def test_list_sequences_for_video():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "sequence-listing-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Sequence listing source"},
+            data={"title": "Sequence listing source", "procedure_id": procedure_id},
             headers=headers,
         ).json()["id"]
 
@@ -600,11 +636,14 @@ def test_media_library_lists_videos_and_photo_sequences():
 
 def test_delete_video_without_sequences_succeeds():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "deletable-video-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos",
             files={"file": ("deletable.mp4", f, "video/mp4")},
-            data={"title": "Deletable video"},
+            data={"title": "Deletable video", "procedure_id": procedure_id},
             headers=headers,
         ).json()["id"]
 
@@ -617,11 +656,14 @@ def test_delete_video_without_sequences_succeeds():
 
 def test_delete_video_with_linked_sequence_returns_409():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "linked-video-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos",
             files={"file": ("linked.mp4", f, "video/mp4")},
-            data={"title": "Linked video"},
+            data={"title": "Linked video", "procedure_id": procedure_id},
             headers=headers,
         ).json()["id"]
     client.post(
@@ -653,11 +695,14 @@ def test_delete_photo_sequence_without_annotations_succeeds():
 
 def test_delete_video_derived_sequence_via_media_endpoint_returns_404():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "not-deletable-here-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos",
             files={"file": ("not_deletable_here.mp4", f, "video/mp4")},
-            data={"title": "Not deletable here"},
+            data={"title": "Not deletable here", "procedure_id": procedure_id},
             headers=headers,
         ).json()["id"]
     sequence_id = client.post(
@@ -719,11 +764,14 @@ def test_probe_codec_compatibility_accepts_vp8_webm():
 
 def test_upload_video_computes_browser_playable_true_for_h264():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "h264-source-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO_H264, "rb") as f:
         response = client.post(
             "/media/videos",
             files={"file": ("tiny_h264.mp4", f, "video/mp4")},
-            data={"title": "H264 source"},
+            data={"title": "H264 source", "procedure_id": procedure_id},
             headers=headers,
         )
     assert response.status_code == 201
@@ -734,11 +782,14 @@ def test_upload_video_computes_browser_playable_true_for_h264():
 
 def test_upload_video_computes_browser_playable_false_for_mpeg4():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "mpeg4-source-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "MPEG4 source"},
+            data={"title": "MPEG4 source", "procedure_id": procedure_id},
             headers=headers,
         )
     assert response.status_code == 201
@@ -749,11 +800,14 @@ def test_upload_video_computes_browser_playable_false_for_mpeg4():
 
 def test_get_video_by_id_returns_full_record():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "fetch-me-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO_H264, "rb") as f:
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny_h264.mp4", f, "video/mp4")},
-            data={"title": "Fetch me"},
+            data={"title": "Fetch me", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -773,11 +827,14 @@ def test_get_video_404_for_missing_video():
 
 def test_transcode_video_creates_job():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "needs-transcode-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:  # tiny.mp4 -- mpeg4, not playable
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Needs transcode"},
+            data={"title": "Needs transcode", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -797,11 +854,14 @@ def test_transcode_video_404_for_missing_video():
 
 def test_transcode_video_409_when_already_playable():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "already-fine-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO_H264, "rb") as f:  # already h264
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny_h264.mp4", f, "video/mp4")},
-            data={"title": "Already fine"},
+            data={"title": "Already fine", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -812,11 +872,14 @@ def test_transcode_video_409_when_already_playable():
 
 def test_transcode_video_409_when_already_pending():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "double-transcode-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "Double transcode"},
+            data={"title": "Double transcode", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -830,11 +893,14 @@ def test_transcode_video_409_when_already_pending():
 
 def test_get_sequence_reports_zero_annotation_count_when_none_exist():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "annotation-count-source-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "annotation count source"},
+            data={"title": "annotation count source", "procedure_id": procedure_id},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -852,11 +918,14 @@ def test_get_sequence_reports_zero_annotation_count_when_none_exist():
 
 def test_get_sequence_reports_actual_annotation_count():
     headers = _auth_headers()
+    procedure_id_for_video = client.post(
+        "/taxonomy/procedures", json={"name": "annotation-count-source-2-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         upload_response = client.post(
             "/media/videos",
             files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "annotation count source 2"},
+            data={"title": "annotation count source 2", "procedure_id": procedure_id_for_video},
             headers=headers,
         )
     video_id = upload_response.json()["id"]
@@ -940,10 +1009,13 @@ def test_sequence_stats_reports_zero_for_empty_sequence():
 
 def test_sequence_stats_reports_frame_count_and_resolution_from_first_frame():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "stats-resolution-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "stats resolution source"}, headers=headers,
+            data={"title": "stats resolution source", "procedure_id": procedure_id}, headers=headers,
         ).json()["id"]
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
@@ -964,10 +1036,13 @@ def test_sequence_stats_reports_frame_count_and_resolution_from_first_frame():
 
 def test_sequence_stats_groups_annotations_by_label_across_types():
     headers = _auth_headers()
+    video_procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "stats-label-source-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "stats label source"}, headers=headers,
+            data={"title": "stats label source", "procedure_id": video_procedure_id}, headers=headers,
         ).json()["id"]
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
@@ -1062,7 +1137,7 @@ def test_patch_sequence_rename_updates_name_and_procedure():
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "patch rename source"}, headers=headers,
+            data={"title": "patch rename source", "procedure_id": procedure_id}, headers=headers,
         ).json()["id"]
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
@@ -1086,10 +1161,13 @@ def test_patch_sequence_rename_updates_name_and_procedure():
 
 def test_patch_sequence_rename_leaves_frames_untouched():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "patch-rename-frames-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "patch rename frames source"}, headers=headers,
+            data={"title": "patch rename frames source", "procedure_id": procedure_id}, headers=headers,
         ).json()["id"]
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
@@ -1107,10 +1185,13 @@ def test_patch_sequence_rename_leaves_frames_untouched():
 
 def test_patch_sequence_recut_replaces_frames():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "patch-recut-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "patch recut source"}, headers=headers,
+            data={"title": "patch recut source", "procedure_id": procedure_id}, headers=headers,
         ).json()["id"]
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
@@ -1133,10 +1214,13 @@ def test_patch_sequence_recut_replaces_frames():
 
 def test_patch_sequence_recut_with_crop_persists_it():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "patch-recut-crop-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "patch recut crop source"}, headers=headers,
+            data={"title": "patch recut crop source", "procedure_id": procedure_id}, headers=headers,
         ).json()["id"]
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
@@ -1159,10 +1243,13 @@ def test_patch_sequence_recut_with_crop_persists_it():
 
 def test_patch_sequence_recut_without_crop_keeps_existing_crop_box():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "patch-recut-no-crop-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "patch recut no-crop source"}, headers=headers,
+            data={"title": "patch recut no-crop source", "procedure_id": procedure_id}, headers=headers,
         ).json()["id"]
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
@@ -1205,10 +1292,13 @@ def test_patch_sequence_recut_on_standalone_sequence_returns_404():
 
 def test_patch_sequence_recut_with_out_of_bounds_range_returns_422():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "patch-recut-oob-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "patch recut oob source"}, headers=headers,
+            data={"title": "patch recut oob source", "procedure_id": procedure_id}, headers=headers,
         ).json()["id"]
     video_duration = client.get(f"/media/videos/{video_id}", headers=headers).json()["duration_seconds"]
     sequence_id = client.post(
@@ -1236,10 +1326,13 @@ def test_patch_sequence_404_for_missing_sequence():
 
 def test_patch_sequence_recut_with_zero_fps_returns_422():
     headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "recut-zero-fps-procedure"}, headers=headers
+    ).json()["id"]
     with open(FIXTURE_VIDEO, "rb") as f:
         video_id = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "patch recut zero fps source"}, headers=headers,
+            data={"title": "patch recut zero fps source", "procedure_id": procedure_id}, headers=headers,
         ).json()["id"]
     sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",

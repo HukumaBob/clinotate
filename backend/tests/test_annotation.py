@@ -18,11 +18,25 @@ def _headers(token: str) -> dict[str, str]:
 def _create_frame(token: str) -> int:
     headers = _headers(token)
     from pathlib import Path
+
+    from app.db import SessionLocal
+    from app.taxonomy.models import Procedure
+
+    session = SessionLocal()
+    procedure = session.query(Procedure).filter_by(name="annotation-frame-procedure").one_or_none()
+    if procedure is None:
+        procedure = Procedure(name="annotation-frame-procedure")
+        session.add(procedure)
+        session.commit()
+        session.refresh(procedure)
+    procedure_id = procedure.id
+    session.close()
+
     fixture = Path(__file__).parent / "fixtures" / "tiny.mp4"
     with open(fixture, "rb") as f:
         upload = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "annotation source"}, headers=headers,
+            data={"title": "annotation source", "procedure_id": procedure_id}, headers=headers,
         )
     video_id = upload.json()["id"]
     sequence = client.post(

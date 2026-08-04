@@ -235,24 +235,12 @@ export function SequenceForm({
           required
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm text-gray-300">
+      <div className="flex flex-col gap-1 text-sm text-gray-300">
         Procedure
-        <select
-          value={procedureId ?? ""}
-          onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
-          className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
-          required
-        >
-          <option value="" disabled>
-            Select a procedure
-          </option>
-          {(proceduresQuery.data ?? []).map((procedure) => (
-            <option key={procedure.id} value={procedure.id}>
-              {procedure.name}
-            </option>
-          ))}
-        </select>
-      </label>
+        <p className="text-sm text-gray-100">
+          {proceduresQuery.data?.find((procedure) => procedure.id === procedureId)?.name ?? "—"}
+        </p>
+      </div>
       {isError && <p className="text-xs text-red-400">Failed to create sequence. Please try again.</p>}
       <button
         type="submit"

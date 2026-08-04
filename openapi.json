@@ -2375,21 +2375,15 @@
             "title": "Title"
           },
           "procedure_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "integer",
             "title": "Procedure Id"
           }
         },
         "type": "object",
         "required": [
           "file",
-          "title"
+          "title",
+          "procedure_id"
         ],
         "title": "Body_upload_video_media_videos_post"
       },

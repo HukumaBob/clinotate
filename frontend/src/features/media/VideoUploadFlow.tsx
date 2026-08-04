@@ -12,7 +12,7 @@ export function VideoUploadFlow({ onVideoUploaded }: { onVideoUploaded: (videoId
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!file) return;
+    if (!file || procedureId === undefined) return;
     uploadVideo.mutate(
       { file, title, procedureId },
       { onSuccess: (video) => video && onVideoUploaded(video.id) }
@@ -38,8 +38,11 @@ export function VideoUploadFlow({ onVideoUploaded }: { onVideoUploaded: (videoId
           value={procedureId ?? ""}
           onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
           className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+          required
         >
-          <option value="">None</option>
+          <option value="" disabled>
+            Select a procedure
+          </option>
           {(proceduresQuery.data ?? []).map((procedure) => (
             <option key={procedure.id} value={procedure.id}>
               {procedure.name}

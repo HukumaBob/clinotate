@@ -181,6 +181,35 @@ describe("SequenceForm create mode (no sequence prop)", () => {
     });
   });
 
+  it("shows the inherited procedure as read-only text instead of a select in create mode", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/taxonomy/procedures") {
+        return { data: [{ id: 1, name: "EGD" }], error: undefined } as never;
+      }
+      if (path === "/media/sequences/suggest-name") {
+        return { data: { name: "EGD 2026-07-29 #1" }, error: undefined } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    render(
+      <SequenceForm
+        videoId={5}
+        markStart={10}
+        markEnd={30}
+        procedureId={1}
+        onCropChange={vi.fn()}
+        existingSequences={[]}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    await screen.findByRole("button", { name: /create sequence/i });
+    expect(screen.queryByRole("combobox", { name: /procedure/i })).not.toBeInTheDocument();
+    expect(await screen.findByText("EGD")).toBeInTheDocument();
+  });
+
   it("does not render a stats panel in create mode", async () => {
     vi.mocked(apiClient.GET).mockImplementation(async (path) => {
       if (path === "/taxonomy/procedures") {

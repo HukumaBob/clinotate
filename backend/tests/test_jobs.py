@@ -64,11 +64,23 @@ def test_get_job_returns_current_state():
 
 def _create_frame(token: str) -> int:
     headers = _auth_headers(token)
+    from app.db import SessionLocal
+    from app.taxonomy.models import Procedure
+
+    session = SessionLocal()
+    procedure = session.query(Procedure).filter_by(name="jobs-frame-procedure").one_or_none()
+    if procedure is None:
+        procedure = Procedure(name="jobs-frame-procedure")
+        session.add(procedure)
+        session.commit()
+        session.refresh(procedure)
+    procedure_id = procedure.id
+    session.close()
     fixture = Path(__file__).parent / "fixtures" / "tiny.mp4"
     with open(fixture, "rb") as f:
         upload = client.post(
             "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
-            data={"title": "jobs test source"}, headers=headers,
+            data={"title": "jobs test source", "procedure_id": procedure_id}, headers=headers,
         )
     video_id = upload.json()["id"]
     sequence = client.post(

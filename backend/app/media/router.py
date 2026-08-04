@@ -44,7 +44,7 @@ router = APIRouter(prefix="/media", tags=["media"], dependencies=[Depends(get_cu
 async def upload_video(
     file: UploadFile,
     title: str = Form(...),
-    procedure_id: int | None = Form(None),
+    procedure_id: int = Form(...),
     session: Session = Depends(get_session),
     storage: StorageService = Depends(get_storage_service),
 ) -> VideoRead:
