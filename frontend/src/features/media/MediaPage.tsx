@@ -16,7 +16,7 @@ export function MediaPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 p-8 text-gray-100">
-      <div className="mb-8">
+      <div className="mb-6">
         {selectedVideoId !== null ? (
           <VideoReviewPlayer
             videoId={selectedVideoId}
@@ -24,7 +24,7 @@ export function MediaPage() {
             onOpenSequence={goToSequence}
           />
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <VideoUploadFlow onVideoUploaded={setSelectedVideoId} />
             <PhotosUploadFlow onCreated={goToSequence} />
           </div>

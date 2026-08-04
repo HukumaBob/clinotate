@@ -353,4 +353,41 @@ describe("VideoReviewPlayer", () => {
 
     expect(currentTimeSetTo).toBe(30);
   });
+
+  it("shows native player controls only while the cursor hovers the video, so the scrubber doesn't obscure the crop overlay by default", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/media/videos/{video_id}") {
+        return {
+          data: {
+            id: 5, filename: "a.mp4", title: "A", procedure_id: 1, fps: 1,
+            duration_seconds: 60, size_bytes: 100,
+            browser_playable: true, container: "mov,mp4,m4a,3gp,3g2,mj2", video_codec: "h264",
+            stream_url: "https://minio.local/videos/a.mp4?signed=1",
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/media/videos/{video_id}/sequences") {
+        return { data: [], error: undefined } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    render(<VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
+
+    const video = await waitFor(() => {
+      const el = document.querySelector("video");
+      expect(el).toBeInTheDocument();
+      return el as HTMLVideoElement;
+    });
+
+    expect(video).not.toHaveAttribute("controls");
+
+    const container = video.parentElement as HTMLElement;
+    fireEvent.mouseEnter(container);
+    expect(video).toHaveAttribute("controls");
+
+    fireEvent.mouseLeave(container);
+    expect(video).not.toHaveAttribute("controls");
+  });
 });

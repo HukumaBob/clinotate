@@ -115,68 +115,66 @@ export function SequenceForm({
   if (isEdit) {
     return (
       <form onSubmit={handleEditSubmit} className="flex flex-col gap-2 rounded border border-gray-800 bg-gray-900 p-4">
-        <CropFields crop={crop} onChange={setCrop} />
         <div className="flex items-end gap-3">
-          <p className="text-sm text-gray-400">
-            Range: {startTime}s – {startTime + duration}s ({duration}s)
-          </p>
-          <label className="flex w-20 flex-col gap-1 text-sm text-gray-300">
+          <CropFields crop={crop} onChange={setCrop} />
+          <label className="flex w-16 flex-col gap-1 text-sm text-gray-300">
             FPS
             <input
               type="number"
               value={fps}
               onChange={(e) => setFps(e.target.value === "" ? "" : Number(e.target.value))}
-              className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+              className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
             />
           </label>
         </div>
-        <div className="flex gap-3">
-          <label className="flex flex-1 flex-col gap-1 text-sm text-gray-300">
-            Name
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-              required
-            />
-          </label>
-          <label className="flex flex-1 flex-col gap-1 text-sm text-gray-300">
-            Procedure
-            <select
-              value={procedureId ?? ""}
-              onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
-              className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-            >
-              <option value="">None</option>
-              {(proceduresQuery.data ?? []).map((procedure) => (
-                <option key={procedure.id} value={procedure.id}>
-                  {procedure.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <p className="text-sm text-gray-400">
+          Range: {startTime}s – {startTime + duration}s ({duration}s)
+        </p>
+        <label className="flex flex-col gap-1 text-sm text-gray-300">
+          Name
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+            required
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-gray-300">
+          Procedure
+          <select
+            value={procedureId ?? ""}
+            onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
+            className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+          >
+            <option value="">None</option>
+            {(proceduresQuery.data ?? []).map((procedure) => (
+              <option key={procedure.id} value={procedure.id}>
+                {procedure.name}
+              </option>
+            ))}
+          </select>
+        </label>
         {confirming && sequence!.annotation_count > 0 && (
-          <p className="text-sm text-red-400">
+          <p className="text-xs text-red-400">
             This will delete {sequence!.annotation_count} annotation{sequence!.annotation_count === 1 ? "" : "s"} on
             this sequence&apos;s current frames.
           </p>
         )}
-        {isError && <p className="text-sm text-red-400">Save failed. Please try again.</p>}
+        {isError && <p className="text-xs text-red-400">Save failed. Please try again.</p>}
         {!confirming ? (
           <div className="flex gap-2">
             <button
               type="submit"
               disabled={isPending || (needsRecut && fps === "")}
-              className="rounded bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+              className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
             >
               Save
             </button>
             <button
               type="button"
               onClick={onDone}
-              className="rounded border border-gray-700 px-3 py-2 text-sm hover:bg-gray-800"
+              className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
             >
               Close
             </button>
@@ -187,14 +185,14 @@ export function SequenceForm({
               type="button"
               onClick={handleConfirm}
               disabled={isPending}
-              className="rounded bg-red-600 px-3 py-2 font-medium text-white hover:bg-red-500 disabled:opacity-50"
+              className="rounded bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-600 disabled:opacity-50"
             >
               Confirm
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="rounded border border-gray-700 px-3 py-2 text-sm hover:bg-gray-800"
+              className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
             >
               Cancel
             </button>
@@ -206,56 +204,54 @@ export function SequenceForm({
 
   return (
     <form onSubmit={handleCreateSubmit} className="flex flex-col gap-2 rounded border border-gray-800 bg-gray-900 p-4">
-      <CropFields crop={crop} onChange={setCrop} />
       <div className="flex items-end gap-3">
-        <p className="text-sm text-gray-400">
-          Range: {startTime}s – {startTime + duration}s ({duration}s)
-        </p>
-        <label className="flex w-20 flex-col gap-1 text-sm text-gray-300">
+        <CropFields crop={crop} onChange={setCrop} />
+        <label className="flex w-16 flex-col gap-1 text-sm text-gray-300">
           FPS
           <input
             type="number"
             value={fps === "" ? 1 : fps}
             onChange={(e) => setFps(Number(e.target.value))}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+            className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
           />
         </label>
       </div>
-      <div className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1 text-sm text-gray-300">
-          Name
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-            required
-          />
-        </label>
-        <label className="flex flex-1 flex-col gap-1 text-sm text-gray-300">
-          Procedure
-          <select
-            value={procedureId ?? ""}
-            onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-            required
-          >
-            <option value="" disabled>
-              Select a procedure
+      <p className="text-sm text-gray-400">
+        Range: {startTime}s – {startTime + duration}s ({duration}s)
+      </p>
+      <label className="flex flex-col gap-1 text-sm text-gray-300">
+        Name
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+          required
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm text-gray-300">
+        Procedure
+        <select
+          value={procedureId ?? ""}
+          onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : undefined)}
+          className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+          required
+        >
+          <option value="" disabled>
+            Select a procedure
+          </option>
+          {(proceduresQuery.data ?? []).map((procedure) => (
+            <option key={procedure.id} value={procedure.id}>
+              {procedure.name}
             </option>
-            {(proceduresQuery.data ?? []).map((procedure) => (
-              <option key={procedure.id} value={procedure.id}>
-                {procedure.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {isError && <p className="text-sm text-red-400">Failed to create sequence. Please try again.</p>}
+          ))}
+        </select>
+      </label>
+      {isError && <p className="text-xs text-red-400">Failed to create sequence. Please try again.</p>}
       <button
         type="submit"
         disabled={isPending}
-        className="rounded bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+        className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
       >
         {isPending ? "Creating…" : "Create sequence"}
       </button>

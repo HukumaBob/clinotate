@@ -20,7 +20,7 @@ export function CropFields({
             max={100}
             value={crop[side]}
             onChange={(e) => onChange({ ...crop, [side]: Number(e.target.value) })}
-            className="w-20 rounded border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+            className="w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
           />
         </label>
       ))}

@@ -40,6 +40,7 @@ export function VideoReviewPlayer({
   const [markStart, setMarkStart] = useState<number | null>(() => loadStoredMarks(videoId).markStart);
   const [markEnd, setMarkEnd] = useState<number | null>(() => loadStoredMarks(videoId).markEnd);
   const [videoReady, setVideoReady] = useState(false);
+  const [videoHovered, setVideoHovered] = useState(false);
   const [editingSequenceId, setEditingSequenceId] = useState<number | null>(null);
   const [activeCrop, setActiveCrop] = useState<Crop | null>(null);
   const [mediaRect, setMediaRect] = useState<{ left: number; top: number; width: number; height: number } | null>(
@@ -114,11 +115,15 @@ export function VideoReviewPlayer({
       ) : video ? (
         <>
           <div className="flex flex-col gap-4 lg:flex-row">
-            <div className="relative min-w-0 flex-[2]">
+            <div
+              className="relative min-w-0 flex-[2]"
+              onMouseEnter={() => setVideoHovered(true)}
+              onMouseLeave={() => setVideoHovered(false)}
+            >
               <video
                 ref={videoRef}
                 src={video.stream_url}
-                controls
+                controls={videoHovered}
                 className="max-h-[40vh] w-full rounded bg-black"
                 onLoadedMetadata={() => {
                   setVideoReady(true);

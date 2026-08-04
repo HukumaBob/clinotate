@@ -35,46 +35,46 @@ export function MediaLibraryTable({
   }
 
   return (
-    <table className="w-full text-left text-sm text-gray-300">
-      <thead>
-        <tr className="border-b border-gray-800 text-gray-400">
-          <th className="py-2">Filename</th>
-          <th>Type</th>
-          <th>Procedure</th>
-          <th>Uploaded</th>
-          <th>Size</th>
-          <th>Sequences</th>
-          <th />
+    <table className="w-full text-left text-sm">
+      <thead className="bg-gray-900 text-xs uppercase text-gray-400">
+        <tr>
+          <th className="py-1.5 px-3">Filename</th>
+          <th className="py-1.5 px-3">Type</th>
+          <th className="py-1.5 px-3">Procedure</th>
+          <th className="py-1.5 px-3">Uploaded</th>
+          <th className="py-1.5 px-3">Size</th>
+          <th className="py-1.5 px-3">Sequences</th>
+          <th className="py-1.5 px-3" />
         </tr>
       </thead>
       <tbody>
         {(libraryQuery.data ?? []).map((item) => {
           const key = `${item.kind}-${item.id}`;
           return (
-            <tr key={key} className="border-b border-gray-900">
+            <tr key={key} className="border-b border-gray-800 hover:bg-gray-900/50">
               <td
-                className={`py-2 ${item.kind === "video" ? "cursor-pointer text-blue-400 hover:underline" : ""}`}
+                className={`py-1.5 px-3 text-gray-100 ${item.kind === "video" ? "cursor-pointer text-blue-400 hover:text-blue-300 hover:underline" : ""}`}
                 onClick={item.kind === "video" ? () => onSelectVideo?.(item.id) : undefined}
               >
                 {item.filename}
               </td>
-              <td>{item.kind}</td>
-              <td>{item.procedure_id ?? "—"}</td>
-              <td>{new Date(item.uploaded_at).toLocaleDateString()}</td>
-              <td>{formatSize(item.size_bytes)}</td>
-              <td>{item.linked_sequence_count}</td>
-              <td>
+              <td className="py-1.5 px-3 text-gray-100">{item.kind}</td>
+              <td className="py-1.5 px-3 text-gray-100">{item.procedure_id ?? "—"}</td>
+              <td className="py-1.5 px-3 text-gray-100">{new Date(item.uploaded_at).toLocaleDateString()}</td>
+              <td className="py-1.5 px-3 text-gray-100">{formatSize(item.size_bytes)}</td>
+              <td className="py-1.5 px-3 text-gray-100">{item.linked_sequence_count}</td>
+              <td className="py-1.5 px-3 text-right">
                 {confirmingKey === key ? (
                   <button
                     onClick={() => handleDelete(item.id, item.kind)}
-                    className="rounded bg-red-600 px-2 py-1 text-white hover:bg-red-500"
+                    className="rounded bg-red-700 px-3 py-1.5 text-white hover:bg-red-600"
                   >
                     Confirm
                   </button>
                 ) : (
                   <button
                     onClick={() => setConfirmingKey(key)}
-                    className="rounded border border-gray-700 px-2 py-1 hover:bg-gray-800"
+                    className="rounded border border-gray-700 px-3 py-1.5 text-gray-100 hover:bg-gray-800"
                   >
                     Delete
                   </button>
