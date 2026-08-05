@@ -15,7 +15,7 @@ export function MediaPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-gray-950 text-gray-100">
+    <div className="flex h-full flex-col overflow-hidden bg-gray-950 text-gray-100">
       <div className="shrink-0 px-8 pt-8">
         {selectedVideoId !== null ? (
           <VideoReviewPlayer

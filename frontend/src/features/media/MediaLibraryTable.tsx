@@ -36,7 +36,7 @@ export function MediaLibraryTable({
 
   return (
     <table className="w-full text-left text-sm">
-      <thead className="bg-gray-900 text-xs uppercase text-gray-400">
+      <thead className="sticky top-0 z-10 bg-gray-900 text-xs uppercase text-gray-400">
         <tr>
           <th className="py-1.5 px-3">Filename</th>
           <th className="py-1.5 px-3">Type</th>

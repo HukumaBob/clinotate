@@ -323,11 +323,11 @@ Current:
   );
 ```
 
-New — root becomes a fixed-viewport flex column; the upload/player block keeps its own top padding and no longer scrolls with the page; the table moves into a `flex-1 overflow-y-auto` region that gets the bottom padding and scrolls independently:
+New — root becomes a flex column that fills its parent; the upload/player block keeps its own top padding and no longer scrolls with the page; the table moves into a `flex-1 overflow-y-auto` region that gets the bottom padding and scrolls independently. `MediaPage` renders inside `AppLayout`'s `<main className="flex-1 overflow-auto">`, not directly into the viewport (which sits below a `h-14` header inside `AppLayout`'s own `h-screen` column), so it must size against that parent with `h-full`, not against `100vh` with `h-screen` — matching the pattern already used by `SequenceGridPage`/`VideoListPage` (`min-h-full`):
 
 ```tsx
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-gray-950 text-gray-100">
+    <div className="flex h-full flex-col overflow-hidden bg-gray-950 text-gray-100">
       <div className="shrink-0 px-8 pt-8">
         {selectedVideoId !== null ? (
           <VideoReviewPlayer
@@ -349,7 +349,7 @@ New — root becomes a fixed-viewport flex column; the upload/player block keeps
   );
 ```
 
-Notes on this mapping: the old outer `p-8` (8-unit padding on all sides) is split into `px-8 pt-8` on the top region (keeps left/right/top padding) and `px-8 pb-8` on the scroll region (keeps left/right/bottom padding — the two regions' side padding must match so content doesn't visually shift left/right between them). The old `mb-6` spacer between the upload block and the table becomes `mt-6` on the scroll region, preserving the same visual gap. `shrink-0` on the top region stops flexbox from compressing it if the scroll region's content is tall — without it, a flex child with no explicit height can shrink below its content's natural size.
+Notes on this mapping: the old outer `p-8` (8-unit padding on all sides) is split into `px-8 pt-8` on the top region (keeps left/right/top padding) and `px-8 pb-8` on the scroll region (keeps left/right/bottom padding — the two regions' side padding must match so content doesn't visually shift left/right between them). The old `mb-6` spacer between the upload block and the table becomes `mt-6` on the scroll region, preserving the same visual gap. `shrink-0` on the top region stops flexbox from compressing it if the scroll region's content is tall — without it, a flex child with no explicit height can shrink below its content's natural size. Using `h-full` instead of `h-screen` is load-bearing, not cosmetic: `h-screen` (`100vh`) is 56px taller than `MediaPage`'s actual parent (`AppLayout`'s `<main>`, which sits below a `h-14` header), so it would overflow that container and produce a second, outer scrollbar that defeats the sticky layout entirely.
 
 - [ ] **Step 2: Type-check and run the full frontend test suite**
 

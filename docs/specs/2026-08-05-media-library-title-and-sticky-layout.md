@@ -40,8 +40,12 @@ Two usability issues in the Media screen (`frontend/src/features/media/MediaPage
    secondary technical detail. Photo rows keep their current single-line
    `filename` display unchanged — there's nothing to layer under it.
 3. **Sticky-header layout replaces the scrolling page.** `MediaPage.tsx`'s
-   root becomes a fixed-viewport flex column (`h-screen` instead of
-   `min-h-screen`, `overflow-hidden`) with two stacked regions:
+   root becomes a flex column that fills its parent (`h-full` instead of
+   `min-h-screen`, `overflow-hidden`) with two stacked regions. `MediaPage`
+   renders inside `AppLayout`'s `<main className="flex-1 overflow-auto">`,
+   not directly into the viewport, so it must size against that parent
+   rather than `100vh` — the same pattern already used by
+   `SequenceGridPage`/`VideoListPage` (`min-h-full`):
    - a non-scrolling top region holding the upload forms /
      `VideoReviewPlayer` (whichever is active), sized to its content;
    - a `flex-1 overflow-y-auto` region below it holding only
@@ -71,7 +75,7 @@ Two usability issues in the Media screen (`frontend/src/features/media/MediaPage
 
 `frontend/src/features/media/MediaPage.tsx`:
 - Restructure the root `<div>` from `min-h-screen ... p-8` (page-scrolls)
-  to a `h-screen overflow-hidden flex flex-col` layout: a top, non-scrolling
+  to a `h-full overflow-hidden flex flex-col` layout: a top, non-scrolling
   section (padding `px-8 pt-8`) containing the existing upload-forms /
   `VideoReviewPlayer` conditional block, and a `flex-1 overflow-y-auto px-8
   pb-8` section containing `MediaLibraryTable`.
