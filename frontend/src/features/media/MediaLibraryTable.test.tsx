@@ -184,4 +184,60 @@ describe("MediaLibraryTable", () => {
     expect(screen.queryByText("null")).not.toBeInTheDocument();
     expect(screen.queryByText("undefined")).not.toBeInTheDocument();
   });
+
+  it("shows the procedure's name instead of its raw id", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/taxonomy/procedures") {
+        return { data: [{ id: 730, name: "colono" }], error: undefined } as never;
+      }
+      return {
+        data: [
+          {
+            id: 30,
+            kind: "video",
+            filename: "colono_video.mp4",
+            title: "Colono video",
+            procedure_id: 730,
+            uploaded_at: "2026-07-28T00:00:00Z",
+            size_bytes: 1_000,
+            linked_sequence_count: 0,
+          },
+        ],
+        error: undefined,
+      } as never;
+    });
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    expect(await screen.findByText("colono")).toBeInTheDocument();
+    expect(screen.queryByText("730")).not.toBeInTheDocument();
+  });
+
+  it("shows the raw procedure id while procedures are still loading, and a dash when there is none", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/taxonomy/procedures") {
+        return { data: [{ id: 730, name: "colono" }], error: undefined } as never;
+      }
+      return {
+        data: [
+          {
+            id: 31,
+            kind: "video",
+            filename: "no_procedure.mp4",
+            title: "No procedure video",
+            procedure_id: null,
+            uploaded_at: "2026-07-28T00:00:00Z",
+            size_bytes: 1_000,
+            linked_sequence_count: 0,
+          },
+        ],
+        error: undefined,
+      } as never;
+    });
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    expect(await screen.findByText("no_procedure.mp4")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
 });

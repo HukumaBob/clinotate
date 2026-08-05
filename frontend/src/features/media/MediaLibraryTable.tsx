@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useDeleteSequence, useDeleteVideo, useMediaLibrary } from "../../entities/useMediaLibrary";
+import { useProcedures } from "../../entities/useProcedures";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -14,6 +15,7 @@ export function MediaLibraryTable({
   onSelectVideo?: (videoId: number) => void;
 } = {}) {
   const libraryQuery = useMediaLibrary();
+  const proceduresQuery = useProcedures();
   const deleteVideo = useDeleteVideo();
   const deleteSequence = useDeleteSequence();
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
@@ -50,6 +52,11 @@ export function MediaLibraryTable({
       <tbody>
         {(libraryQuery.data ?? []).map((item) => {
           const key = `${item.kind}-${item.id}`;
+          const procedureName =
+            item.procedure_id === null
+              ? "—"
+              : (proceduresQuery.data?.find((procedure) => procedure.id === item.procedure_id)?.name ??
+                item.procedure_id);
           return (
             <tr key={key} className="border-b border-gray-800 hover:bg-gray-900/50">
               <td
@@ -66,7 +73,7 @@ export function MediaLibraryTable({
                 )}
               </td>
               <td className="py-1.5 px-3 text-gray-100">{item.kind}</td>
-              <td className="py-1.5 px-3 text-gray-100">{item.procedure_id ?? "—"}</td>
+              <td className="py-1.5 px-3 text-gray-100">{procedureName}</td>
               <td className="py-1.5 px-3 text-gray-100">{new Date(item.uploaded_at).toLocaleDateString()}</td>
               <td className="py-1.5 px-3 text-gray-100">{formatSize(item.size_bytes)}</td>
               <td className="py-1.5 px-3 text-gray-100">{item.linked_sequence_count}</td>
