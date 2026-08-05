@@ -31,49 +31,51 @@ export function CascadingLabelPicker({ store, procedureId }: CascadingLabelPicke
 
   return (
     <div className="space-y-2">
-      <label className="block text-xs text-gray-400">
-        Category
-        <select
-          className={SELECT_CLASSES}
-          value={labelCategoryId ?? ""}
-          onChange={(event) =>
-            setLabelSelection({
-              labelCategoryId: event.target.value ? Number(event.target.value) : null,
-              labelClassification: null,
-              labelTagId: null,
-            })
-          }
-        >
-          <option value="">Select category</option>
-          {tree.map((node) => (
-            <option key={node.category.id} value={node.category.id}>
-              {node.category.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex gap-2">
+        <label className="block flex-1 text-xs text-gray-400">
+          Category
+          <select
+            className={SELECT_CLASSES}
+            value={labelCategoryId ?? ""}
+            onChange={(event) =>
+              setLabelSelection({
+                labelCategoryId: event.target.value ? Number(event.target.value) : null,
+                labelClassification: null,
+                labelTagId: null,
+              })
+            }
+          >
+            <option value="">Select category</option>
+            {tree.map((node) => (
+              <option key={node.category.id} value={node.category.id}>
+                {node.category.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <label className="block text-xs text-gray-400">
-        Classification
-        <select
-          className={SELECT_CLASSES}
-          value={labelClassification ?? ""}
-          disabled={!selectedCategory}
-          onChange={(event) =>
-            setLabelSelection({
-              labelClassification: event.target.value ? Number(event.target.value) : null,
-              labelTagId: null,
-            } as never)
-          }
-        >
-          <option value="">All</option>
-          {evaluationTypeOptions.map(({ evaluation_type: evaluationType }) => (
-            <option key={evaluationType.id} value={evaluationType.id}>
-              {evaluationType.name}
-            </option>
-          ))}
-        </select>
-      </label>
+        <label className="block flex-1 text-xs text-gray-400">
+          Classification
+          <select
+            className={SELECT_CLASSES}
+            value={labelClassification ?? ""}
+            disabled={!selectedCategory}
+            onChange={(event) =>
+              setLabelSelection({
+                labelClassification: event.target.value ? Number(event.target.value) : null,
+                labelTagId: null,
+              } as never)
+            }
+          >
+            <option value="">All</option>
+            {evaluationTypeOptions.map(({ evaluation_type: evaluationType }) => (
+              <option key={evaluationType.id} value={evaluationType.id}>
+                {evaluationType.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <label className="block text-xs text-gray-400">
         Tag

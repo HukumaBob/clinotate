@@ -27,9 +27,11 @@ export function ToolsPanel({ store, annotations, frameId, onTrack, procedureId }
   const setActiveTool = useStore(store, (state) => state.setActiveTool);
   const color = useStore(store, (state) => state.color);
   const setColor = useStore(store, (state) => state.setColor);
+  const labelTagId = useStore(store, (state) => state.labelTagId);
+  const toolDisabled = labelTagId === null;
 
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-800 bg-gray-950 p-4">
+    <aside className="flex w-[420px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-800 bg-gray-950 p-4">
       <section className="space-y-1">
         <h2 className="text-[11px] font-medium text-gray-500">Model</h2>
         <div role="tablist" className="flex gap-1 rounded-md border border-gray-800 bg-gray-900 p-1">
@@ -58,14 +60,22 @@ export function ToolsPanel({ store, annotations, frameId, onTrack, procedureId }
       </section>
 
       <section className="space-y-1">
+        <h2 className="text-[11px] font-medium text-gray-500">Label</h2>
+        <CascadingLabelPicker store={store} procedureId={procedureId} />
+      </section>
+
+      <div className="border-t border-gray-800" />
+
+      <section className="space-y-1">
         <h2 className="text-[11px] font-medium text-gray-500">Tool</h2>
         <div className="flex gap-1 rounded-md border border-gray-800 bg-gray-900 p-1">
           {TOOLS.map((tool) => (
             <button
               key={tool}
               type="button"
+              disabled={toolDisabled}
               onClick={() => setActiveTool(tool)}
-              className={`flex-1 rounded px-2 py-1.5 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded px-2 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                 activeTool === tool ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
               }`}
             >
@@ -73,23 +83,19 @@ export function ToolsPanel({ store, annotations, frameId, onTrack, procedureId }
             </button>
           ))}
         </div>
-        {activeTool === "point" && (
+        {toolDisabled && (
+          <p className="pt-1 text-[11px] leading-snug text-gray-500">Select a tag above to start annotating.</p>
+        )}
+        {!toolDisabled && activeTool === "point" && (
           <p className="pt-1 text-[11px] leading-snug text-gray-500">
             Click = include · Shift+click = exclude · Drag = box · Ctrl+click a mask = remove
           </p>
         )}
-        {activeTool === "mask" && (
+        {!toolDisabled && activeTool === "mask" && (
           <p className="pt-1 text-[11px] leading-snug text-gray-500">
             Trace an outline and release to predict · trace another to refine
           </p>
         )}
-      </section>
-
-      <div className="border-t border-gray-800" />
-
-      <section className="space-y-1">
-        <h2 className="text-[11px] font-medium text-gray-500">Label</h2>
-        <CascadingLabelPicker store={store} procedureId={procedureId} />
       </section>
 
       <section className="space-y-2">
