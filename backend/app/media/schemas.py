@@ -102,6 +102,7 @@ class MediaLibraryItem(BaseModel):
     id: int
     kind: Literal["video", "photo"]
     filename: str
+    title: str | None
     procedure_id: int | None
     uploaded_at: datetime
     size_bytes: int

@@ -628,10 +628,12 @@ def test_media_library_lists_videos_and_photo_sequences():
     items = response.json()
     video_item = next(i for i in items if i["kind"] == "video" and i["filename"] == "library_video.mp4")
     assert video_item["linked_sequence_count"] == 1
+    assert video_item["title"] == "Library video"
 
     photo_item = next(i for i in items if i["kind"] == "photo" and i["id"] == photo_sequence_id)
     assert photo_item["linked_sequence_count"] == 1
     assert photo_item["filename"] == "Library photo seq"
+    assert photo_item["title"] is None
 
 
 def test_delete_video_without_sequences_succeeds():

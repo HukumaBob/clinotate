@@ -2819,6 +2819,17 @@
             "type": "string",
             "title": "Filename"
           },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
           "procedure_id": {
             "anyOf": [
               {
@@ -2849,6 +2860,7 @@
           "id",
           "kind",
           "filename",
+          "title",
           "procedure_id",
           "uploaded_at",
           "size_bytes",
