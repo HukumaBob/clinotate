@@ -56,7 +56,14 @@ export function MediaLibraryTable({
                 className={`py-1.5 px-3 text-gray-100 ${item.kind === "video" ? "cursor-pointer text-blue-400 hover:text-blue-300 hover:underline" : ""}`}
                 onClick={item.kind === "video" ? () => onSelectVideo?.(item.id) : undefined}
               >
-                {item.filename}
+                {item.kind === "video" ? (
+                  <div>
+                    <div>{item.title}</div>
+                    <div className="text-xs text-gray-500">{item.filename}</div>
+                  </div>
+                ) : (
+                  item.filename
+                )}
               </td>
               <td className="py-1.5 px-3 text-gray-100">{item.kind}</td>
               <td className="py-1.5 px-3 text-gray-100">{item.procedure_id ?? "—"}</td>

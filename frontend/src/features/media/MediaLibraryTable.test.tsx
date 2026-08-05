@@ -26,6 +26,7 @@ describe("MediaLibraryTable", () => {
           id: 1,
           kind: "video",
           filename: "a.mp4",
+          title: "A Title",
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
           size_bytes: 1_200_000,
@@ -57,6 +58,7 @@ describe("MediaLibraryTable", () => {
           id: 5,
           kind: "video",
           filename: "video-five.mp4",
+          title: "Video Five",
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
           size_bytes: 1_000,
@@ -66,6 +68,7 @@ describe("MediaLibraryTable", () => {
           id: 5,
           kind: "photo",
           filename: "photo-sequence-five",
+          title: null,
           procedure_id: null,
           uploaded_at: "2026-07-27T00:00:00Z",
           size_bytes: 2_000,
@@ -94,6 +97,7 @@ describe("MediaLibraryTable", () => {
           id: 9,
           kind: "video",
           filename: "clickme.mp4",
+          title: "Click Me Video",
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
           size_bytes: 1_000,
@@ -117,6 +121,7 @@ describe("MediaLibraryTable", () => {
           id: 10,
           kind: "photo",
           filename: "batch-1",
+          title: null,
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
           size_bytes: 1_000,
@@ -131,5 +136,52 @@ describe("MediaLibraryTable", () => {
 
     await userEvent.click(await screen.findByText("batch-1"));
     expect(onSelectVideo).not.toHaveBeenCalled();
+  });
+
+  it("shows the video's title as the primary text with the filename as a secondary line", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: [
+        {
+          id: 20,
+          kind: "video",
+          filename: "raw_upload_20260101.mp4",
+          title: "Colonoscopy patient 42",
+          procedure_id: null,
+          uploaded_at: "2026-07-28T00:00:00Z",
+          size_bytes: 1_000,
+          linked_sequence_count: 0,
+        },
+      ],
+      error: undefined,
+    } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    expect(await screen.findByText("Colonoscopy patient 42")).toBeInTheDocument();
+    expect(screen.getByText("raw_upload_20260101.mp4")).toBeInTheDocument();
+  });
+
+  it("shows only the filename for a photo row, with no secondary line or null artifact", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: [
+        {
+          id: 21,
+          kind: "photo",
+          filename: "photo-batch-21",
+          title: null,
+          procedure_id: null,
+          uploaded_at: "2026-07-28T00:00:00Z",
+          size_bytes: 1_000,
+          linked_sequence_count: 1,
+        },
+      ],
+      error: undefined,
+    } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    expect(await screen.findByText("photo-batch-21")).toBeInTheDocument();
+    expect(screen.queryByText("null")).not.toBeInTheDocument();
+    expect(screen.queryByText("undefined")).not.toBeInTheDocument();
   });
 });
