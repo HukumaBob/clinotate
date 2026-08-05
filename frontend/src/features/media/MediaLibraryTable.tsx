@@ -44,6 +44,7 @@ export function MediaLibraryTable({
           <th className="py-1.5 px-3">Type</th>
           <th className="py-1.5 px-3">Procedure</th>
           <th className="py-1.5 px-3">Uploaded</th>
+          <th className="py-1.5 px-3">Last edited</th>
           <th className="py-1.5 px-3">Size</th>
           <th className="py-1.5 px-3">Sequences</th>
           <th className="py-1.5 px-3" />
@@ -75,6 +76,7 @@ export function MediaLibraryTable({
               <td className="py-1.5 px-3 text-gray-100">{item.kind}</td>
               <td className="py-1.5 px-3 text-gray-100">{procedureName}</td>
               <td className="py-1.5 px-3 text-gray-100">{new Date(item.uploaded_at).toLocaleDateString()}</td>
+              <td className="py-1.5 px-3 text-gray-100">{new Date(item.last_edited_at).toLocaleDateString()}</td>
               <td className="py-1.5 px-3 text-gray-100">{formatSize(item.size_bytes)}</td>
               <td className="py-1.5 px-3 text-gray-100">{item.linked_sequence_count}</td>
               <td className="py-1.5 px-3 text-right">
