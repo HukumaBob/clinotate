@@ -2846,6 +2846,11 @@
             "format": "date-time",
             "title": "Uploaded At"
           },
+          "last_edited_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Edited At"
+          },
           "size_bytes": {
             "type": "integer",
             "title": "Size Bytes"
@@ -2863,6 +2868,7 @@
           "title",
           "procedure_id",
           "uploaded_at",
+          "last_edited_at",
           "size_bytes",
           "linked_sequence_count"
         ],

@@ -105,6 +105,7 @@ class MediaLibraryItem(BaseModel):
     title: str | None
     procedure_id: int | None
     uploaded_at: datetime
+    last_edited_at: datetime
     size_bytes: int
     linked_sequence_count: int
 

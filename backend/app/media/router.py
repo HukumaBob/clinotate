@@ -134,7 +134,21 @@ def get_media_library(session: Session = Depends(get_session)) -> list[MediaLibr
 
     videos = session.query(Video).all()
     for video in videos:
-        linked_count = session.query(Sequence).filter(Sequence.video_id == video.id).count()
+        sequences = session.query(Sequence).filter(Sequence.video_id == video.id).all()
+        linked_count = len(sequences)
+        sequence_ids = [s.id for s in sequences]
+        annotation_max = (
+            session.query(func.max(Annotation.created_at))
+            .join(Frame, Annotation.frame_id == Frame.id)
+            .filter(Frame.sequence_id.in_(sequence_ids))
+            .scalar()
+            if sequence_ids
+            else None
+        )
+        candidates = [video.created_at] + [s.created_at for s in sequences]
+        if annotation_max is not None:
+            candidates.append(annotation_max)
+        last_edited_at = max(candidates)
         items.append(
             MediaLibraryItem(
                 id=video.id,
@@ -143,6 +157,7 @@ def get_media_library(session: Session = Depends(get_session)) -> list[MediaLibr
                 title=video.title,
                 procedure_id=video.procedure_id,
                 uploaded_at=video.created_at,
+                last_edited_at=last_edited_at,
                 size_bytes=video.size_bytes,
                 linked_sequence_count=linked_count,
             )
@@ -154,6 +169,13 @@ def get_media_library(session: Session = Depends(get_session)) -> list[MediaLibr
             session.query(func.sum(Frame.size_bytes)).filter(Frame.sequence_id == sequence.id).scalar()
             or 0
         )
+        annotation_max = (
+            session.query(func.max(Annotation.created_at))
+            .join(Frame, Annotation.frame_id == Frame.id)
+            .filter(Frame.sequence_id == sequence.id)
+            .scalar()
+        )
+        last_edited_at = max(sequence.created_at, annotation_max) if annotation_max is not None else sequence.created_at
         items.append(
             MediaLibraryItem(
                 id=sequence.id,
@@ -162,6 +184,7 @@ def get_media_library(session: Session = Depends(get_session)) -> list[MediaLibr
                 title=None,
                 procedure_id=sequence.procedure_id,
                 uploaded_at=sequence.created_at,
+                last_edited_at=last_edited_at,
                 size_bytes=total_size,
                 linked_sequence_count=1,
             )
