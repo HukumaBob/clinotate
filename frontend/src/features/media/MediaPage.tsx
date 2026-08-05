@@ -15,8 +15,8 @@ export function MediaPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 p-8 text-gray-100">
-      <div className="mb-6">
+    <div className="flex h-screen flex-col overflow-hidden bg-gray-950 text-gray-100">
+      <div className="shrink-0 px-8 pt-8">
         {selectedVideoId !== null ? (
           <VideoReviewPlayer
             videoId={selectedVideoId}
@@ -30,7 +30,9 @@ export function MediaPage() {
           </div>
         )}
       </div>
-      <MediaLibraryTable onSelectVideo={setSelectedVideoId} />
+      <div className="mt-6 flex-1 overflow-y-auto px-8 pb-8">
+        <MediaLibraryTable onSelectVideo={setSelectedVideoId} />
+      </div>
     </div>
   );
 }
