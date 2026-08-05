@@ -26,12 +26,20 @@ describe("ToolsPanel", () => {
     expect(screen.getByRole("tab", { name: "SAM-3" })).toBeDisabled();
   });
 
-  it("shows Point/Box/Mask row with Mask selectable", async () => {
+  it("shows Point/Box/Mask row with Mask selectable once a tag is chosen", async () => {
     const store = renderPanel();
+    store.getState().setLabelSelection({ labelTagId: 1 });
 
     await userEvent.click(screen.getByRole("button", { name: "Mask" }));
 
     expect(store.getState().activeTool).toBe("mask");
+  });
+
+  it("disables the tool buttons until a tag is selected", () => {
+    renderPanel();
+
+    expect(screen.getByRole("button", { name: "Point / Box" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Mask" })).toBeDisabled();
   });
 
   it("does not render a generic 'Add mask' submit button when Point is the active tool", () => {
@@ -41,7 +49,8 @@ describe("ToolsPanel", () => {
   });
 
   it("does not render a 'Generate from mask' button -- tracing and closing an outline predicts immediately", async () => {
-    renderPanel();
+    const store = renderPanel();
+    store.getState().setLabelSelection({ labelTagId: 1 });
 
     await userEvent.click(screen.getByRole("button", { name: "Mask" }));
     expect(screen.queryByRole("button", { name: "Generate from mask" })).not.toBeInTheDocument();

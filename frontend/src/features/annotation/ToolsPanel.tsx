@@ -16,17 +16,14 @@ interface ToolsPanelProps {
   procedureId: number | null;
 }
 
-const PRESET_COLORS = ["#22d3ee", "#f87171", "#4ade80", "#facc15", "#a78bfa", "#fb923c"];
-const TOOLS: PromptType[] = ["point", "box", "mask"];
-const TOOL_LABELS: Record<PromptType, string> = { point: "Point", box: "Box", mask: "Mask" };
+const TOOLS: PromptType[] = ["point", "mask"];
+const TOOL_LABELS: Record<PromptType, string> = { point: "Point / Box", box: "Point / Box", mask: "Mask" };
 
 export function ToolsPanel({ store, annotations, frameId, onTrack, procedureId }: ToolsPanelProps) {
   const activeModel = useStore(store, (state) => state.activeModel);
   const activeTool = useStore(store, (state) => state.activeTool);
   const setActiveModel = useStore(store, (state) => state.setActiveModel);
   const setActiveTool = useStore(store, (state) => state.setActiveTool);
-  const color = useStore(store, (state) => state.color);
-  const setColor = useStore(store, (state) => state.setColor);
   const labelTagId = useStore(store, (state) => state.labelTagId);
   const toolDisabled = labelTagId === null;
 
@@ -96,31 +93,6 @@ export function ToolsPanel({ store, annotations, frameId, onTrack, procedureId }
             Trace an outline and release to predict · trace another to refine
           </p>
         )}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-[11px] font-medium text-gray-500">Color</h2>
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            value={color}
-            onChange={(event) => setColor(event.target.value)}
-            className="h-7 w-7 cursor-pointer rounded border border-gray-700 bg-transparent p-0.5"
-            aria-label="Color"
-          />
-          {PRESET_COLORS.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              onClick={() => setColor(preset)}
-              style={{ backgroundColor: preset }}
-              className={`h-5 w-5 rounded-full border transition-transform ${
-                color === preset ? "scale-110 border-gray-200" : "border-gray-700"
-              }`}
-              aria-label={`Preset color ${preset}`}
-            />
-          ))}
-        </div>
       </section>
 
       <div className="border-t border-gray-800" />
