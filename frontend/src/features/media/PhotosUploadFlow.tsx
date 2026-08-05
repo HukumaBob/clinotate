@@ -64,9 +64,14 @@ export function PhotosUploadFlow({ onCreated }: { onCreated: (sequenceId: number
         />
       </label>
       {previewUrls.length > 0 && (
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid max-h-64 grid-cols-6 gap-1 overflow-y-auto sm:grid-cols-8">
           {previewUrls.map((url, index) => (
-            <img key={url} src={url} alt={`preview ${index}`} className="h-20 w-20 rounded object-cover" />
+            <img
+              key={url}
+              src={url}
+              alt={`preview ${index}`}
+              className="aspect-square w-full rounded object-cover"
+            />
           ))}
         </div>
       )}
