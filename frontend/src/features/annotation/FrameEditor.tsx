@@ -257,10 +257,10 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
             })()
           : null}
       </div>
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-1 items-center justify-center overflow-hidden p-4">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden p-4">
           <div
-            className="relative"
+            className="absolute inset-4 m-auto"
             style={{
               aspectRatio: `${frameQuery.data.width} / ${frameQuery.data.height}`,
               maxWidth: "100%",
