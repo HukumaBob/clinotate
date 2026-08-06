@@ -110,6 +110,13 @@ class MediaLibraryItem(BaseModel):
     linked_sequence_count: int
 
 
+class MediaLibraryPage(BaseModel):
+    items: list[MediaLibraryItem]
+    total: int
+    page: int
+    page_size: int
+
+
 class FrameRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

@@ -1,5 +1,6 @@
 import io
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from PIL import Image, UnidentifiedImageError
@@ -17,6 +18,7 @@ from app.media.models import Frame, Sequence, Video
 from app.media.schemas import (
     FrameRead,
     MediaLibraryItem,
+    MediaLibraryPage,
     SequenceCreate,
     SequenceCreateStandalone,
     SequenceRead,
@@ -128,8 +130,17 @@ def get_video(
     return _video_read(video, storage)
 
 
-@router.get("/library", response_model=list[MediaLibraryItem])
-def get_media_library(session: Session = Depends(get_session)) -> list[MediaLibraryItem]:
+@router.get("/library", response_model=MediaLibraryPage)
+def get_media_library(
+    search: str | None = None,
+    type: Literal["video", "photo"] | None = None,
+    procedure_id: int | None = None,
+    sort: Literal["uploaded_at", "last_edited_at", "size_bytes", "linked_sequence_count"] = "uploaded_at",
+    order: Literal["asc", "desc"] = "desc",
+    page: int = 1,
+    page_size: int = 25,
+    session: Session = Depends(get_session),
+) -> MediaLibraryPage:
     items: list[MediaLibraryItem] = []
 
     videos = session.query(Video).all()
@@ -190,8 +201,25 @@ def get_media_library(session: Session = Depends(get_session)) -> list[MediaLibr
             )
         )
 
-    items.sort(key=lambda item: item.uploaded_at, reverse=True)
-    return items
+    if search:
+        needle = search.lower()
+        items = [
+            item
+            for item in items
+            if needle in item.filename.lower() or (item.title is not None and needle in item.title.lower())
+        ]
+    if type is not None:
+        items = [item for item in items if item.kind == type]
+    if procedure_id is not None:
+        items = [item for item in items if item.procedure_id == procedure_id]
+
+    items.sort(key=lambda item: getattr(item, sort), reverse=(order == "desc"))
+
+    total = len(items)
+    start = (page - 1) * page_size
+    page_items = items[start : start + page_size]
+
+    return MediaLibraryPage(items=page_items, total=total, page=page, page_size=page_size)
 
 
 @router.post("/videos/{video_id}/sequences", response_model=SequenceRead, status_code=status.HTTP_201_CREATED)
