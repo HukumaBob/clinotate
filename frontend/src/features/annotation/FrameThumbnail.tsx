@@ -4,6 +4,8 @@ import type { components } from "../../shared/api/generated/schema";
 
 type TaxonomyTreeNode = components["schemas"]["TaxonomyTreeNode"];
 
+const DEFAULT_MASK_COLOR = "#22d3ee";
+
 interface FrameThumbnailProps {
   frameId: number;
   imageUrl: string;
@@ -14,6 +16,7 @@ interface FrameThumbnailProps {
 export function FrameThumbnail({ frameId, imageUrl, taxonomyTree, onClick }: FrameThumbnailProps) {
   const annotationsQuery = useAnnotations(frameId);
   const annotations = annotationsQuery.data ?? [];
+  const maskAnnotations = annotations.filter((annotation) => annotation.mask_url);
 
   return (
     <button
@@ -22,6 +25,31 @@ export function FrameThumbnail({ frameId, imageUrl, taxonomyTree, onClick }: Fra
       className="group relative aspect-square overflow-hidden rounded border border-gray-800 bg-gray-900"
     >
       <img src={imageUrl} alt={`Frame ${frameId}`} className="h-full w-full object-contain" />
+      {maskAnnotations.map((annotation) => {
+        const resolved = resolveLabelFromTree(taxonomyTree, annotation.label_id);
+        const color = resolved?.tag.color ?? DEFAULT_MASK_COLOR;
+        return (
+          <div
+            key={annotation.id}
+            data-testid="mask-overlay"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundColor: color,
+              maskImage: `url(${annotation.mask_url})`,
+              WebkitMaskImage: `url(${annotation.mask_url})`,
+              maskMode: "luminance",
+              WebkitMaskMode: "luminance" as never,
+              maskSize: "contain",
+              WebkitMaskSize: "contain",
+              maskRepeat: "no-repeat",
+              WebkitMaskRepeat: "no-repeat",
+              maskPosition: "center",
+              WebkitMaskPosition: "center",
+              opacity: 0.45,
+            }}
+          />
+        );
+      })}
       {annotations.length > 0 && (
         <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-1 truncate bg-gray-950/80 px-1 py-0.5 text-xs text-gray-200">
           {annotations.map((annotation) => {
