@@ -2,6 +2,8 @@ import os
 import sys
 from datetime import datetime, timezone
 
+import torch
+
 from app.celery_app import celery_app
 from app.db import SessionLocal
 from app.models import Annotation, AnnotationStatus, AnnotationType, Frame, Job, JobStatus, Label
@@ -66,6 +68,19 @@ def _evict_sam2_models() -> None:
     adapter._release_video_predictor()
 
 
+def _record_vram_usage(job: Job) -> None:
+    """Records this process's current CUDA memory usage onto the Job row,
+    as a percentage-of-total traffic-light metric the frontend renders
+    live while a job is pending/running (see
+    docs/superpowers/specs/2026-08-05-gpu-vram-gauge-design.md).
+    torch.cuda.mem_get_info() is a cheap driver query, not a memory
+    operation -- safe to call at every existing progress checkpoint
+    without measurably affecting job duration."""
+    free_bytes, total_bytes = torch.cuda.mem_get_info()
+    job.vram_used_bytes = total_bytes - free_bytes
+    job.vram_total_bytes = total_bytes
+
+
 @celery_app.task(name="sam3_predict")
 def run_sam3_predict(job_id: int, adapter: Sam3Adapter | None = None) -> None:
     """`adapter` is injectable for tests; production calls always resolve
@@ -111,6 +126,7 @@ def run_sam3_predict(job_id: int, adapter: Sam3Adapter | None = None) -> None:
         job.progress = 100
         job.result_ref = mask_key
         job.finished_at = datetime.now(timezone.utc)
+        _record_vram_usage(job)
         session.commit()
     except Exception as exc:
         session.rollback()
@@ -162,6 +178,7 @@ def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
             session.add(annotation)
 
             job.progress = int(((index + 1) / len(frames)) * 100)
+            _record_vram_usage(job)
             session.commit()
 
         job.status = JobStatus.SUCCEEDED
@@ -223,6 +240,7 @@ def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
         job.progress = 100
         job.result_ref = mask_key
         job.finished_at = datetime.now(timezone.utc)
+        _record_vram_usage(job)
         session.commit()
     except Exception as exc:
         session.rollback()
@@ -279,6 +297,7 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
             session.add(annotation)
 
             job.progress = int(((index + 1) / len(tracked_frames)) * 100)
+            _record_vram_usage(job)
             session.commit()
 
         job.status = JobStatus.SUCCEEDED
