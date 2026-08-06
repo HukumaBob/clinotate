@@ -20,13 +20,26 @@ describe("useMediaLibrary", () => {
 
   it("fetches the media library list", async () => {
     const items = [{ id: 1, kind: "video", filename: "a.mp4", procedure_id: null, uploaded_at: "2026-07-28T00:00:00Z", size_bytes: 100, linked_sequence_count: 0 }];
-    vi.mocked(apiClient.GET).mockResolvedValue({ data: items, error: undefined } as never);
+    const envelope = { items, total: 1, page: 1, page_size: 25 };
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: envelope, error: undefined } as never);
 
-    const { result } = renderHook(() => useMediaLibrary(), { wrapper });
+    const { result } = renderHook(() => useMediaLibrary({ page: 1, pageSize: 25 }), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(apiClient.GET).toHaveBeenCalledWith("/media/library", {});
-    expect(result.current.data).toEqual(items);
+    expect(apiClient.GET).toHaveBeenCalledWith("/media/library", {
+      params: {
+        query: {
+          search: undefined,
+          type: undefined,
+          procedure_id: undefined,
+          sort: undefined,
+          order: undefined,
+          page: 1,
+          page_size: 25,
+        },
+      },
+    });
+    expect(result.current.data).toEqual(envelope);
   });
 });
 

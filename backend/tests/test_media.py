@@ -625,7 +625,11 @@ def test_media_library_lists_videos_and_photo_sequences():
     response = client.get("/media/library", headers=headers)
 
     assert response.status_code == 200
-    items = response.json()
+    body = response.json()
+    assert body["page"] == 1
+    assert body["page_size"] == 25
+    assert body["total"] >= 2
+    items = body["items"]
     video_item = next(i for i in items if i["kind"] == "video" and i["filename"] == "library_video.mp4")
     assert video_item["linked_sequence_count"] == 1
     assert video_item["title"] == "Library video"
@@ -682,12 +686,160 @@ def test_media_library_lists_videos_and_photo_sequences():
     )
 
     response_after = client.get("/media/library", headers=headers)
-    items_after = response_after.json()
+    items_after = response_after.json()["items"]
     video_item_after = next(
         i for i in items_after if i["kind"] == "video" and i["filename"] == "library_video.mp4"
     )
     assert video_item_after["last_edited_at"] >= before_last_edited
     assert video_item_after["last_edited_at"] > video_item_after["uploaded_at"]
+
+
+def test_media_library_search_matches_video_title_or_filename():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Search procedure"}, headers=headers
+    ).json()["id"]
+
+    with open(FIXTURE_VIDEO, "rb") as f:
+        client.post(
+            "/media/videos",
+            files={"file": ("zzz_unique_filename.mp4", f, "video/mp4")},
+            data={"title": "Totally different title", "procedure_id": str(procedure_id)},
+            headers=headers,
+        )
+
+    by_filename = client.get(
+        "/media/library", params={"search": "zzz_unique_filename"}, headers=headers
+    ).json()
+    assert any(i["filename"] == "zzz_unique_filename.mp4" for i in by_filename["items"])
+
+    by_title = client.get(
+        "/media/library", params={"search": "totally different"}, headers=headers
+    ).json()
+    assert any(i["filename"] == "zzz_unique_filename.mp4" for i in by_title["items"])
+
+    no_match = client.get(
+        "/media/library", params={"search": "no-such-media-exists-anywhere"}, headers=headers
+    ).json()
+    assert no_match["items"] == []
+    assert no_match["total"] == 0
+
+
+def test_media_library_filters_by_type():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Type filter procedure"}, headers=headers
+    ).json()["id"]
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+    client.post(
+        "/media/sequences/photos",
+        data={"name": "Type filter photo seq", "procedure_id": str(procedure_id)},
+        files=[("files", ("p.png", image_bytes, "image/png"))],
+        headers=headers,
+    )
+
+    photos_only = client.get("/media/library", params={"type": "photo"}, headers=headers).json()
+    assert all(i["kind"] == "photo" for i in photos_only["items"])
+
+    videos_only = client.get("/media/library", params={"type": "video"}, headers=headers).json()
+    assert all(i["kind"] == "video" for i in videos_only["items"])
+
+
+def test_media_library_filters_by_procedure_id():
+    headers = _auth_headers()
+    procedure_a = client.post(
+        "/taxonomy/procedures", json={"name": "Procedure filter A"}, headers=headers
+    ).json()["id"]
+    procedure_b = client.post(
+        "/taxonomy/procedures", json={"name": "Procedure filter B"}, headers=headers
+    ).json()["id"]
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+    client.post(
+        "/media/sequences/photos",
+        data={"name": "Procedure A photo seq", "procedure_id": str(procedure_a)},
+        files=[("files", ("pa.png", image_bytes, "image/png"))],
+        headers=headers,
+    )
+    with open(fixture, "rb") as f:
+        image_bytes_b = f.read()
+    client.post(
+        "/media/sequences/photos",
+        data={"name": "Procedure B photo seq", "procedure_id": str(procedure_b)},
+        files=[("files", ("pb.png", image_bytes_b, "image/png"))],
+        headers=headers,
+    )
+
+    filtered = client.get(
+        "/media/library", params={"procedure_id": procedure_a}, headers=headers
+    ).json()
+    assert all(i["procedure_id"] == procedure_a for i in filtered["items"])
+    assert any(i["filename"] == "Procedure A photo seq" for i in filtered["items"])
+    assert not any(i["filename"] == "Procedure B photo seq" for i in filtered["items"])
+
+
+def test_media_library_sorts_by_size_bytes_ascending():
+    headers = _auth_headers()
+    response = client.get(
+        "/media/library", params={"sort": "size_bytes", "order": "asc"}, headers=headers
+    )
+    assert response.status_code == 200
+    sizes = [i["size_bytes"] for i in response.json()["items"]]
+    assert sizes == sorted(sizes)
+
+
+def test_media_library_sorts_by_size_bytes_descending():
+    headers = _auth_headers()
+    response = client.get(
+        "/media/library", params={"sort": "size_bytes", "order": "desc"}, headers=headers
+    )
+    assert response.status_code == 200
+    sizes = [i["size_bytes"] for i in response.json()["items"]]
+    assert sizes == sorted(sizes, reverse=True)
+
+
+def test_media_library_paginates_results():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "Pagination procedure"}, headers=headers
+    ).json()["id"]
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    for n in range(3):
+        with open(fixture, "rb") as f:
+            image_bytes = f.read()
+        client.post(
+            "/media/sequences/photos",
+            data={"name": f"Pagination photo seq {n}", "procedure_id": str(procedure_id)},
+            files=[("files", (f"p{n}.png", image_bytes, "image/png"))],
+            headers=headers,
+        )
+
+    page_1 = client.get(
+        "/media/library",
+        params={"procedure_id": procedure_id, "page": 1, "page_size": 2},
+        headers=headers,
+    ).json()
+    assert len(page_1["items"]) == 2
+    assert page_1["total"] == 3
+    assert page_1["page"] == 1
+
+    page_2 = client.get(
+        "/media/library",
+        params={"procedure_id": procedure_id, "page": 2, "page_size": 2},
+        headers=headers,
+    ).json()
+    assert len(page_2["items"]) == 1
+    assert page_2["total"] == 3
+
+    page_ids_1 = {i["id"] for i in page_1["items"]}
+    page_ids_2 = {i["id"] for i in page_2["items"]}
+    assert page_ids_1.isdisjoint(page_ids_2)
 
 
 def test_delete_video_without_sequences_succeeds():
