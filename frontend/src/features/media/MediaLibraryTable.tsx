@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useDeleteSequence, useDeleteVideo, useMediaLibrary } from "../../entities/useMediaLibrary";
 import type { MediaLibraryParams } from "../../entities/useMediaLibrary";
@@ -84,6 +84,14 @@ export function MediaLibraryTable({
   const items = libraryQuery.data?.items ?? [];
   const total = libraryQuery.data?.total ?? 0;
 
+  useEffect(() => {
+    if (!libraryQuery.data || total === 0) return;
+    const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (page > lastPage) {
+      setPage(lastPage);
+    }
+  }, [libraryQuery.data, total, page]);
+
   return (
     <div>
       <table className="w-full text-left text-sm">
@@ -153,7 +161,19 @@ export function MediaLibraryTable({
           </tr>
         </thead>
         <tbody>
-          {items.length === 0 ? (
+          {libraryQuery.isPending ? (
+            <tr>
+              <td colSpan={8} className="py-4 px-3 text-center text-gray-500">
+                Loading…
+              </td>
+            </tr>
+          ) : libraryQuery.isError ? (
+            <tr>
+              <td colSpan={8} className="py-4 px-3 text-center text-red-400">
+                Failed to load media library
+              </td>
+            </tr>
+          ) : items.length === 0 ? (
             <tr>
               <td colSpan={8} className="py-4 px-3 text-center text-gray-500">
                 No media matches your filters

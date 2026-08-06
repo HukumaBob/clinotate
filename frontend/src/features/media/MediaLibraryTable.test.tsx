@@ -438,4 +438,87 @@ describe("MediaLibraryTable", () => {
 
     expect(await screen.findByText(/no media matches/i)).toBeInTheDocument();
   });
+
+  it("shows a loading indicator instead of the no-results message while the query is pending", async () => {
+    let resolveLibraryFetch!: (value: unknown) => void;
+    vi.mocked(apiClient.GET).mockImplementation((path) => {
+      if (path === "/taxonomy/procedures") {
+        return Promise.resolve({ data: [], error: undefined }) as never;
+      }
+      return new Promise((resolve) => {
+        resolveLibraryFetch = resolve;
+      }) as never;
+    });
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    expect(await screen.findByText(/loading/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no media matches/i)).not.toBeInTheDocument();
+
+    resolveLibraryFetch({
+      data: { items: [], total: 0, page: 1, page_size: 25 },
+      error: undefined,
+    });
+
+    expect(await screen.findByText(/no media matches/i)).toBeInTheDocument();
+  });
+
+  it("shows an error message instead of the no-results message when the query fails", async () => {
+    vi.mocked(apiClient.GET).mockRejectedValue(new Error("network error"));
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    expect(await screen.findByText(/failed to load media library/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no media matches/i)).not.toBeInTheDocument();
+  });
+
+  it("clamps back to the last valid page when the item count shrinks below the current page after a delete", async () => {
+    function makeItem(id: number) {
+      return {
+        id,
+        kind: "photo" as const,
+        filename: `batch-${id}`,
+        title: null,
+        procedure_id: null,
+        uploaded_at: "2026-07-28T00:00:00Z",
+        last_edited_at: "2026-07-29T00:00:00Z",
+        size_bytes: 1_000,
+        linked_sequence_count: 0,
+      };
+    }
+
+    // Page 1: 60 total items -> pages 1, 2, 3 available.
+    vi.mocked(apiClient.GET).mockImplementation(async (path, options) => {
+      if (path === "/taxonomy/procedures") {
+        return { data: [], error: undefined } as never;
+      }
+      const requestedPage = (options as { params?: { query?: { page?: number } } })?.params?.query
+        ?.page;
+      if (requestedPage === 3) {
+        // After deleting the sole item on page 3, only 2 pages remain.
+        return {
+          data: { items: [], total: 50, page: 3, page_size: 25 },
+          error: undefined,
+        } as never;
+      }
+      return {
+        data: { items: [makeItem(requestedPage ?? 1)], total: 60, page: requestedPage ?? 1, page_size: 25 },
+        error: undefined,
+      } as never;
+    });
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByRole("button", { name: "3" });
+    await userEvent.click(screen.getByRole("button", { name: "3" }));
+
+    // Page 3 request resolves with total shrunk to 50 (2 pages) -- page should clamp to 2.
+    await waitFor(() => {
+      const libraryCalls = vi
+        .mocked(apiClient.GET)
+        .mock.calls.filter((call) => call[0] === "/media/library");
+      const lastCall = libraryCalls[libraryCalls.length - 1];
+      expect(lastCall?.[1]?.params?.query?.page).toBe(2);
+    });
+  });
 });
