@@ -4,6 +4,7 @@ import { useStore } from "zustand/react";
 import { useDeleteAnnotation, useDeleteJobAnnotations } from "../../entities/useAnnotations";
 import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import type { components } from "../../shared/api/generated/schema";
+import { resolveLabelFromTree } from "./resolveLabel";
 import type { FrameEditorStore } from "./frameEditorStore";
 
 type Annotation = components["schemas"]["AnnotationRead"];
@@ -32,26 +33,9 @@ export function MasksList({ annotations, store, frameId, procedureId }: MasksLis
 
   const maskAnnotations = annotations.filter((annotation) => annotation.annotation_type === "mask");
 
-  function resolveLabel(labelId: number) {
-    for (const categoryNode of tree) {
-      for (const evaluationTypeNode of categoryNode.evaluation_types) {
-        const label = evaluationTypeNode.labels.find((l) => l.id === labelId);
-        if (label) {
-          return {
-            categoryId: categoryNode.category.id,
-            categoryName: categoryNode.category.name,
-            tag: label,
-            classification: evaluationTypeNode.evaluation_type.id,
-          };
-        }
-      }
-    }
-    return null;
-  }
-
   function handleSelect(annotation: Annotation) {
     setSelectedAnnotation(annotation.id);
-    const resolved = resolveLabel(annotation.label_id);
+    const resolved = resolveLabelFromTree(tree, annotation.label_id);
     if (resolved) {
       setLabelSelection({
         labelCategoryId: resolved.categoryId,
@@ -102,7 +86,7 @@ export function MasksList({ annotations, store, frameId, procedureId }: MasksLis
   return (
     <ul className="max-h-48 space-y-1 overflow-y-auto text-sm">
       {maskAnnotations.map((annotation) => {
-        const resolved = resolveLabel(annotation.label_id);
+        const resolved = resolveLabelFromTree(tree, annotation.label_id);
         const categoryName = resolved?.categoryName;
         const tagName = resolved?.tag.name;
         const isPendingDelete = pendingDeleteId === annotation.id;
