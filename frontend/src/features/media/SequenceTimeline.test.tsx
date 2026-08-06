@@ -341,7 +341,7 @@ describe("SequenceTimeline", () => {
 
     expect(onMarkStartChange).toHaveBeenLastCalledWith(50);
     expect(onMarkEndChange).toHaveBeenLastCalledWith(100);
-    expect(onEmptyBackgroundClick).toHaveBeenCalled();
+    expect(onEmptyBackgroundClick).toHaveBeenCalledWith(50);
   });
 
   it("a click between two segments sets marks to the gap bounded by both neighbors", () => {

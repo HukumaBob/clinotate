@@ -78,10 +78,12 @@ export function VideoReviewPlayer({
     setEditingSequenceId(sequenceId);
     setMarkStart(startTime);
     setMarkEnd(endTime);
+    if (videoRef.current) videoRef.current.currentTime = startTime;
   }
 
-  function handleEmptyBackgroundClick() {
+  function handleEmptyBackgroundClick(startTime: number) {
     setEditingSequenceId(null);
+    if (videoRef.current) videoRef.current.currentTime = startTime;
   }
 
   function handleEditDone() {

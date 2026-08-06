@@ -354,6 +354,105 @@ describe("VideoReviewPlayer", () => {
     expect(currentTimeSetTo).toBe(30);
   });
 
+  it("seeks the video to a segment's start time when the segment is clicked", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/media/videos/{video_id}") {
+        return {
+          data: {
+            id: 5, filename: "a.mp4", title: "A", procedure_id: 1, fps: 1,
+            duration_seconds: 60, size_bytes: 100,
+            browser_playable: true, container: "mov,mp4,m4a,3gp,3g2,mj2", video_codec: "h264",
+            stream_url: "https://minio.local/videos/a.mp4?signed=1",
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/media/videos/{video_id}/sequences") {
+        return {
+          data: [
+            { id: 2, video_id: 5, name: "Esophagus", start_time: 20, duration: 30, fps: 1, procedure_id: 1 },
+          ],
+          error: undefined,
+        } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    render(<VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
+
+    const video = await waitFor(() => {
+      const el = document.querySelector("video");
+      expect(el).toBeInTheDocument();
+      return el as HTMLVideoElement;
+    });
+    fireEvent.loadedMetadata(video);
+
+    let currentTimeSetTo: number | null = null;
+    Object.defineProperty(video, "currentTime", {
+      get: () => 0,
+      set: (value: number) => { currentTimeSetTo = value; },
+      configurable: true,
+    });
+
+    fireEvent.mouseDown(screen.getByText("Esophagus"), { clientX: 100 });
+    fireEvent.mouseUp(window, { clientX: 100 });
+
+    expect(currentTimeSetTo).toBe(20);
+  });
+
+  it("seeks the video to the start of the clicked gap when empty timeline background is clicked", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/media/videos/{video_id}") {
+        return {
+          data: {
+            id: 5, filename: "a.mp4", title: "A", procedure_id: 1, fps: 1,
+            duration_seconds: 100, size_bytes: 100,
+            browser_playable: true, container: "mov,mp4,m4a,3gp,3g2,mj2", video_codec: "h264",
+            stream_url: "https://minio.local/videos/a.mp4?signed=1",
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/media/videos/{video_id}/sequences") {
+        return {
+          data: [
+            { id: 2, video_id: 5, name: "Esophagus", start_time: 20, duration: 30, fps: 1, procedure_id: 1 },
+          ],
+          error: undefined,
+        } as never;
+      }
+      return { data: undefined, error: undefined } as never;
+    });
+
+    render(<VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
+
+    const video = await waitFor(() => {
+      const el = document.querySelector("video");
+      expect(el).toBeInTheDocument();
+      return el as HTMLVideoElement;
+    });
+    fireEvent.loadedMetadata(video);
+
+    let currentTimeSetTo: number | null = null;
+    Object.defineProperty(video, "currentTime", {
+      get: () => 0,
+      set: (value: number) => { currentTimeSetTo = value; },
+      configurable: true,
+    });
+
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 0, right: 200, top: 0, bottom: 40, width: 200, height: 40, x: 0, y: 0, toJSON: () => {},
+    });
+
+    // durationSeconds=100 -> 2px/s. Esophagus [20,50). Click past it at clientX=140 -> 70s,
+    // gap bounds: left=50 (Esophagus's end), right=100 (duration, no next segment).
+    const timelineRoot = document.querySelector(".relative.h-10.w-full.rounded.bg-gray-800") as HTMLElement;
+    fireEvent.mouseDown(timelineRoot, { clientX: 140, target: timelineRoot, currentTarget: timelineRoot });
+    fireEvent.mouseUp(window, { clientX: 140 });
+
+    expect(currentTimeSetTo).toBe(50);
+  });
+
   it("shows native player controls only while the cursor hovers the video, so the scrubber doesn't obscure the crop overlay by default", async () => {
     vi.mocked(apiClient.GET).mockImplementation(async (path) => {
       if (path === "/media/videos/{video_id}") {

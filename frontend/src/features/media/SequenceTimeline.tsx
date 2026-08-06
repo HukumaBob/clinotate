@@ -44,7 +44,7 @@ export function SequenceTimeline({
   markStart: number | null;
   markEnd: number | null;
   onSegmentClick: (sequenceId: number, startTime: number, endTime: number) => void;
-  onEmptyBackgroundClick: () => void;
+  onEmptyBackgroundClick: (startTime: number) => void;
   onMarkStartChange: (seconds: number) => void;
   onMarkEndChange: (seconds: number) => void;
   onScrub: (seconds: number) => void;
@@ -103,7 +103,7 @@ export function SequenceTimeline({
         const [left, right] = computeGapBounds(current.anchorSeconds, sequences, durationSeconds);
         onMarkStartChange(left);
         onMarkEndChange(right);
-        onEmptyBackgroundClick();
+        onEmptyBackgroundClick(left);
       }
       setDragState(null);
     }
