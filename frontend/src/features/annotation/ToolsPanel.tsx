@@ -5,6 +5,7 @@ import { CascadingLabelPicker } from "./CascadingLabelPicker";
 import type { FrameEditorStore, PromptType } from "./frameEditorStore";
 import { MasksList } from "./MasksList";
 import { TrackControls } from "./TrackControls";
+import { VramGauge } from "./VramGauge";
 
 type Annotation = components["schemas"]["AnnotationRead"];
 
@@ -14,12 +15,24 @@ interface ToolsPanelProps {
   frameId: number;
   onTrack: () => void;
   procedureId: number | null;
+  vramUsedBytes: number | null;
+  vramTotalBytes: number | null;
+  vramIsLive: boolean;
 }
 
 const TOOLS: PromptType[] = ["point", "mask"];
 const TOOL_LABELS: Record<PromptType, string> = { point: "Point / Box", box: "Point / Box", mask: "Mask" };
 
-export function ToolsPanel({ store, annotations, frameId, onTrack, procedureId }: ToolsPanelProps) {
+export function ToolsPanel({
+  store,
+  annotations,
+  frameId,
+  onTrack,
+  procedureId,
+  vramUsedBytes,
+  vramTotalBytes,
+  vramIsLive,
+}: ToolsPanelProps) {
   const activeModel = useStore(store, (state) => state.activeModel);
   const activeTool = useStore(store, (state) => state.activeTool);
   const setActiveModel = useStore(store, (state) => state.setActiveModel);
@@ -54,6 +67,10 @@ export function ToolsPanel({ store, annotations, frameId, onTrack, procedureId }
             SAM-3
           </button>
         </div>
+      </section>
+
+      <section className="space-y-1">
+        <VramGauge vramUsedBytes={vramUsedBytes} vramTotalBytes={vramTotalBytes} isLive={vramIsLive} />
       </section>
 
       <section className="space-y-1">

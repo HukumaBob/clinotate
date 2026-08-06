@@ -327,3 +327,99 @@ describe("describeJobBanner", () => {
     expect(describeJobBanner(undefined)).toBeNull();
   });
 });
+
+describe("FrameEditor VRAM gauge staleness", () => {
+  it("keeps showing the last known VRAM reading after a job finishes, dimmed", async () => {
+    vi.restoreAllMocks();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let jobStatus: "running" | "succeeded" = "running";
+
+    vi.spyOn(apiClient, "GET").mockImplementation((async (
+      path: string,
+      options?: { params?: { path?: { frame_id?: number } } },
+    ) => {
+      if (path === "/media/frames/{frame_id}") {
+        const requestedId = options?.params?.path?.frame_id ?? 42;
+        const match = FRAMES.find((f) => f.id === requestedId) ?? FRAMES[1];
+        return { data: match, error: undefined, response: new Response() };
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined, response: new Response() };
+      }
+      if (path === "/taxonomy/tree") {
+        return { data: TAXONOMY_TREE, error: undefined, response: new Response() };
+      }
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: { id: 9, procedure_id: 9, video_id: null, start_time: 0, duration: 0 },
+          error: undefined,
+          response: new Response(),
+        };
+      }
+      if (path === "/jobs/{job_id}") {
+        return {
+          data: {
+            id: 1,
+            job_type: "sam2_predict",
+            status: jobStatus,
+            progress: jobStatus === "succeeded" ? 100 : 40,
+            vram_used_bytes: 4 * 1024 ** 3,
+            vram_total_bytes: 8 * 1024 ** 3,
+            result_ref: null,
+            error: null,
+            created_by_id: 1,
+            started_at: null,
+            finished_at: null,
+          },
+          error: undefined,
+          response: new Response(),
+        };
+      }
+      return { data: undefined, error: "not mocked", response: new Response() };
+    }) as never);
+    vi.spyOn(apiClient, "POST").mockResolvedValue({
+      data: {
+        id: 1,
+        job_type: "sam2_predict",
+        status: "pending",
+        progress: 0,
+        result_ref: null,
+        error: null,
+        created_by_id: 1,
+        started_at: null,
+        finished_at: null,
+      },
+      error: undefined,
+      response: new Response(),
+    } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <FrameEditor frameId={42} frames={FRAMES} onClose={vi.fn()} onFrameChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
+    const canvas = screen.getByTestId("frame-canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    });
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    await waitFor(() =>
+      expect(apiClient.POST).toHaveBeenCalledWith("/jobs/sam2/predict", expect.anything()),
+    );
+
+    await waitFor(() => expect(screen.getByText("4.0 / 8.0 GiB")).toBeInTheDocument());
+    expect(screen.getByTestId("vram-gauge")).not.toHaveClass("opacity-50");
+
+    jobStatus = "succeeded";
+
+    await waitFor(() => expect(screen.getByTestId("vram-gauge")).toHaveClass("opacity-50"), { timeout: 3000 });
+    expect(screen.getByText("4.0 / 8.0 GiB")).toBeInTheDocument();
+  });
+});
