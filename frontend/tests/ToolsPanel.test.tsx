@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
@@ -98,5 +98,17 @@ describe("ToolsPanel", () => {
     });
 
     expect(screen.getByText("4.0 / 8.0 GiB")).toBeInTheDocument();
+  });
+
+  it("flashes the Label section when labelPickerPulseAt changes", async () => {
+    const store = renderPanel();
+
+    expect(screen.getByTestId("label-picker-section")).not.toHaveClass("animate-label-pulse");
+
+    act(() => {
+      store.getState().triggerLabelPickerPulse();
+    });
+
+    expect(screen.getByTestId("label-picker-section")).toHaveClass("animate-label-pulse");
   });
 });

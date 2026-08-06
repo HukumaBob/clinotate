@@ -89,4 +89,24 @@ describe("frameEditorStore", () => {
     expect(store.getState().selectedAnnotationId).toBe(7);
     expect(store.getState().hoveredAnnotationId).toBe(9);
   });
+
+  it("defaults labelPickerPulseAt to null and bumps it on triggerLabelPickerPulse", () => {
+    const store = createFrameEditorStore();
+    expect(store.getState().labelPickerPulseAt).toBeNull();
+
+    store.getState().triggerLabelPickerPulse();
+
+    expect(store.getState().labelPickerPulseAt).not.toBeNull();
+  });
+
+  it("triggerLabelPickerPulse produces a new value on each call", () => {
+    const store = createFrameEditorStore();
+    store.getState().triggerLabelPickerPulse();
+    const first = store.getState().labelPickerPulseAt;
+
+    store.getState().triggerLabelPickerPulse();
+    const second = store.getState().labelPickerPulseAt;
+
+    expect(second).not.toBe(first);
+  });
 });

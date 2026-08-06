@@ -24,6 +24,11 @@ export interface FrameEditorState {
   draftAnnotationId: number | null;
   selectedAnnotationId: number | null;
   hoveredAnnotationId: number | null;
+  // Bumped to a fresh timestamp each time the user clicks the canvas without
+  // a tag selected -- the Label section in ToolsPanel watches this to fire a
+  // brief highlight animation, nudging the user toward the control they
+  // actually need without a blocking modal.
+  labelPickerPulseAt: number | null;
   labelCategoryId: number | null;
   labelClassification: LabelClassification | null;
   labelTagId: number | null;
@@ -39,6 +44,7 @@ export interface FrameEditorState {
   setDraftAnnotationId: (id: number | null) => void;
   setSelectedAnnotation: (id: number | null) => void;
   setHoveredAnnotation: (id: number | null) => void;
+  triggerLabelPickerPulse: () => void;
   setLabelSelection: (partial: Partial<{
     labelCategoryId: number | null;
     labelClassification: LabelClassification | null;
@@ -62,6 +68,7 @@ export function createFrameEditorStore() {
     draftAnnotationId: null,
     selectedAnnotationId: null,
     hoveredAnnotationId: null,
+    labelPickerPulseAt: null,
     labelCategoryId: null,
     labelClassification: null,
     labelTagId: null,
@@ -89,6 +96,7 @@ export function createFrameEditorStore() {
     setDraftAnnotationId: (id) => set({ draftAnnotationId: id }),
     setSelectedAnnotation: (id) => set({ selectedAnnotationId: id }),
     setHoveredAnnotation: (id) => set({ hoveredAnnotationId: id }),
+    triggerLabelPickerPulse: () => set({ labelPickerPulseAt: Date.now() + Math.random() }),
     setLabelSelection: (partial) => set(partial),
     setColor: (color) => set({ color }),
     setBackward: (value) => set({ backward: value }),

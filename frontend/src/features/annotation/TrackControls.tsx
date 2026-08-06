@@ -12,6 +12,9 @@ export function TrackControls({ store, onTrack }: TrackControlsProps) {
   const forward = useStore(store, (state) => state.forward);
   const setBackward = useStore(store, (state) => state.setBackward);
   const setForward = useStore(store, (state) => state.setForward);
+  const labelTagId = useStore(store, (state) => state.labelTagId);
+  const pendingPrompts = useStore(store, (state) => state.pendingPrompts);
+  const trackDisabled = labelTagId === null || pendingPrompts.length === 0;
 
   return (
     <div className="space-y-2">
@@ -39,8 +42,9 @@ export function TrackControls({ store, onTrack }: TrackControlsProps) {
       </div>
       <button
         type="button"
+        disabled={trackDisabled}
         onClick={onTrack}
-        className="w-full rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500"
+        className="w-full rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
       >
         Track
       </button>

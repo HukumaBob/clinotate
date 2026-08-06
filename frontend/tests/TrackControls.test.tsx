@@ -1,36 +1,45 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
 
 import { createFrameEditorStore } from "../src/features/annotation/frameEditorStore";
 import { TrackControls } from "../src/features/annotation/TrackControls";
 
 describe("TrackControls", () => {
-  it("shows nonzero default values for both fields, never blank", () => {
+  it("disables the Track button when there are no pending prompts", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
+
     render(<TrackControls store={store} onTrack={vi.fn()} />);
 
-    expect(screen.getByLabelText("Backward")).toHaveValue(store.getState().backward);
-    expect(screen.getByLabelText("Forward")).toHaveValue(store.getState().forward);
+    expect(screen.getByRole("button", { name: "Track" })).toBeDisabled();
   });
 
-  it("updates the store when a field changes", async () => {
+  it("enables the Track button once a point prompt is pending", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
+    store.getState().addPrompt({ type: "point", coords: [0.5, 0.5], label: true });
+
     render(<TrackControls store={store} onTrack={vi.fn()} />);
 
-    await userEvent.clear(screen.getByLabelText("Backward"));
-    await userEvent.type(screen.getByLabelText("Backward"), "3");
-
-    expect(store.getState().backward).toBe(3);
+    expect(screen.getByRole("button", { name: "Track" })).toBeEnabled();
   });
 
-  it("calls onTrack when the Track button is clicked", async () => {
+  it("enables the Track button once a mask prompt is pending", () => {
     const store = createFrameEditorStore();
-    const onTrack = vi.fn();
-    render(<TrackControls store={store} onTrack={onTrack} />);
+    store.getState().setLabelSelection({ labelTagId: 1 });
+    store.getState().setMaskPrompt("base64data");
 
-    await userEvent.click(screen.getByRole("button", { name: "Track" }));
+    render(<TrackControls store={store} onTrack={vi.fn()} />);
 
-    expect(onTrack).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Track" })).toBeEnabled();
+  });
+
+  it("disables the Track button when no tag is selected even with pending prompts", () => {
+    const store = createFrameEditorStore();
+    store.getState().addPrompt({ type: "point", coords: [0.5, 0.5], label: true });
+
+    render(<TrackControls store={store} onTrack={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Track" })).toBeDisabled();
   });
 });

@@ -24,6 +24,7 @@ function setBoundingRect(canvas: Element) {
 describe("FrameCanvas", () => {
   it("adds a positive point prompt and calls onPointOrBoxSubmit on a plain left click", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
     const onPointOrBoxSubmit = vi.fn();
     const onRemoveAnnotation = vi.fn();
     render(
@@ -49,6 +50,7 @@ describe("FrameCanvas", () => {
 
   it("adds a negative point prompt on a shift+left click", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
     const onPointOrBoxSubmit = vi.fn();
     render(
       <FrameCanvas
@@ -73,6 +75,7 @@ describe("FrameCanvas", () => {
 
   it("accumulates a second refinement point instead of replacing the first, and submits the full set", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
     const onPointOrBoxSubmit = vi.fn();
     render(
       <FrameCanvas
@@ -106,6 +109,7 @@ describe("FrameCanvas", () => {
 
   it("clicking an existing point marker removes it and resubmits the remaining prompts", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
     const onPointOrBoxSubmit = vi.fn();
     render(
       <FrameCanvas
@@ -139,6 +143,7 @@ describe("FrameCanvas", () => {
 
   it("clicking the last remaining point marker removes it and submits an empty prompt list", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
     const onPointOrBoxSubmit = vi.fn();
     render(
       <FrameCanvas
@@ -164,6 +169,7 @@ describe("FrameCanvas", () => {
 
   it("adds a box prompt and calls onPointOrBoxSubmit on left-click-drag", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
     const onPointOrBoxSubmit = vi.fn();
     render(
       <FrameCanvas
@@ -192,6 +198,7 @@ describe("FrameCanvas", () => {
 
   it("cancels an in-progress box without submitting when its cancel (x) is clicked before mouseup", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
     const onPointOrBoxSubmit = vi.fn();
     render(
       <FrameCanvas
@@ -237,6 +244,7 @@ describe("FrameCanvas", () => {
 
   it("rasterizes a freehand stroke to mask_png and submits immediately on mouseup, no separate confirm step", () => {
     const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
     store.getState().setActiveTool("mask");
     const onPointOrBoxSubmit = vi.fn();
     render(
@@ -533,5 +541,102 @@ describe("FrameCanvas", () => {
     expect(isHighlighted(5, null, 5)).toBe(true);
     expect(isHighlighted(5, null, null)).toBe(false);
     expect(isHighlighted(5, 3, 3)).toBe(false);
+  });
+
+  it("does not add a point prompt when clicked with no label tag selected", () => {
+    const store = createFrameEditorStore();
+    const onPointOrBoxSubmit = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    expect(store.getState().pendingPrompts).toHaveLength(0);
+    expect(onPointOrBoxSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not add a box prompt when dragged with no label tag selected", () => {
+    const store = createFrameEditorStore();
+    const onPointOrBoxSubmit = vi.fn();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={onPointOrBoxSubmit}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
+    fireEvent.mouseDown(canvas, { clientX: 40, clientY: 20, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    expect(store.getState().pendingPrompts).toHaveLength(0);
+    expect(onPointOrBoxSubmit).not.toHaveBeenCalled();
+  });
+
+  it("triggers the label picker pulse when clicked with no label tag selected", () => {
+    const store = createFrameEditorStore();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
+    expect(store.getState().labelPickerPulseAt).toBeNull();
+
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    expect(store.getState().labelPickerPulseAt).not.toBeNull();
+  });
+
+  it("uses a not-allowed cursor when no label tag is selected", () => {
+    const store = createFrameEditorStore();
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("frame-canvas").className).toContain("cursor-not-allowed");
+  });
+
+  it("uses a crosshair cursor once a label tag is selected", () => {
+    const store = createFrameEditorStore();
+    store.getState().setLabelSelection({ labelTagId: 1 });
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={[]}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("frame-canvas").className).toContain("cursor-crosshair");
   });
 });

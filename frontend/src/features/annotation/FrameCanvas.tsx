@@ -185,6 +185,8 @@ export function FrameCanvas({
   const activeTool = useStore(store, (state) => state.activeTool);
   const addPrompt = useStore(store, (state) => state.addPrompt);
   const setMaskPrompt = useStore(store, (state) => state.setMaskPrompt);
+  const labelTagId = useStore(store, (state) => state.labelTagId);
+  const triggerLabelPickerPulse = useStore(store, (state) => state.triggerLabelPickerPulse);
   // Points the user has placed for the object currently being refined --
   // read straight from the store (not a local echo) so they stay visible
   // for as long as they're actually part of the prompt set, through every
@@ -383,6 +385,11 @@ export function FrameCanvas({
         onPointOrBoxSubmit(remaining);
         return;
       }
+    }
+
+    if (labelTagId === null) {
+      triggerLabelPickerPulse();
+      return;
     }
 
     dragRef.current = { startX: x, startY: y };
@@ -650,7 +657,7 @@ export function FrameCanvas({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        className="h-full w-full cursor-crosshair bg-gray-900"
+        className={`h-full w-full bg-gray-900 ${labelTagId === null ? "cursor-not-allowed" : "cursor-crosshair"}`}
       />
       {pendingBox && (
         <button

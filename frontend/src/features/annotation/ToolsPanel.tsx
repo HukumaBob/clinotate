@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useStore } from "zustand/react";
 
 import type { components } from "../../shared/api/generated/schema";
@@ -40,6 +41,21 @@ export function ToolsPanel({
   const labelTagId = useStore(store, (state) => state.labelTagId);
   const toolDisabled = labelTagId === null;
 
+  const labelPickerPulseAt = useStore(store, (state) => state.labelPickerPulseAt);
+  // Flashes briefly (CSS animation, see index.css) whenever the user clicks
+  // the canvas without a tag selected -- a lightweight nudge toward this
+  // section instead of a blocking modal. Re-derived from the timestamp on
+  // every pulse rather than toggled once, so back-to-back clicks each
+  // restart the animation instead of silently no-op'ing while a previous
+  // flash is still fading out.
+  const [isPulsing, setIsPulsing] = useState(false);
+  useEffect(() => {
+    if (labelPickerPulseAt === null) return;
+    setIsPulsing(true);
+    const timer = window.setTimeout(() => setIsPulsing(false), 700);
+    return () => window.clearTimeout(timer);
+  }, [labelPickerPulseAt]);
+
   return (
     <aside className="flex w-[420px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-800 bg-gray-950 p-4">
       <section className="space-y-1">
@@ -73,7 +89,10 @@ export function ToolsPanel({
         <VramGauge vramUsedBytes={vramUsedBytes} vramTotalBytes={vramTotalBytes} isLive={vramIsLive} />
       </section>
 
-      <section className="space-y-1">
+      <section
+        data-testid="label-picker-section"
+        className={`space-y-1 rounded-md transition-shadow ${isPulsing ? "animate-label-pulse" : ""}`}
+      >
         <h2 className="text-[11px] font-medium text-gray-500">Label</h2>
         <CascadingLabelPicker store={store} procedureId={procedureId} />
       </section>
