@@ -1,13 +1,36 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "../shared/api/client";
 
-export function useMediaLibrary() {
+export interface MediaLibraryParams {
+  search?: string;
+  type?: "video" | "photo";
+  procedureId?: number;
+  sort?: "uploaded_at" | "last_edited_at" | "size_bytes" | "linked_sequence_count";
+  order?: "asc" | "desc";
+  page: number;
+  pageSize: number;
+}
+
+export function useMediaLibrary(params: MediaLibraryParams) {
+  const { search, type, procedureId, sort, order, page, pageSize } = params;
   return useQuery({
-    queryKey: ["media-library"],
+    queryKey: ["media-library", search, type, procedureId, sort, order, page, pageSize],
     queryFn: async () => {
-      const result = await apiClient.GET("/media/library", {});
-      return result.data ?? [];
+      const result = await apiClient.GET("/media/library", {
+        params: {
+          query: {
+            search: search || undefined,
+            type,
+            procedure_id: procedureId,
+            sort,
+            order,
+            page,
+            page_size: pageSize,
+          },
+        },
+      });
+      return result.data;
     },
   });
 }
