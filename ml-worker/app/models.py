@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import JSON, BigInteger, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -28,6 +28,8 @@ class Job(Base):
     job_type: Mapped[JobType] = mapped_column(Enum(JobType))
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus))
     progress: Mapped[int] = mapped_column(Integer)
+    vram_used_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    vram_total_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     payload: Mapped[dict] = mapped_column(JSON)
     result_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
     error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
