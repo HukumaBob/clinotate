@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { useFrames } from "../../entities/useFrames";
+import { useSequence } from "../../entities/useSequence";
+import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import { FrameEditor } from "./FrameEditor";
 import { FrameThumbnail } from "./FrameThumbnail";
 
@@ -11,6 +13,9 @@ export function SequenceGridPage() {
   const [selectedFrameId, setSelectedFrameId] = useState<number | null>(null);
 
   const framesQuery = useFrames(sequenceIdNumber);
+  const sequenceQuery = useSequence(sequenceIdNumber);
+  const taxonomyTreeQuery = useTaxonomyTree(sequenceQuery.data?.procedure_id ?? null);
+  const taxonomyTree = taxonomyTreeQuery.data ?? [];
 
   if (selectedFrameId !== null) {
     return (
@@ -32,6 +37,7 @@ export function SequenceGridPage() {
             key={frame.id}
             frameId={frame.id}
             imageUrl={frame.image_url}
+            taxonomyTree={taxonomyTree}
             onClick={() => setSelectedFrameId(frame.id)}
           />
         ))}
