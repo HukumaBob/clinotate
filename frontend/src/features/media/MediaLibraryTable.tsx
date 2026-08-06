@@ -25,8 +25,10 @@ const PAGE_SIZE = 25;
 
 export function MediaLibraryTable({
   onSelectVideo,
+  onSelectSequence,
 }: {
   onSelectVideo?: (videoId: number) => void;
+  onSelectSequence?: (sequenceId: number) => void;
 } = {}) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput, 300);
@@ -191,8 +193,10 @@ export function MediaLibraryTable({
               return (
                 <tr key={key} className="border-b border-gray-800 hover:bg-gray-900/50">
                   <td
-                    className={`py-1.5 px-3 text-gray-100 ${item.kind === "video" ? "cursor-pointer text-blue-400 hover:text-blue-300 hover:underline" : ""}`}
-                    onClick={item.kind === "video" ? () => onSelectVideo?.(item.id) : undefined}
+                    className="py-1.5 px-3 text-gray-100 cursor-pointer text-blue-400 hover:text-blue-300 hover:underline"
+                    onClick={
+                      item.kind === "video" ? () => onSelectVideo?.(item.id) : () => onSelectSequence?.(item.id)
+                    }
                   >
                     {item.kind === "video" ? (
                       <div>

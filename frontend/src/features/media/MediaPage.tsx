@@ -31,7 +31,7 @@ export function MediaPage() {
         )}
       </div>
       <div className="mt-6 flex-1 overflow-y-auto px-8 pb-8">
-        <MediaLibraryTable onSelectVideo={setSelectedVideoId} />
+        <MediaLibraryTable onSelectVideo={setSelectedVideoId} onSelectSequence={goToSequence} />
       </div>
     </div>
   );

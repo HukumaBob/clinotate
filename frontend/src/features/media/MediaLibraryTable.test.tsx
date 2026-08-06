@@ -163,6 +163,66 @@ describe("MediaLibraryTable", () => {
     expect(onSelectVideo).not.toHaveBeenCalled();
   });
 
+  it("calls onSelectSequence with the sequence's id when a photo row is clicked", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 10,
+            kind: "photo",
+            filename: "batch-1",
+            title: null,
+            procedure_id: null,
+            uploaded_at: "2026-07-28T00:00:00Z",
+            last_edited_at: "2026-07-29T00:00:00Z",
+            size_bytes: 1_000,
+            linked_sequence_count: 1,
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 25,
+      },
+      error: undefined,
+    } as never);
+
+    const onSelectSequence = vi.fn();
+    render(<MediaLibraryTable onSelectSequence={onSelectSequence} />, { wrapper });
+
+    await userEvent.click(await screen.findByText("batch-1"));
+    expect(onSelectSequence).toHaveBeenCalledWith(10);
+  });
+
+  it("does not call onSelectSequence when a video row is clicked", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 9,
+            kind: "video",
+            filename: "clickme.mp4",
+            title: "Click Me Video",
+            procedure_id: null,
+            uploaded_at: "2026-07-28T00:00:00Z",
+            last_edited_at: "2026-07-29T00:00:00Z",
+            size_bytes: 1_000,
+            linked_sequence_count: 0,
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 25,
+      },
+      error: undefined,
+    } as never);
+
+    const onSelectSequence = vi.fn();
+    render(<MediaLibraryTable onSelectVideo={vi.fn()} onSelectSequence={onSelectSequence} />, { wrapper });
+
+    await userEvent.click(await screen.findByText("clickme.mp4"));
+    expect(onSelectSequence).not.toHaveBeenCalled();
+  });
+
   it("shows the video's title as the primary text with the filename as a secondary line", async () => {
     vi.mocked(apiClient.GET).mockResolvedValue({
       data: {
