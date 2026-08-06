@@ -606,11 +606,11 @@ def test_media_library_lists_videos_and_photo_sequences():
             headers=headers,
         ).json()["id"]
 
-    client.post(
+    sequence_id = client.post(
         f"/media/videos/{video_id}/sequences",
         json={"name": "Library video seq", "start_time": 0, "duration": 2},
         headers=headers,
-    )
+    ).json()["id"]
 
     fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
     with open(fixture, "rb") as f:
@@ -629,11 +629,65 @@ def test_media_library_lists_videos_and_photo_sequences():
     video_item = next(i for i in items if i["kind"] == "video" and i["filename"] == "library_video.mp4")
     assert video_item["linked_sequence_count"] == 1
     assert video_item["title"] == "Library video"
+    # No annotations yet -- last_edited_at falls back to the sequence's own created_at.
+    assert video_item["last_edited_at"] is not None
 
     photo_item = next(i for i in items if i["kind"] == "photo" and i["id"] == photo_sequence_id)
     assert photo_item["linked_sequence_count"] == 1
     assert photo_item["filename"] == "Library photo seq"
     assert photo_item["title"] is None
+    assert photo_item["last_edited_at"] is not None
+
+    # Now add an annotation to the video's sequence and confirm last_edited_at moves forward.
+    before_last_edited = video_item["last_edited_at"]
+
+    procedures = client.get("/taxonomy/procedures", headers=headers).json()
+    procedure = next(p for p in procedures if p["id"] == procedure_id)
+    categories = client.get(
+        f"/taxonomy/categories?procedure_id={procedure['id']}", headers=headers
+    ).json()
+    category = next((c for c in categories if c["name"] == "last-edited-category"), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": "last-edited-category", "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next(
+        (e for e in evaluation_types if e["name"] == "last-edited-evaluation-type"), None
+    )
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types",
+            json={"name": "last-edited-evaluation-type"},
+            headers=headers,
+        ).json()
+    label_id = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "last-edited-label",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()["id"]
+
+    frames = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+    frame_id = frames[0]["id"]
+    client.post(
+        f"/annotation/frames/{frame_id}/annotations",
+        json={"label_id": label_id},
+        headers=headers,
+    )
+
+    response_after = client.get("/media/library", headers=headers)
+    items_after = response_after.json()
+    video_item_after = next(
+        i for i in items_after if i["kind"] == "video" and i["filename"] == "library_video.mp4"
+    )
+    assert video_item_after["last_edited_at"] >= before_last_edited
+    assert video_item_after["last_edited_at"] > video_item_after["uploaded_at"]
 
 
 def test_delete_video_without_sequences_succeeds():

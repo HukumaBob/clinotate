@@ -29,6 +29,7 @@ describe("MediaLibraryTable", () => {
           title: "A Title",
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
+          last_edited_at: "2026-07-29T00:00:00Z",
           size_bytes: 1_200_000,
           linked_sequence_count: 2,
         },
@@ -61,6 +62,7 @@ describe("MediaLibraryTable", () => {
           title: "Video Five",
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
+          last_edited_at: "2026-07-29T00:00:00Z",
           size_bytes: 1_000,
           linked_sequence_count: 0,
         },
@@ -71,6 +73,7 @@ describe("MediaLibraryTable", () => {
           title: null,
           procedure_id: null,
           uploaded_at: "2026-07-27T00:00:00Z",
+          last_edited_at: "2026-07-28T00:00:00Z",
           size_bytes: 2_000,
           linked_sequence_count: 1,
         },
@@ -100,6 +103,7 @@ describe("MediaLibraryTable", () => {
           title: "Click Me Video",
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
+          last_edited_at: "2026-07-29T00:00:00Z",
           size_bytes: 1_000,
           linked_sequence_count: 0,
         },
@@ -124,6 +128,7 @@ describe("MediaLibraryTable", () => {
           title: null,
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
+          last_edited_at: "2026-07-29T00:00:00Z",
           size_bytes: 1_000,
           linked_sequence_count: 1,
         },
@@ -148,6 +153,7 @@ describe("MediaLibraryTable", () => {
           title: "Colonoscopy patient 42",
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
+          last_edited_at: "2026-07-29T00:00:00Z",
           size_bytes: 1_000,
           linked_sequence_count: 0,
         },
@@ -171,6 +177,7 @@ describe("MediaLibraryTable", () => {
           title: null,
           procedure_id: null,
           uploaded_at: "2026-07-28T00:00:00Z",
+          last_edited_at: "2026-07-29T00:00:00Z",
           size_bytes: 1_000,
           linked_sequence_count: 1,
         },
@@ -199,6 +206,7 @@ describe("MediaLibraryTable", () => {
             title: "Colono video",
             procedure_id: 730,
             uploaded_at: "2026-07-28T00:00:00Z",
+            last_edited_at: "2026-07-29T00:00:00Z",
             size_bytes: 1_000,
             linked_sequence_count: 0,
           },
@@ -227,6 +235,7 @@ describe("MediaLibraryTable", () => {
             title: "No procedure video",
             procedure_id: null,
             uploaded_at: "2026-07-28T00:00:00Z",
+            last_edited_at: "2026-07-29T00:00:00Z",
             size_bytes: 1_000,
             linked_sequence_count: 0,
           },
@@ -239,5 +248,30 @@ describe("MediaLibraryTable", () => {
 
     expect(await screen.findByText("no_procedure.mp4")).toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("shows the Last edited date, distinct from Uploaded", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: [
+        {
+          id: 22,
+          kind: "video",
+          filename: "edited.mp4",
+          title: "Edited video",
+          procedure_id: null,
+          uploaded_at: "2026-07-01T00:00:00Z",
+          last_edited_at: "2026-07-15T00:00:00Z",
+          size_bytes: 1_000,
+          linked_sequence_count: 1,
+        },
+      ],
+      error: undefined,
+    } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("edited.mp4");
+    expect(screen.getByText(new Date("2026-07-01T00:00:00Z").toLocaleDateString())).toBeInTheDocument();
+    expect(screen.getByText(new Date("2026-07-15T00:00:00Z").toLocaleDateString())).toBeInTheDocument();
   });
 });
