@@ -41,12 +41,21 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   const store = useMemo(() => createFrameEditorStore(), [frameId]);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const [dismissedJobId, setDismissedJobId] = useState<number | null>(null);
+  const [lastKnownVram, setLastKnownVram] = useState<{ used: number; total: number } | null>(null);
   const [frameInputValue, setFrameInputValue] = useState("");
   const queryClient = useQueryClient();
 
   const frameQuery = useFrame(frameId);
   const annotationsQuery = useAnnotations(frameId);
   const jobQuery = useJob(activeJobId);
+
+  useEffect(() => {
+    const used = jobQuery.data?.vram_used_bytes;
+    const total = jobQuery.data?.vram_total_bytes;
+    if (used !== null && used !== undefined && total !== null && total !== undefined) {
+      setLastKnownVram({ used, total });
+    }
+  }, [jobQuery.data?.vram_used_bytes, jobQuery.data?.vram_total_bytes]);
   const sequenceQuery = useSequence(frameQuery.data?.sequence_id ?? Number.NaN);
   const taxonomyTreeQuery = useTaxonomyTree(sequenceQuery.data?.procedure_id ?? null);
   const predictMutation = useSam2Predict();
@@ -178,6 +187,8 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
     if (target) onFrameChange(target.id);
   }
 
+  const vramIsLive = jobQuery.data?.status === "pending" || jobQuery.data?.status === "running";
+
   if (!frameQuery.data) {
     return <p className="p-8 text-sm text-gray-500">Loading frame...</p>;
   }
@@ -283,6 +294,9 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
           frameId={frameId}
           onTrack={handleTrack}
           procedureId={sequenceQuery.data?.procedure_id ?? null}
+          vramUsedBytes={lastKnownVram?.used ?? null}
+          vramTotalBytes={lastKnownVram?.total ?? null}
+          vramIsLive={vramIsLive}
         />
       </div>
     </div>

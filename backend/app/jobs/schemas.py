@@ -20,6 +20,8 @@ class JobRead(BaseModel):
     job_type: JobType
     status: JobStatus
     progress: int
+    vram_used_bytes: int | None
+    vram_total_bytes: int | None
     result_ref: str | None
     error: str | None
     created_by_id: int

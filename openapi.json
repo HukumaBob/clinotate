@@ -2599,6 +2599,28 @@
             "type": "integer",
             "title": "Progress"
           },
+          "vram_used_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vram Used Bytes"
+          },
+          "vram_total_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vram Total Bytes"
+          },
           "result_ref": {
             "anyOf": [
               {
@@ -2656,6 +2678,8 @@
           "job_type",
           "status",
           "progress",
+          "vram_used_bytes",
+          "vram_total_bytes",
           "result_ref",
           "error",
           "created_by_id",
