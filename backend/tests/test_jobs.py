@@ -413,3 +413,69 @@ def test_enqueue_video_transcode_creates_pending_job():
     assert job.job_type == JobType.VIDEO_TRANSCODE
     assert job.status == JobStatus.PENDING
     assert job.payload == {"video_id": video_id}
+
+
+def test_get_job_returns_vram_fields():
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+
+    token_str = _register_and_login("jobs_vram@example.com")
+    token = _auth_headers(token_str)
+
+    me_response = client.get("/auth/me", headers=token)
+    user_id = me_response.json()["id"]
+
+    session = SessionLocal()
+    job = Job(
+        job_type=JobType.SAM2_PREDICT,
+        status=JobStatus.SUCCEEDED,
+        progress=100,
+        payload={"frame_id": 1},
+        created_by_id=user_id,
+        vram_used_bytes=4_294_967_296,
+        vram_total_bytes=8_589_934_592,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    job_id = job.id
+    session.close()
+
+    response = client.get(f"/jobs/{job_id}", headers=token)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["vram_used_bytes"] == 4_294_967_296
+    assert body["vram_total_bytes"] == 8_589_934_592
+
+
+def test_get_job_vram_fields_default_to_null():
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+
+    token_str = _register_and_login("jobs_vram_null@example.com")
+    token = _auth_headers(token_str)
+
+    me_response = client.get("/auth/me", headers=token)
+    user_id = me_response.json()["id"]
+
+    session = SessionLocal()
+    job = Job(
+        job_type=JobType.SAM2_PREDICT,
+        status=JobStatus.PENDING,
+        progress=0,
+        payload={"frame_id": 1},
+        created_by_id=user_id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    job_id = job.id
+    session.close()
+
+    response = client.get(f"/jobs/{job_id}", headers=token)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["vram_used_bytes"] is None
+    assert body["vram_total_bytes"] is None
