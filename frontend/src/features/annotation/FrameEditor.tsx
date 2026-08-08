@@ -93,7 +93,11 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   // deliberately left untouched by resetForNewFrame -- see the store.
   useEffect(() => {
     store.getState().resetForNewFrame();
-    store.getState().setForward(maxForward);
+    // Capped at the same combined-range limit TrackControls enforces (see
+    // docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md)
+    // -- otherwise a sequence with >20 frames ahead would default forward
+    // above the cap before the user touches either input.
+    store.getState().setForward(Math.min(maxForward, 20));
     // maxForward intentionally excluded: it's a pure function of frameId
     // (via currentIndex) here, so including it would double-fire this
     // effect on every render where it's recomputed as the same value.
