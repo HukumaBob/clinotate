@@ -38,7 +38,13 @@ export function describeJobBanner(job: Pick<JobRead, "status" | "progress" | "er
 }
 
 export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEditorProps) {
-  const store = useMemo(() => createFrameEditorStore(), [frameId]);
+  // Created once per FrameEditor mount (not per frameId) so the Label
+  // selection survives navigating between frames within the same editing
+  // session -- FrameEditor unmounts back to the sequence grid between
+  // sessions, which is what actually resets it. Per-frame state (pending
+  // prompts, draft/selected/hovered annotation) is cleared explicitly by
+  // the frameId effect below instead.
+  const store = useMemo(() => createFrameEditorStore(), []);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const [dismissedJobId, setDismissedJobId] = useState<number | null>(null);
   const [lastKnownVram, setLastKnownVram] = useState<{ used: number; total: number } | null>(null);
@@ -68,10 +74,31 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   const currentIndex = orderedFrames.findIndex((f) => f.id === frameId);
   const prevFrame = currentIndex > 0 ? orderedFrames[currentIndex - 1] : null;
   const nextFrame = currentIndex >= 0 && currentIndex < orderedFrames.length - 1 ? orderedFrames[currentIndex + 1] : null;
+  // How many frames exist behind/ahead of the current one within this
+  // sequence -- backs both the Track "Max" shortcut buttons and the
+  // forward-defaults-to-rest-of-sequence behavior below. -1 (all frames
+  // behind/ahead) only while frames/currentIndex haven't loaded yet.
+  const maxBackward = currentIndex >= 0 ? currentIndex : 0;
+  const maxForward = currentIndex >= 0 ? orderedFrames.length - 1 - currentIndex : 0;
 
   useEffect(() => {
     setFrameInputValue(String(currentIndex + 1));
   }, [currentIndex]);
+
+  // Per-frame state doesn't belong to the session-scoped store above: old
+  // points/boxes/masks and the selected/hovered annotation refer to the
+  // frame just left, and Forward's "track to the end of the sequence"
+  // default depends on this frame's position, not the previous one's. The
+  // label choice (Category/Classification/Tag) and Backward are
+  // deliberately left untouched by resetForNewFrame -- see the store.
+  useEffect(() => {
+    store.getState().resetForNewFrame();
+    store.getState().setForward(maxForward);
+    // maxForward intentionally excluded: it's a pure function of frameId
+    // (via currentIndex) here, so including it would double-fire this
+    // effect on every render where it's recomputed as the same value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameId, store]);
 
   useEffect(() => {
     if (jobQuery.data?.status === "succeeded") {
@@ -297,6 +324,8 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
           vramUsedBytes={lastKnownVram?.used ?? null}
           vramTotalBytes={lastKnownVram?.total ?? null}
           vramIsLive={vramIsLive}
+          maxBackward={maxBackward}
+          maxForward={maxForward}
         />
       </div>
     </div>

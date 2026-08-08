@@ -45,6 +45,12 @@ export interface FrameEditorState {
   setSelectedAnnotation: (id: number | null) => void;
   setHoveredAnnotation: (id: number | null) => void;
   triggerLabelPickerPulse: () => void;
+  // Called when the user navigates to a different frame within the same
+  // sequence (the store now lives for the whole FrameEditor session, not
+  // per-frame) -- clears per-frame prompt/selection state, which belongs to
+  // the frame just left, while keeping the label choice and tool/model,
+  // which the user expects to carry over.
+  resetForNewFrame: () => void;
   setLabelSelection: (partial: Partial<{
     labelCategoryId: number | null;
     labelClassification: LabelClassification | null;
@@ -56,8 +62,12 @@ export interface FrameEditorState {
   reset: () => void;
 }
 
-const DEFAULT_BACKWARD = 5;
-const DEFAULT_FORWARD = 5;
+// Backward defaults to 0 (tracking is forward-only unless the user opts in);
+// forward has no static default -- FrameEditor sets it to "rest of the
+// sequence" via setForward once it knows the current frame's position, so 0
+// here is just a safe placeholder before that first computation runs.
+const DEFAULT_BACKWARD = 0;
+const DEFAULT_FORWARD = 0;
 const DEFAULT_COLOR = "#22d3ee";
 
 export function createFrameEditorStore() {
@@ -97,6 +107,13 @@ export function createFrameEditorStore() {
     setSelectedAnnotation: (id) => set({ selectedAnnotationId: id }),
     setHoveredAnnotation: (id) => set({ hoveredAnnotationId: id }),
     triggerLabelPickerPulse: () => set({ labelPickerPulseAt: Date.now() + Math.random() }),
+    resetForNewFrame: () =>
+      set({
+        pendingPrompts: [],
+        draftAnnotationId: null,
+        selectedAnnotationId: null,
+        hoveredAnnotationId: null,
+      }),
     setLabelSelection: (partial) => set(partial),
     setColor: (color) => set({ color }),
     setBackward: (value) => set({ backward: value }),

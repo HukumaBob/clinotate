@@ -29,6 +29,8 @@ function renderPanel(
         vramUsedBytes={vram.vramUsedBytes}
         vramTotalBytes={vram.vramTotalBytes}
         vramIsLive={vram.isLive}
+        maxBackward={10}
+        maxForward={20}
       />
     </QueryClientProvider>,
   );
@@ -110,5 +112,15 @@ describe("ToolsPanel", () => {
     });
 
     expect(screen.getByTestId("label-picker-section")).toHaveClass("animate-label-pulse");
+  });
+
+  it("passes maxBackward/maxForward through to the Track section's Max buttons", async () => {
+    const store = renderPanel();
+
+    await userEvent.click(screen.getByRole("button", { name: "Max backward" }));
+    expect(store.getState().backward).toBe(10);
+
+    await userEvent.click(screen.getByRole("button", { name: "Max forward" }));
+    expect(store.getState().forward).toBe(20);
   });
 });

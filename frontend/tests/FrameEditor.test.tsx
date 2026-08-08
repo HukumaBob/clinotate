@@ -213,6 +213,55 @@ describe("FrameEditor", () => {
     );
   });
 
+  it("keeps the selected label tag when navigating to another frame", async () => {
+    const { rerender } = renderEditor();
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
+    expect(screen.getByLabelText("Tag")).toHaveValue("2");
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <FrameEditor frameId={43} frames={FRAMES} onClose={vi.fn()} onFrameChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("Frame number")).toHaveValue(3));
+    await waitFor(() => expect(screen.getByLabelText("Tag")).toHaveValue("2"));
+  });
+
+  it("clears pending point prompts when navigating to another frame", async () => {
+    const { rerender } = renderEditor();
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
+    const canvas = screen.getByTestId("frame-canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    });
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /^track$/i })).toBeEnabled());
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <FrameEditor frameId={43} frames={FRAMES} onClose={vi.fn()} onFrameChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("Frame number")).toHaveValue(3));
+    expect(screen.getByRole("button", { name: /^track$/i })).toBeDisabled();
+  });
+
   it("Track submits the accumulated pendingPrompts, not an empty list, after prior point clicks", async () => {
     renderEditor();
 
@@ -244,6 +293,33 @@ describe("FrameEditor", () => {
         }),
       ),
     );
+  });
+});
+
+describe("FrameEditor Track backward/forward defaults", () => {
+  it("defaults backward to 0 and forward to the rest of the sequence", async () => {
+    renderEditor(42);
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    expect(screen.getByLabelText("Backward")).toHaveValue(0);
+    // Frame 42 is index 1 of 3 (0-indexed) -- one frame (43) remains ahead.
+    expect(screen.getByLabelText("Forward")).toHaveValue(1);
+  });
+
+  it("recomputes forward to the new rest-of-sequence length after navigating frames", async () => {
+    const { rerender } = renderEditor(41);
+
+    await waitFor(() => expect(screen.getByLabelText("Forward")).toHaveValue(2));
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <FrameEditor frameId={43} frames={FRAMES} onClose={vi.fn()} onFrameChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("Frame number")).toHaveValue(3));
+    expect(screen.getByLabelText("Forward")).toHaveValue(0);
   });
 });
 

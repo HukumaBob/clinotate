@@ -8,8 +8,11 @@ describe("frameEditorStore", () => {
     const state = store.getState();
     expect(state.activeModel).toBe("sam2");
     expect(state.activeTool).toBe("point");
-    expect(state.backward).toBeGreaterThan(0);
-    expect(state.forward).toBeGreaterThan(0);
+  });
+
+  it("defaults backward to 0 (track forward-only unless the user opts in)", () => {
+    const store = createFrameEditorStore();
+    expect(store.getState().backward).toBe(0);
   });
 
   it("accumulates prompts and clears them", () => {
@@ -108,5 +111,37 @@ describe("frameEditorStore", () => {
     const second = store.getState().labelPickerPulseAt;
 
     expect(second).not.toBe(first);
+  });
+
+  it("resetForNewFrame clears prompts and selection but keeps the label choice", () => {
+    const store = createFrameEditorStore();
+    store.getState().addPrompt({ type: "point", coords: [0.5, 0.5], label: true });
+    store.getState().setDraftAnnotationId(9);
+    store.getState().setSelectedAnnotation(3);
+    store.getState().setHoveredAnnotation(4);
+    store.getState().setLabelSelection({ labelCategoryId: 1, labelClassification: "geometric", labelTagId: 3 });
+
+    store.getState().resetForNewFrame();
+
+    const state = store.getState();
+    expect(state.pendingPrompts).toHaveLength(0);
+    expect(state.draftAnnotationId).toBeNull();
+    expect(state.selectedAnnotationId).toBeNull();
+    expect(state.hoveredAnnotationId).toBeNull();
+    expect(state.labelCategoryId).toBe(1);
+    expect(state.labelClassification).toBe("geometric");
+    expect(state.labelTagId).toBe(3);
+  });
+
+  it("resetForNewFrame keeps the active tool and model", () => {
+    const store = createFrameEditorStore();
+    store.getState().setActiveTool("mask");
+    store.getState().setActiveModel("sam3");
+
+    store.getState().resetForNewFrame();
+
+    const state = store.getState();
+    expect(state.activeTool).toBe("mask");
+    expect(state.activeModel).toBe("sam3");
   });
 });
