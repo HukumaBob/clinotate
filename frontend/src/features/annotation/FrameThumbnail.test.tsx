@@ -53,7 +53,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
       { wrapper },
     );
 
@@ -80,7 +80,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
       { wrapper },
     );
 
@@ -91,7 +91,7 @@ describe("FrameThumbnail", () => {
     vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
       { wrapper },
     );
 
@@ -119,7 +119,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
       { wrapper },
     );
 
@@ -161,7 +161,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
       { wrapper },
     );
 
@@ -189,11 +189,81 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
       { wrapper },
     );
 
     await screen.findByText("Polyp / Sessile");
     expect(screen.queryByTestId("mask-overlay")).not.toBeInTheDocument();
+  });
+
+  it("in selectable mode, renders a checkbox reflecting the selected prop", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+
+    render(
+      <FrameThumbnail
+        frameId={5}
+        imageUrl="http://example.com/frame.png"
+        taxonomyTree={TAXONOMY_TREE}
+        onClick={() => {}}
+        selectable
+        selected
+        onToggleSelect={() => {}}
+      />,
+      { wrapper },
+    );
+
+    await screen.findByAltText("Frame 5");
+    const checkbox = screen.getByRole("checkbox");
+    expect(checkbox).toBeChecked();
+  });
+
+  it("in selectable mode, clicking the card calls onToggleSelect instead of onClick", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+    const onClick = vi.fn();
+    const onToggleSelect = vi.fn();
+
+    render(
+      <FrameThumbnail
+        frameId={5}
+        imageUrl="http://example.com/frame.png"
+        taxonomyTree={TAXONOMY_TREE}
+        onClick={onClick}
+        selectable
+        selected={false}
+        onToggleSelect={onToggleSelect}
+      />,
+      { wrapper },
+    );
+
+    const img = await screen.findByAltText("Frame 5");
+    img.closest("button")?.click();
+
+    expect(onToggleSelect).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("when not selectable, clicking the card calls onClick and renders no checkbox", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+    const onClick = vi.fn();
+
+    render(
+      <FrameThumbnail
+        frameId={5}
+        imageUrl="http://example.com/frame.png"
+        taxonomyTree={TAXONOMY_TREE}
+        onClick={onClick}
+        selectable={false}
+        selected={false}
+        onToggleSelect={() => {}}
+      />,
+      { wrapper },
+    );
+
+    const img = await screen.findByAltText("Frame 5");
+    img.closest("button")?.click();
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 });
