@@ -42,6 +42,14 @@ cap on how much VRAM the `ml-worker` process may claim.
 
 ## Non-goals
 
+- SAM3 tracking (`run_sam3_track`/`Sam3TrackRequest`) — SAM3 is not
+  currently functional in this stack, and unlike SAM2's request schema, it
+  has no `backward`/`forward` fields to bound (it tracks the entire
+  sequence unconditionally). Layers 2 and 3 below therefore apply only to
+  the SAM2 path (`Sam2TrackRequest`/`run_sam2_track`). Layer 1's
+  per-process VRAM cap still protects SAM3 incidentally, since both
+  adapters share the same `ml-worker` process — but a SAM3-specific range
+  cap and pre-flight check are deferred until SAM3 tracking is revisited.
 - GPU upgrade / hardware change.
 - NVIDIA MPS or MIG-based system-level isolation — RTX 2070 doesn't support
   MIG, and MPS is unnecessary complexity for a single-consumer-process
