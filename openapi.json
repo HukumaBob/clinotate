@@ -1701,6 +1701,61 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Bulk Delete Frames",
+        "operationId": "bulk_delete_frames_media_sequences__sequence_id__frames_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameBulkDelete"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameBulkDeleteResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/media/procedures/{procedure_id}/sequences": {
@@ -2636,6 +2691,38 @@
         },
         "type": "object",
         "title": "EvaluationTypeUpdate"
+      },
+      "FrameBulkDelete": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Frame Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids"
+        ],
+        "title": "FrameBulkDelete"
+      },
+      "FrameBulkDeleteResult": {
+        "properties": {
+          "deleted_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Deleted Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted_ids"
+        ],
+        "title": "FrameBulkDeleteResult"
       },
       "FrameRead": {
         "properties": {

@@ -16,6 +16,8 @@ from app.jobs.schemas import JobRead
 from app.jobs.service import enqueue_video_transcode
 from app.media.models import Frame, Sequence, Video
 from app.media.schemas import (
+    FrameBulkDelete,
+    FrameBulkDeleteResult,
     FrameRead,
     MediaLibraryItem,
     MediaLibraryPage,
@@ -605,3 +607,29 @@ def delete_sequence(sequence_id: int, session: Session = Depends(get_session)) -
     session.query(Frame).filter(Frame.sequence_id == sequence_id).delete()
     session.delete(sequence)
     session.commit()
+
+
+@router.delete("/sequences/{sequence_id}/frames", response_model=FrameBulkDeleteResult)
+def bulk_delete_frames(
+    sequence_id: int,
+    payload: FrameBulkDelete,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> FrameBulkDeleteResult:
+    frames = (
+        session.query(Frame)
+        .filter(Frame.id.in_(payload.frame_ids), Frame.sequence_id == sequence_id)
+        .all()
+    )
+    deleted_ids: list[int] = []
+    for frame in frames:
+        annotations = session.query(Annotation).filter(Annotation.frame_id == frame.id).all()
+        for annotation in annotations:
+            if annotation.storage_key:
+                storage.delete(annotation.storage_key)
+            session.delete(annotation)
+        storage.delete(frame.storage_key)
+        session.delete(frame)
+        deleted_ids.append(frame.id)
+    session.commit()
+    return FrameBulkDeleteResult(deleted_ids=deleted_ids)

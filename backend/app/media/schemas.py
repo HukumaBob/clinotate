@@ -126,3 +126,11 @@ class FrameRead(BaseModel):
     width: int
     height: int
     image_url: str
+
+
+class FrameBulkDelete(BaseModel):
+    frame_ids: list[int]
+
+
+class FrameBulkDeleteResult(BaseModel):
+    deleted_ids: list[int]

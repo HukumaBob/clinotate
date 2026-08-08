@@ -1626,3 +1626,196 @@ def test_patch_sequence_recut_with_zero_fps_returns_422():
     )
 
     assert response.status_code == 422
+
+
+def _create_label_for_delete_tests(headers: dict[str, str], suffix: str) -> int:
+    # Mirrors test_delete_video_derived_sequence_with_annotations_returns_409's
+    # get-or-create pattern: Procedure/Category/EvaluationType creation 500s
+    # on a unique-constraint collision instead of returning a JSON error, so
+    # look each up first rather than assuming a fresh POST will succeed.
+    procedures = client.get("/taxonomy/procedures", headers=headers).json()
+    procedure = next((p for p in procedures if p["name"] == f"frame-delete-procedure-{suffix}"), None)
+    if procedure is None:
+        procedure = client.post(
+            "/taxonomy/procedures", json={"name": f"frame-delete-procedure-{suffix}"}, headers=headers
+        ).json()
+
+    categories = client.get(f"/taxonomy/categories?procedure_id={procedure['id']}", headers=headers).json()
+    category = next((c for c in categories if c["name"] == f"frame-delete-category-{suffix}"), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": f"frame-delete-category-{suffix}", "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next(
+        (e for e in evaluation_types if e["name"] == f"frame-delete-evaluation-type-{suffix}"), None
+    )
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types", json={"name": f"frame-delete-evaluation-type-{suffix}"}, headers=headers
+        ).json()
+
+    return client.post(
+        "/taxonomy/labels",
+        json={
+            "name": f"Frame-delete label {suffix}",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()["id"]
+
+
+def test_bulk_delete_frame_removes_frame_and_cascades_mask_annotation():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "bulk-delete-frame-procedure"}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("bulk_delete.mp4", f, "video/mp4")},
+            data={"title": "Bulk delete source", "procedure_id": procedure_id},
+            headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Bulk delete seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frame_id = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()[0]["id"]
+    label_id = _create_label_for_delete_tests(headers, "mask-cascade")
+
+    # The API can only create CLASSIFICATION-type annotations (no storage_key
+    # / mask file) -- create_classification_annotation in
+    # app/annotation/service.py always sets storage_key=None. To exercise
+    # the mask-file cleanup path this endpoint must perform, build a MASK
+    # annotation with a real uploaded storage object directly via the ORM,
+    # mirroring test_sequence_can_be_created_without_a_video's direct-session
+    # pattern for state the HTTP API cannot produce.
+    from app.annotation.models import Annotation, AnnotationType
+    from app.db import SessionLocal
+    from app.storage import get_storage_service
+
+    storage = get_storage_service()
+    mask_key = f"masks/test/{frame_id}-bulk-delete.png"
+    storage.upload(mask_key, b"fake-mask-bytes", "image/png")
+
+    session = SessionLocal()
+    try:
+        user_id = session.execute(
+            __import__("sqlalchemy").text("SELECT id FROM users WHERE email = :email"),
+            {"email": "media1@example.com"},
+        ).scalar_one()
+        annotation = Annotation(
+            frame_id=frame_id,
+            label_id=label_id,
+            taxonomy_version=1,
+            annotation_type=AnnotationType.MASK,
+            payload={},
+            storage_key=mask_key,
+            created_by_id=user_id,
+        )
+        session.add(annotation)
+        session.commit()
+        annotation_id = annotation.id
+    finally:
+        session.close()
+
+    response = client.request(
+        "DELETE",
+        f"/media/sequences/{sequence_id}/frames",
+        json={"frame_ids": [frame_id]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted_ids": [frame_id]}
+
+    # Frame gone
+    assert client.get(f"/media/frames/{frame_id}", headers=headers).status_code == 404
+
+    # Annotation row gone
+    session = SessionLocal()
+    try:
+        assert session.get(Annotation, annotation_id) is None
+    finally:
+        session.close()
+
+    # Mask storage object gone
+    import pytest
+    from botocore.exceptions import ClientError
+
+    with pytest.raises(ClientError):
+        storage.download(mask_key)
+
+
+def test_bulk_delete_frames_silently_skips_nonexistent_and_foreign_ids():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "bulk-delete-skip-procedure"}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("bulk_delete_skip.mp4", f, "video/mp4")},
+            data={"title": "Bulk delete skip source", "procedure_id": procedure_id},
+            headers=headers,
+        ).json()["id"]
+    sequence_a = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Skip seq A", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    sequence_b = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Skip seq B", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frame_a_id = client.get(f"/media/sequences/{sequence_a}/frames", headers=headers).json()[0]["id"]
+    frame_b_id = client.get(f"/media/sequences/{sequence_b}/frames", headers=headers).json()[0]["id"]
+
+    response = client.request(
+        "DELETE",
+        f"/media/sequences/{sequence_a}/frames",
+        json={"frame_ids": [frame_a_id, frame_b_id, 999999999]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted_ids": [frame_a_id]}
+    # frame_b (different sequence) survives
+    assert client.get(f"/media/frames/{frame_b_id}", headers=headers).status_code == 200
+
+
+def test_bulk_delete_frame_with_no_annotations_succeeds():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "bulk-delete-no-annotation-procedure"}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("bulk_delete_no_annotation.mp4", f, "video/mp4")},
+            data={"title": "Bulk delete no-annotation source", "procedure_id": procedure_id},
+            headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "No-annotation seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frame_id = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()[0]["id"]
+
+    response = client.request(
+        "DELETE",
+        f"/media/sequences/{sequence_id}/frames",
+        json={"frame_ids": [frame_id]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted_ids": [frame_id]}
