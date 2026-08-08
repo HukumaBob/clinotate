@@ -4,7 +4,6 @@ from pathlib import Path
 from botocore.exceptions import ClientError
 
 from app.main import app  # noqa: F401  (import registers all models on Base.metadata)
-from app.db import SessionLocal
 from app.media.models import Frame, Sequence, Video
 from app.media.service import compute_checksum, extract_frames, recut_sequence
 from app.storage import get_storage_service
@@ -43,6 +42,8 @@ def _make_video_and_sequence(session, crop_box=None):
 
 
 def test_recut_sequence_replaces_frames_and_updates_timing():
+    from app.db import SessionLocal
+
     session = SessionLocal()
     storage = get_storage_service()
     video, sequence = _make_video_and_sequence(session)
@@ -115,6 +116,7 @@ def _create_user_and_label(session):
 
 def test_recut_sequence_deletes_annotations_on_removed_frames():
     from app.annotation.models import Annotation, AnnotationType
+    from app.db import SessionLocal
 
     session = SessionLocal()
     storage = get_storage_service()
@@ -148,6 +150,8 @@ def test_recut_sequence_deletes_annotations_on_removed_frames():
 
 
 def test_recut_sequence_reuses_the_persisted_crop_box():
+    from app.db import SessionLocal
+
     session = SessionLocal()
     storage = get_storage_service()
     crop_box = {"left": 20, "right": 20, "top": 10, "bottom": 10}
@@ -176,6 +180,7 @@ def test_recut_sequence_reuses_the_persisted_crop_box():
 
 
 def test_recut_sequence_persists_a_new_crop_box_when_provided():
+    from app.db import SessionLocal
     from app.media.schemas import CropBox
 
     session = SessionLocal()
@@ -198,6 +203,8 @@ def test_recut_sequence_persists_a_new_crop_box_when_provided():
 
 
 def test_recut_sequence_keeps_old_crop_box_when_none_provided():
+    from app.db import SessionLocal
+
     session = SessionLocal()
     storage = get_storage_service()
     old_crop_box = {"left": 20, "right": 20, "top": 10, "bottom": 10}
@@ -211,6 +218,8 @@ def test_recut_sequence_keeps_old_crop_box_when_none_provided():
 
 
 def test_recut_sequence_uses_unique_storage_keys_and_deletes_old_objects():
+    from app.db import SessionLocal
+
     session = SessionLocal()
     storage = get_storage_service()
     video, sequence = _make_video_and_sequence(session)
