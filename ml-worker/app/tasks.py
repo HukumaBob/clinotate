@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import torch
 from PIL import Image
 
+from app.celery_app import WORKER_VRAM_FRACTION as _WORKER_VRAM_FRACTION
 from app.celery_app import celery_app
 from app.db import SessionLocal
 from app.models import Annotation, AnnotationStatus, AnnotationType, Frame, Job, JobStatus, Label
@@ -83,14 +84,19 @@ def _record_vram_usage(job: Job) -> None:
     job.vram_total_bytes = total_bytes
 
 
-class _InsufficientVramError(RuntimeError):
+class _InsufficientVramError(Exception):
     """Raised by the run_sam2_track() pre-flight VRAM check when the
     estimated requirement exceeds the safe available budget. Deliberately
-    distinct from a generic RuntimeError so the except block below can
-    skip _restart_worker_process_after_track_failure() for this case --
-    no GPU work was attempted, so there is no corrupted CUDA allocator
-    state to work around, and restarting the process here would be pure
-    overhead."""
+    distinct from a generic RuntimeError (subclasses Exception directly,
+    NOT RuntimeError) so the except block below can skip
+    _restart_worker_process_after_track_failure() for this case -- no GPU
+    work was attempted, so there is no corrupted CUDA allocator state to
+    work around, and restarting the process here would be pure overhead.
+    torch.cuda.OutOfMemoryError also subclasses RuntimeError, so if this
+    class subclassed RuntimeError too, an `except RuntimeError:` clause
+    added above this one in the future could silently swallow a real CUDA
+    OOM into this no-restart path -- subclassing Exception directly removes
+    that ambiguity entirely."""
 
 
 # Rough calibration: SAM2's video predictor keeps a resized copy of every
@@ -314,26 +320,46 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
         label = _load_label(session, label_id)
 
         anchor_index = next(i for i, f in enumerate(frames) if f.id == anchor_frame_id)
-        frame_bytes_list = [storage.download(f.storage_key) for f in frames]
+        window_start = max(0, anchor_index - backward)
+        window_end = anchor_index + forward + 1
+        tracked_frames = frames[window_start:window_end]
+        anchor_index_in_window = anchor_index - window_start
 
-        tracked_frame_count = min(len(frames), backward + forward + 1)
-        first_frame_image = Image.open(io.BytesIO(frame_bytes_list[0]))
-        estimated_bytes = _estimate_track_vram_bytes(
-            frame_count=tracked_frame_count,
-            width=first_frame_image.width,
-            height=first_frame_image.height,
-        )
-        free_bytes, _total_bytes = torch.cuda.mem_get_info()
-        if estimated_bytes > free_bytes * _TRACK_VRAM_SAFETY_MARGIN:
+        # Only download the frames actually reaching the GPU. Sam2Adapter.track()
+        # stages every frame it's given resident in VRAM via
+        # SAM2VideoPredictor.init_state() -- backward/forward only bound how far
+        # propagate_in_video() walks afterward, not what init_state() loads up
+        # front. Downloading/passing the whole sequence here would let the real
+        # VRAM footprint balloon far past what the pre-flight estimate below
+        # (and Layer 2's 20-frame combined-range cap) models.
+        frame_bytes_list = [storage.download(f.storage_key) for f in tracked_frames]
+
+        with Image.open(io.BytesIO(frame_bytes_list[0])) as first_frame_image:
+            estimated_bytes = _estimate_track_vram_bytes(
+                frame_count=len(tracked_frames),
+                width=first_frame_image.width,
+                height=first_frame_image.height,
+            )
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+        # torch.cuda.mem_get_info() reports raw driver-level free VRAM across
+        # the whole device -- it does NOT account for the per-process fraction
+        # cap set in celery_app.py (that cap lives entirely inside PyTorch's
+        # allocator, invisible to cudaMemGetInfo). Combine both so a busy
+        # desktop session sharing this GPU can't make this process think it
+        # has more headroom than its own fraction cap actually allows.
+        fraction_budget = int(total_bytes * _WORKER_VRAM_FRACTION) - torch.cuda.memory_reserved()
+        available_budget = min(free_bytes, fraction_budget)
+        if estimated_bytes > available_budget * _TRACK_VRAM_SAFETY_MARGIN:
             raise _InsufficientVramError(
                 f"Estimated GPU memory required ({estimated_bytes} bytes) exceeds the "
-                f"safe available budget ({int(free_bytes * _TRACK_VRAM_SAFETY_MARGIN)} bytes "
-                f"of {free_bytes} free) -- try a smaller tracking range."
+                f"safe available budget ({int(available_budget * _TRACK_VRAM_SAFETY_MARGIN)} bytes "
+                f"of {available_budget} available) -- try a smaller tracking range."
             )
 
-        results = resolved_adapter.track(frame_bytes_list, prompts, anchor_index, backward, forward)
+        results = resolved_adapter.track(
+            frame_bytes_list, prompts, anchor_index_in_window, backward, forward
+        )
 
-        tracked_frames = frames[max(0, anchor_index - backward):anchor_index + forward + 1]
         for index, (frame, result) in enumerate(zip(tracked_frames, results)):
             mask_key = f"masks/{frame.id}/{job_id}.png"
             storage.upload(mask_key, result.mask_png, content_type="image/png")

@@ -5,6 +5,12 @@ from app.config import get_worker_settings
 
 settings = get_worker_settings()
 
+# Fraction of total device VRAM this worker process is allowed to claim.
+# Shared with tasks.py's pre-flight VRAM check (which needs the same value
+# to reason about how much of torch.cuda.mem_get_info()'s device-wide free
+# memory is actually available to THIS process) so the two never drift.
+WORKER_VRAM_FRACTION = 0.8
+
 celery_app = Celery(
     "endoscopy_platform_worker",
     broker=settings.redis_url,
@@ -25,7 +31,7 @@ celery_app.conf.accept_content = ["json"]
 # ordinary Python exception the existing track() failure handling in
 # app/tasks.py already recovers from via a worker process restart.
 if torch.cuda.is_available():
-    torch.cuda.set_per_process_memory_fraction(0.8)
+    torch.cuda.set_per_process_memory_fraction(WORKER_VRAM_FRACTION)
 
 # tasks.py defines the @celery_app.task-decorated sam3_predict/sam3_track
 # tasks against this same app instance; importing it here is what actually

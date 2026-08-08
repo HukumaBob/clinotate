@@ -17,7 +17,7 @@ interface TrackControlsProps {
 // jobs within the GPU VRAM budget this GPU can safely handle. Mirrors
 // MAX_TRACK_RANGE_FRAMES in backend/app/jobs/schemas.py -- keep both in
 // sync if this value ever changes.
-const MAX_COMBINED_TRACK_RANGE = 20;
+export const MAX_COMBINED_TRACK_RANGE = 20;
 
 export function TrackControls({ store, onTrack, maxBackward, maxForward }: TrackControlsProps) {
   const backward = useStore(store, (state) => state.backward);

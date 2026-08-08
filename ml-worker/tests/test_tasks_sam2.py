@@ -56,7 +56,8 @@ def test_run_sam2_track_fails_fast_without_calling_adapter_when_vram_insufficien
     mock_session.get.side_effect = get_side_effect
     mock_session.query.return_value.filter.return_value.order_by.return_value.all.return_value = all_frames
 
-    # A tiny 1x1 PNG so Image.open(...).size works without a real frame download.
+    # A 1920x1080 PNG -- deliberately large (not tiny) so the VRAM estimate
+    # this test exercises actually exceeds the safety margin below.
     import io as _io
 
     from PIL import Image as _Image
@@ -73,6 +74,7 @@ def test_run_sam2_track_fails_fast_without_calling_adapter_when_vram_insufficien
         patch("app.tasks.get_storage_service") as mock_get_storage,
         # Almost no free VRAM: 1 MiB free out of 8 GiB total.
         patch("torch.cuda.mem_get_info", return_value=(1_048_576, 8_589_934_592)),
+        patch("torch.cuda.memory_reserved", return_value=0),
     ):
         mock_get_storage.return_value.download.return_value = tiny_png_bytes
         tasks_module.run_sam2_track(job_id=1)
@@ -138,6 +140,7 @@ def test_run_sam2_track_maps_results_to_correct_frame_window():
         patch("app.tasks.SessionLocal", return_value=mock_session),
         patch("app.tasks.get_storage_service") as mock_get_storage,
         patch("torch.cuda.mem_get_info", return_value=(4_294_967_296, 8_589_934_592)),
+        patch("torch.cuda.memory_reserved", return_value=0),
     ):
         mock_get_storage.return_value.download.return_value = _small_frame_png_bytes()
         tasks_module.run_sam2_track(job_id=1)
@@ -150,6 +153,24 @@ def test_run_sam2_track_maps_results_to_correct_frame_window():
 
     # Expected window: frames[max(0, 2-1):2+1+1] = frames[1:4] -> ids [101, 102, 103]
     assert created_frame_ids == [101, 102, 103]
+
+    # Only the 3 windowed frames should ever be downloaded -- NOT all 5 frames
+    # in the sequence. This is the Critical-finding fix: staging the whole
+    # sequence's bytes for the adapter would let real GPU VRAM use balloon
+    # far past what the pre-flight estimate models.
+    downloaded_keys = [call.args[0] for call in mock_get_storage.return_value.download.call_args_list]
+    assert downloaded_keys == ["frames/101.png", "frames/102.png", "frames/103.png"]
+
+    # resolved_adapter.track() must receive only the windowed frames' bytes
+    # (3 of them, not all 5) and an anchor index RELATIVE TO THAT WINDOW:
+    # anchor_index=2 in the full sequence, window_start=1, so
+    # anchor_index_in_window = 2 - 1 = 1 (the middle of the 3-frame window).
+    track_call_args = fake_adapter.track.call_args.args
+    frames_arg, prompts_arg, anchor_index_in_window_arg, backward_arg, forward_arg = track_call_args
+    assert len(frames_arg) == 3
+    assert anchor_index_in_window_arg == 1
+    assert backward_arg == 1
+    assert forward_arg == 1
 
 
 def test_run_sam2_track_sets_job_id_on_every_created_annotation():
@@ -191,6 +212,7 @@ def test_run_sam2_track_sets_job_id_on_every_created_annotation():
         patch("app.tasks.SessionLocal", return_value=mock_session),
         patch("app.tasks.get_storage_service") as mock_get_storage,
         patch("torch.cuda.mem_get_info", return_value=(4_294_967_296, 8_589_934_592)),
+        patch("torch.cuda.memory_reserved", return_value=0),
     ):
         mock_get_storage.return_value.download.return_value = _small_frame_png_bytes()
         tasks_module.run_sam2_track(job_id=77)
@@ -337,6 +359,7 @@ def test_run_sam2_track_records_vram_usage_per_frame():
         patch("app.tasks.SessionLocal", return_value=mock_session),
         patch("app.tasks.get_storage_service") as mock_get_storage,
         patch("torch.cuda.mem_get_info", return_value=(2_147_483_648, 8_589_934_592)),
+        patch("torch.cuda.memory_reserved", return_value=0),
     ):
         mock_get_storage.return_value.download.return_value = _small_frame_png_bytes()
         tasks_module.run_sam2_track(job_id=1)

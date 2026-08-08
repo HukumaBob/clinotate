@@ -12,6 +12,7 @@ import { FrameCanvas } from "./FrameCanvas";
 import { JobErrorNotice } from "./JobErrorNotice";
 import { buildLabelColorMap } from "./labelColors";
 import { ToolsPanel } from "./ToolsPanel";
+import { MAX_COMBINED_TRACK_RANGE } from "./TrackControls";
 import type { components } from "../../shared/api/generated/schema";
 
 type FrameRead = components["schemas"]["FrameRead"];
@@ -97,7 +98,7 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
     // docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md)
     // -- otherwise a sequence with >20 frames ahead would default forward
     // above the cap before the user touches either input.
-    store.getState().setForward(Math.min(maxForward, 20));
+    store.getState().setForward(Math.min(maxForward, MAX_COMBINED_TRACK_RANGE));
     // maxForward intentionally excluded: it's a pure function of frameId
     // (via currentIndex) here, so including it would double-fire this
     // effect on every render where it's recomputed as the same value.
