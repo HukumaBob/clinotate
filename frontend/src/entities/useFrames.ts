@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "../shared/api/client";
 
@@ -25,5 +25,21 @@ export function useFrame(frameId: number) {
       return result.data;
     },
     enabled: Number.isFinite(frameId),
+  });
+}
+
+export function useDeleteFrames(sequenceId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (frameIds: number[]) => {
+      const result = await apiClient.DELETE("/media/sequences/{sequence_id}/frames", {
+        params: { path: { sequence_id: sequenceId } },
+        body: { frame_ids: frameIds },
+      });
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["frames", sequenceId] });
+    },
   });
 }

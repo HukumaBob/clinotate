@@ -4,12 +4,10 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { apiClient } from "../shared/api/client";
-import { useFrame } from "./useFrames";
+import { useDeleteFrames, useFrame } from "./useFrames";
 
 vi.mock("../shared/api/client", () => ({
-  apiClient: {
-    GET: vi.fn(),
-  },
+  apiClient: { GET: vi.fn(), DELETE: vi.fn() },
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -49,5 +47,30 @@ describe("useFrame", () => {
   it("does not fetch when frameId is not a finite number", () => {
     renderHook(() => useFrame(Number.NaN), { wrapper });
     expect(apiClient.GET).not.toHaveBeenCalled();
+  });
+});
+
+describe("useDeleteFrames", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("calls the bulk-delete endpoint with the sequence id and frame ids", async () => {
+    vi.mocked(apiClient.DELETE).mockResolvedValue({
+      data: { deleted_ids: [1, 2] },
+      error: undefined,
+    } as never);
+
+    const { result } = renderHook(() => useDeleteFrames(9), { wrapper });
+
+    result.current.mutate([1, 2]);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiClient.DELETE).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}/frames",
+      expect.objectContaining({
+        params: { path: { sequence_id: 9 } },
+        body: { frame_ids: [1, 2] },
+      }),
+    );
   });
 });

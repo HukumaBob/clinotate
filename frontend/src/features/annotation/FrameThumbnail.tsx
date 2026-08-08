@@ -11,9 +11,20 @@ interface FrameThumbnailProps {
   imageUrl: string;
   taxonomyTree: TaxonomyTreeNode[];
   onClick: () => void;
+  selectable: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
 }
 
-export function FrameThumbnail({ frameId, imageUrl, taxonomyTree, onClick }: FrameThumbnailProps) {
+export function FrameThumbnail({
+  frameId,
+  imageUrl,
+  taxonomyTree,
+  onClick,
+  selectable,
+  selected,
+  onToggleSelect,
+}: FrameThumbnailProps) {
   const annotationsQuery = useAnnotations(frameId);
   const annotations = annotationsQuery.data ?? [];
   const maskAnnotations = annotations.filter((annotation) => annotation.mask_url);
@@ -21,10 +32,19 @@ export function FrameThumbnail({ frameId, imageUrl, taxonomyTree, onClick }: Fra
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={selectable ? onToggleSelect : onClick}
       className="group relative aspect-square overflow-hidden rounded border border-gray-800 bg-gray-900"
     >
       <img src={imageUrl} alt={`Frame ${frameId}`} className="h-full w-full object-contain" />
+      {selectable && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          onClick={(event) => event.stopPropagation()}
+          className="absolute left-2 top-2 h-5 w-5 accent-blue-500"
+        />
+      )}
       {maskAnnotations.map((annotation) => {
         const resolved = resolveLabelFromTree(taxonomyTree, annotation.label_id);
         const color = resolved?.tag.color ?? DEFAULT_MASK_COLOR;
