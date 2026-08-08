@@ -1,8 +1,10 @@
+import io
 import os
 import sys
 from datetime import datetime, timezone
 
 import torch
+from PIL import Image
 
 from app.celery_app import celery_app
 from app.db import SessionLocal
@@ -79,6 +81,42 @@ def _record_vram_usage(job: Job) -> None:
     free_bytes, total_bytes = torch.cuda.mem_get_info()
     job.vram_used_bytes = total_bytes - free_bytes
     job.vram_total_bytes = total_bytes
+
+
+class _InsufficientVramError(RuntimeError):
+    """Raised by the run_sam2_track() pre-flight VRAM check when the
+    estimated requirement exceeds the safe available budget. Deliberately
+    distinct from a generic RuntimeError so the except block below can
+    skip _restart_worker_process_after_track_failure() for this case --
+    no GPU work was attempted, so there is no corrupted CUDA allocator
+    state to work around, and restarting the process here would be pure
+    overhead."""
+
+
+# Rough calibration: SAM2's video predictor keeps a resized copy of every
+# tracked frame (plus internal feature maps) resident in VRAM for the
+# duration of propagate_in_video(). This constant is a conservative
+# starting estimate, not a measured physical model -- see
+# docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md's
+# "Open items" section. Recalibrate by comparing this estimate against the
+# actual vram_used_bytes _record_vram_usage() reports for a real tracking
+# job of known frame_count/width/height, then update this constant.
+_TRACK_VRAM_BYTES_PER_PIXEL_PER_FRAME = 40
+
+
+def _estimate_track_vram_bytes(frame_count: int, width: int, height: int) -> int:
+    """Rough upper-bound estimate of the VRAM a run_sam2_track() call will
+    need, used only as a cheap pre-flight check to reject obviously
+    oversized requests before spending time loading frames and starting a
+    SAM2 video session. Not a substitute for the hard per-process VRAM
+    cap set in celery_app.py, which is what actually guarantees safety if
+    this estimate is wrong."""
+    return frame_count * width * height * _TRACK_VRAM_BYTES_PER_PIXEL_PER_FRAME
+
+
+# Fraction of currently-free VRAM the estimate must fit under, leaving
+# headroom for the safety margin discussed in the design doc.
+_TRACK_VRAM_SAFETY_MARGIN = 0.7
 
 
 @celery_app.task(name="sam3_predict")
@@ -277,6 +315,22 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
 
         anchor_index = next(i for i, f in enumerate(frames) if f.id == anchor_frame_id)
         frame_bytes_list = [storage.download(f.storage_key) for f in frames]
+
+        tracked_frame_count = min(len(frames), backward + forward + 1)
+        first_frame_image = Image.open(io.BytesIO(frame_bytes_list[0]))
+        estimated_bytes = _estimate_track_vram_bytes(
+            frame_count=tracked_frame_count,
+            width=first_frame_image.width,
+            height=first_frame_image.height,
+        )
+        free_bytes, _total_bytes = torch.cuda.mem_get_info()
+        if estimated_bytes > free_bytes * _TRACK_VRAM_SAFETY_MARGIN:
+            raise _InsufficientVramError(
+                f"Estimated GPU memory required ({estimated_bytes} bytes) exceeds the "
+                f"safe available budget ({int(free_bytes * _TRACK_VRAM_SAFETY_MARGIN)} bytes "
+                f"of {free_bytes} free) -- try a smaller tracking range."
+            )
+
         results = resolved_adapter.track(frame_bytes_list, prompts, anchor_index, backward, forward)
 
         tracked_frames = frames[max(0, anchor_index - backward):anchor_index + forward + 1]
@@ -301,6 +355,17 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
             session.commit()
 
         job.status = JobStatus.SUCCEEDED
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
+    except _InsufficientVramError as exc:
+        # No GPU work was attempted (the pre-flight check ran before
+        # resolved_adapter.track()), so there is no corrupted CUDA
+        # allocator state to work around -- skip the worker-process
+        # restart used for genuine track() failures below.
+        session.rollback()
+        job = session.get(Job, job_id)
+        job.status = JobStatus.FAILED
+        job.error = str(exc)
         job.finished_at = datetime.now(timezone.utc)
         session.commit()
     except Exception as exc:

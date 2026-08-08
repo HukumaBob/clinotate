@@ -1,6 +1,85 @@
+import io
 from unittest.mock import MagicMock, patch
 
+from PIL import Image
+
 import app.tasks as tasks_module
+
+def _small_frame_png_bytes() -> bytes:
+    """A small real PNG (not a MagicMock) so run_sam2_track's pre-flight
+    VRAM estimate -- which calls Image.open() on the first downloaded
+    frame's bytes -- has something real to decode. Used by tests below
+    that aren't specifically exercising the pre-flight check itself."""
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 48)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_estimate_track_vram_bytes_scales_with_frame_count_and_resolution():
+    from app.tasks import _estimate_track_vram_bytes
+
+    small = _estimate_track_vram_bytes(frame_count=5, width=800, height=640)
+    large = _estimate_track_vram_bytes(frame_count=20, width=1920, height=1080)
+
+    assert small > 0
+    assert large > small
+
+
+def test_run_sam2_track_fails_fast_without_calling_adapter_when_vram_insufficient():
+    """When the pre-flight estimate exceeds free VRAM (with margin), the
+    job must fail immediately and resolved_adapter.track() must never be
+    called -- the whole point of this check is to avoid spending GPU time
+    on a request already known to be too big."""
+    fake_adapter = MagicMock()
+
+    mock_session = MagicMock()
+    mock_job = MagicMock(
+        payload={
+            "sequence_id": 10, "label_id": 2, "prompts": [],
+            "anchor_frame_id": 101, "backward": 5, "forward": 5,
+        },
+        created_by_id=1,
+    )
+    mock_label = MagicMock(id=2, taxonomy_version=3)
+
+    all_frames = [
+        MagicMock(id=100 + i, frame_index=i, storage_key=f"frames/{100+i}.png")
+        for i in range(11)
+    ]
+
+    def get_side_effect(model, pk):
+        from app.models import Job
+        if model is Job:
+            return mock_job
+        return None
+
+    mock_session.get.side_effect = get_side_effect
+    mock_session.query.return_value.filter.return_value.order_by.return_value.all.return_value = all_frames
+
+    # A tiny 1x1 PNG so Image.open(...).size works without a real frame download.
+    import io as _io
+
+    from PIL import Image as _Image
+
+    tiny_png = _io.BytesIO()
+    _Image.new("RGB", (1920, 1080)).save(tiny_png, format="PNG")
+    tiny_png_bytes = tiny_png.getvalue()
+
+    with (
+        patch.object(tasks_module, "_get_default_sam2_adapter", return_value=fake_adapter),
+        patch.object(tasks_module, "_evict_sam3_models"),
+        patch.object(tasks_module, "_load_label", return_value=mock_label),
+        patch("app.tasks.SessionLocal", return_value=mock_session),
+        patch("app.tasks.get_storage_service") as mock_get_storage,
+        # Almost no free VRAM: 1 MiB free out of 8 GiB total.
+        patch("torch.cuda.mem_get_info", return_value=(1_048_576, 8_589_934_592)),
+    ):
+        mock_get_storage.return_value.download.return_value = tiny_png_bytes
+        tasks_module.run_sam2_track(job_id=1)
+
+    fake_adapter.track.assert_not_called()
+    assert mock_job.status == "failed"
+    assert mock_job.error
 
 
 def test_run_sam2_track_maps_results_to_correct_frame_window():
@@ -57,8 +136,10 @@ def test_run_sam2_track_maps_results_to_correct_frame_window():
         patch.object(tasks_module, "_evict_sam3_models"),
         patch.object(tasks_module, "_load_label", return_value=mock_label),
         patch("app.tasks.SessionLocal", return_value=mock_session),
-        patch("app.tasks.get_storage_service"),
+        patch("app.tasks.get_storage_service") as mock_get_storage,
+        patch("torch.cuda.mem_get_info", return_value=(4_294_967_296, 8_589_934_592)),
     ):
+        mock_get_storage.return_value.download.return_value = _small_frame_png_bytes()
         tasks_module.run_sam2_track(job_id=1)
 
     assert mock_job.status == "succeeded"
@@ -108,8 +189,10 @@ def test_run_sam2_track_sets_job_id_on_every_created_annotation():
         patch.object(tasks_module, "_evict_sam3_models"),
         patch.object(tasks_module, "_load_label", return_value=mock_label),
         patch("app.tasks.SessionLocal", return_value=mock_session),
-        patch("app.tasks.get_storage_service"),
+        patch("app.tasks.get_storage_service") as mock_get_storage,
+        patch("torch.cuda.mem_get_info", return_value=(4_294_967_296, 8_589_934_592)),
     ):
+        mock_get_storage.return_value.download.return_value = _small_frame_png_bytes()
         tasks_module.run_sam2_track(job_id=77)
 
     created_annotations = [call.args[0] for call in mock_session.add.call_args_list]
@@ -252,9 +335,10 @@ def test_run_sam2_track_records_vram_usage_per_frame():
         patch.object(tasks_module, "_evict_sam3_models"),
         patch.object(tasks_module, "_load_label", return_value=mock_label),
         patch("app.tasks.SessionLocal", return_value=mock_session),
-        patch("app.tasks.get_storage_service"),
+        patch("app.tasks.get_storage_service") as mock_get_storage,
         patch("torch.cuda.mem_get_info", return_value=(2_147_483_648, 8_589_934_592)),
     ):
+        mock_get_storage.return_value.download.return_value = _small_frame_png_bytes()
         tasks_module.run_sam2_track(job_id=1)
 
     # free=2 GiB, total=8 GiB -> used = 6 GiB
