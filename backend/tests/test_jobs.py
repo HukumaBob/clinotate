@@ -287,6 +287,53 @@ def test_sam2_track_request_accepts_full_payload():
     assert request.forward == 5
 
 
+def test_sam2_track_request_rejects_combined_range_over_twenty():
+    from pydantic import ValidationError
+
+    from app.jobs.schemas import PromptIn, Sam2TrackRequest
+
+    with pytest.raises(ValidationError):
+        Sam2TrackRequest(
+            sequence_id=1,
+            label_id=1,
+            prompts=[PromptIn(type="point", coords=[0.5, 0.5], label=True)],
+            anchor_frame_id=10,
+            backward=15,
+            forward=6,
+        )
+
+
+def test_sam2_track_request_accepts_combined_range_at_twenty():
+    from app.jobs.schemas import PromptIn, Sam2TrackRequest
+
+    request = Sam2TrackRequest(
+        sequence_id=1,
+        label_id=1,
+        prompts=[PromptIn(type="point", coords=[0.5, 0.5], label=True)],
+        anchor_frame_id=10,
+        backward=10,
+        forward=10,
+    )
+    assert request.backward == 10
+    assert request.forward == 10
+
+
+def test_sam2_track_request_rejects_negative_backward():
+    from pydantic import ValidationError
+
+    from app.jobs.schemas import PromptIn, Sam2TrackRequest
+
+    with pytest.raises(ValidationError):
+        Sam2TrackRequest(
+            sequence_id=1,
+            label_id=1,
+            prompts=[PromptIn(type="point", coords=[0.5, 0.5], label=True)],
+            anchor_frame_id=10,
+            backward=-1,
+            forward=5,
+        )
+
+
 def test_job_type_has_sam2_variants():
     from app.jobs.models import JobType
 

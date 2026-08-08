@@ -3248,10 +3248,12 @@
           },
           "backward": {
             "type": "integer",
+            "minimum": 0.0,
             "title": "Backward"
           },
           "forward": {
             "type": "integer",
+            "minimum": 0.0,
             "title": "Forward"
           }
         },

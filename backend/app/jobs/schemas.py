@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.jobs.models import JobStatus, JobType
 
@@ -11,6 +11,15 @@ from app.jobs.models import JobStatus, JobType
 # regardless), while rejecting a pathologically large payload before it's
 # ever decoded/rasterized in the ml-worker.
 MAX_MASK_PNG_BASE64_LENGTH = 10 * 1024 * 1024
+
+# See docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md:
+# this GPU (8 GiB, shared with the desktop session) has reliably run out of
+# VRAM and rebooted the host at tracking ranges as small as 20-30 frames.
+# 20 is a deliberately conservative starting cap, not a measured safe
+# maximum -- it may be revisited once the per-process VRAM fraction cap
+# (ml-worker/app/celery_app.py) and the pre-flight estimate have more
+# real-world data behind them.
+MAX_TRACK_RANGE_FRAMES = 20
 
 
 class JobRead(BaseModel):
@@ -70,5 +79,15 @@ class Sam2TrackRequest(BaseModel):
     label_id: int
     prompts: list[PromptIn]
     anchor_frame_id: int
-    backward: int
-    forward: int
+    backward: int = Field(ge=0)
+    forward: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _validate_combined_range(self) -> "Sam2TrackRequest":
+        if self.backward + self.forward > MAX_TRACK_RANGE_FRAMES:
+            raise ValueError(
+                f"backward + forward must not exceed {MAX_TRACK_RANGE_FRAMES} frames "
+                f"(got {self.backward + self.forward}) -- see "
+                "docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md"
+            )
+        return self
