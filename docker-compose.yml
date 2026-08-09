@@ -62,6 +62,16 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_SECURE: "false"
       HF_TOKEN: ${HF_TOKEN}
+      # PyTorch's default CUDA caching allocator reserves fixed-size
+      # cudaMalloc segments, which fragments the CUDA address space under
+      # SAM2's variable per-tracking-job frame count. On this GPU (RTX 2070,
+      # BAR1 limited to 256 MiB, no Resizable BAR, also driving the desktop
+      # display) that fragmentation has been observed to hard-hang the whole
+      # host rather than raise a catchable OOM. expandable_segments uses
+      # CUDA's virtual memory management API instead of fixed segments,
+      # which avoids this fragmentation pattern -- see
+      # docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md.
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
     depends_on:
       - postgres
       - redis
