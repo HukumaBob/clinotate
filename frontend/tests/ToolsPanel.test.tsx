@@ -120,7 +120,9 @@ describe("ToolsPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Max backward" }));
     expect(store.getState().backward).toBe(10);
 
+    // maxForward is 20, but the combined 20-frame cap leaves only
+    // 20 - backward(10) = 10 frames of budget for forward.
     await userEvent.click(screen.getByRole("button", { name: "Max forward" }));
-    expect(store.getState().forward).toBe(20);
+    expect(store.getState().forward).toBe(10);
   });
 });

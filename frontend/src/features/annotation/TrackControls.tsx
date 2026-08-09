@@ -11,6 +11,14 @@ interface TrackControlsProps {
   maxForward: number;
 }
 
+// See docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md:
+// backward + forward must never exceed this, independent of how many
+// frames are actually available in the sequence, to keep SAM2 tracking
+// jobs within the GPU VRAM budget this GPU can safely handle. Mirrors
+// MAX_TRACK_RANGE_FRAMES in backend/app/jobs/schemas.py -- keep both in
+// sync if this value ever changes.
+export const MAX_COMBINED_TRACK_RANGE = 20;
+
 export function TrackControls({ store, onTrack, maxBackward, maxForward }: TrackControlsProps) {
   const backward = useStore(store, (state) => state.backward);
   const forward = useStore(store, (state) => state.forward);
@@ -19,6 +27,9 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
   const labelTagId = useStore(store, (state) => state.labelTagId);
   const pendingPrompts = useStore(store, (state) => state.pendingPrompts);
   const trackDisabled = labelTagId === null || pendingPrompts.length === 0;
+
+  const backwardBudget = Math.max(0, MAX_COMBINED_TRACK_RANGE - forward);
+  const forwardBudget = Math.max(0, MAX_COMBINED_TRACK_RANGE - backward);
 
   return (
     <div className="space-y-2">
@@ -29,14 +40,15 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
             <input
               type="number"
               min={0}
+              max={backwardBudget}
               value={backward}
-              onChange={(event) => setBackward(Number(event.target.value))}
+              onChange={(event) => setBackward(Math.min(Number(event.target.value), backwardBudget))}
               className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
             />
             <button
               type="button"
               aria-label="Max backward"
-              onClick={() => setBackward(maxBackward)}
+              onClick={() => setBackward(Math.min(maxBackward, backwardBudget))}
               className="shrink-0 rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-gray-200"
             >
               Max
@@ -49,14 +61,15 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
             <input
               type="number"
               min={0}
+              max={forwardBudget}
               value={forward}
-              onChange={(event) => setForward(Number(event.target.value))}
+              onChange={(event) => setForward(Math.min(Number(event.target.value), forwardBudget))}
               className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
             />
             <button
               type="button"
               aria-label="Max forward"
-              onClick={() => setForward(maxForward)}
+              onClick={() => setForward(Math.min(maxForward, forwardBudget))}
               className="shrink-0 rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-gray-200"
             >
               Max
@@ -64,6 +77,9 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
           </div>
         </label>
       </div>
+      <p className="text-xs text-gray-500">
+        Combined backward + forward is capped at {MAX_COMBINED_TRACK_RANGE} frames to protect GPU memory.
+      </p>
       <button
         type="button"
         disabled={trackDisabled}
