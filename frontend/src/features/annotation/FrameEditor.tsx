@@ -184,7 +184,12 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
     }
 
     predictMutation.mutate(
-      { frame_id: frameId, label_id: state.labelTagId, prompts },
+      {
+        frame_id: frameId,
+        label_id: state.labelTagId,
+        prompts,
+        mask_postprocess_strength: state.maskSmoothingStrength,
+      },
       {
         onSuccess: (data) => {
           if (!data) return;
@@ -243,6 +248,7 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
         anchor_frame_id: frameId,
         backward,
         forward,
+        mask_postprocess_strength: state.maskSmoothingStrength,
       },
       {
         onSuccess: (data) => {

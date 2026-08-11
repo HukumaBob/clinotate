@@ -49,7 +49,11 @@ function renderEditor(
       return { data: { id: 9, procedure_id: 9, video_id: null, start_time: 0, duration: 0 }, error: undefined, response: new Response() };
     }
     if (path === "/settings") {
-      return { data: { max_track_range_frames: maxTrackRangeFrames }, error: undefined, response: new Response() };
+      return {
+        data: { max_track_range_frames: maxTrackRangeFrames, mask_postprocess_strength: 0.3 },
+        error: undefined,
+        response: new Response(),
+      };
     }
     if (path === "/jobs/{job_id}") {
       if (!jobData) return { data: undefined, error: undefined, response: new Response() };
@@ -344,7 +348,11 @@ describe("FrameEditor", () => {
         return { data: { id: 9, procedure_id: 9, video_id: null, start_time: 0, duration: 0 }, error: undefined, response: new Response() };
       }
       if (path === "/settings") {
-        return { data: { max_track_range_frames: 1 }, error: undefined, response: new Response() };
+        return {
+          data: { max_track_range_frames: 1, mask_postprocess_strength: 0.3 },
+          error: undefined,
+          response: new Response(),
+        };
       }
       return { data: undefined, error: undefined, response: new Response() };
     }) as never);
@@ -428,8 +436,12 @@ describe("FrameEditor Track backward/forward defaults", () => {
     // Forward initially defaults to the full per-sequence bound (2, for
     // frame 41) with no cap applied (combinedCap falls back to Infinity
     // while settingsQuery.data is undefined).
-    let resolveSettings!: (value: { data: { max_track_range_frames: number } }) => void;
-    const settingsPromise = new Promise<{ data: { max_track_range_frames: number } }>((resolve) => {
+    let resolveSettings!: (value: {
+      data: { max_track_range_frames: number; mask_postprocess_strength: number };
+    }) => void;
+    const settingsPromise = new Promise<{
+      data: { max_track_range_frames: number; mask_postprocess_strength: number };
+    }>((resolve) => {
       resolveSettings = resolve;
     });
 
@@ -472,7 +484,7 @@ describe("FrameEditor Track backward/forward defaults", () => {
     // Now the settings query resolves to a cap (1) lower than that
     // uncapped default -- Forward must come down to fit it, without the
     // user navigating to a different frame.
-    resolveSettings({ data: { max_track_range_frames: 1 } });
+    resolveSettings({ data: { max_track_range_frames: 1, mask_postprocess_strength: 0.3 } });
     await waitFor(() => expect(screen.getByLabelText("Forward")).toHaveValue(1));
   });
 });

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand/react";
 
+import { useSettings } from "../../entities/useSettings";
 import type { components } from "../../shared/api/generated/schema";
 import { CascadingLabelPicker } from "./CascadingLabelPicker";
 import type { FrameEditorStore, PromptType } from "./frameEditorStore";
@@ -45,6 +46,17 @@ export function ToolsPanel({
   const labelTagId = useStore(store, (state) => state.labelTagId);
   const toolDisabled = labelTagId === null;
 
+  const maskSmoothingStrength = useStore(store, (state) => state.maskSmoothingStrength);
+  const setMaskSmoothingStrength = useStore(store, (state) => state.setMaskSmoothingStrength);
+  const settingsQuery = useSettings();
+  const hasSeededSmoothing = useRef(false);
+  useEffect(() => {
+    if (settingsQuery.data && !hasSeededSmoothing.current) {
+      hasSeededSmoothing.current = true;
+      store.getState().setMaskSmoothingStrength(settingsQuery.data.mask_postprocess_strength);
+    }
+  }, [settingsQuery.data, store]);
+
   const labelPickerPulseAt = useStore(store, (state) => state.labelPickerPulseAt);
   // Flashes briefly (CSS animation, see index.css) whenever the user clicks
   // the canvas without a tag selected -- a lightweight nudge toward this
@@ -87,6 +99,23 @@ export function ToolsPanel({
             SAM-3
           </button>
         </div>
+      </section>
+
+      <section className="space-y-1">
+        <h2 className="text-[11px] font-medium text-gray-500">Mask smoothing</h2>
+        <label className="flex items-center gap-2 text-xs text-gray-400">
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={maskSmoothingStrength}
+            aria-label="Mask smoothing"
+            onChange={(event) => setMaskSmoothingStrength(Number(event.target.value))}
+            className="flex-1"
+          />
+          <span className="w-10 shrink-0 text-right tabular-nums">{maskSmoothingStrength.toFixed(2)}</span>
+        </label>
       </section>
 
       <section className="space-y-1">

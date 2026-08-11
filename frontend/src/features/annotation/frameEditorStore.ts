@@ -39,6 +39,7 @@ export interface FrameEditorState {
   color: string;
   backward: number;
   forward: number;
+  maskSmoothingStrength: number;
   setActiveModel: (model: SegmentationModel) => void;
   setActiveTool: (tool: PromptType) => void;
   addPrompt: (prompt: PromptDraft) => void;
@@ -64,6 +65,7 @@ export interface FrameEditorState {
   setColor: (color: string) => void;
   setBackward: (value: number) => void;
   setForward: (value: number) => void;
+  setMaskSmoothingStrength: (value: number) => void;
   reset: () => void;
 }
 
@@ -74,6 +76,9 @@ export interface FrameEditorState {
 const DEFAULT_BACKWARD = 0;
 const DEFAULT_FORWARD = 0;
 const DEFAULT_COLOR = "#22d3ee";
+// Overwritten as soon as GET /settings resolves (see ToolsPanel.tsx) --
+// this is only the value shown before that first fetch completes.
+const DEFAULT_MASK_SMOOTHING_STRENGTH = 0.3;
 
 export function createFrameEditorStore() {
   return createStore<FrameEditorState>((set) => ({
@@ -91,6 +96,7 @@ export function createFrameEditorStore() {
     color: DEFAULT_COLOR,
     backward: DEFAULT_BACKWARD,
     forward: DEFAULT_FORWARD,
+    maskSmoothingStrength: DEFAULT_MASK_SMOOTHING_STRENGTH,
     setActiveModel: (model) => set({ activeModel: model }),
     setActiveTool: (tool) => set({ activeTool: tool }),
     addPrompt: (prompt) => set((state) => ({ pendingPrompts: [...state.pendingPrompts, prompt] })),
@@ -135,6 +141,7 @@ export function createFrameEditorStore() {
     setColor: (color) => set({ color }),
     setBackward: (value) => set({ backward: value }),
     setForward: (value) => set({ forward: value }),
+    setMaskSmoothingStrength: (value) => set({ maskSmoothingStrength: value }),
     reset: () =>
       set({
         activeTool: "point",

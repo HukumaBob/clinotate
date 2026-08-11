@@ -16,9 +16,18 @@ export function useSettings() {
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ maxTrackRangeFrames }: { maxTrackRangeFrames: number }) => {
+    mutationFn: async ({
+      maxTrackRangeFrames,
+      maskPostprocessStrength,
+    }: {
+      maxTrackRangeFrames: number;
+      maskPostprocessStrength: number;
+    }) => {
       const result = await apiClient.PATCH("/settings", {
-        body: { max_track_range_frames: maxTrackRangeFrames },
+        body: {
+          max_track_range_frames: maxTrackRangeFrames,
+          mask_postprocess_strength: maskPostprocessStrength,
+        },
       });
       if (result.error) throw result.error;
       return result.data;

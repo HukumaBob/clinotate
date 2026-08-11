@@ -41,11 +41,26 @@ describe("useUpdateSettings", () => {
     } as never);
 
     const { result } = renderHook(() => useUpdateSettings(), { wrapper });
-    result.current.mutate({ maxTrackRangeFrames: 8 });
+    result.current.mutate({ maxTrackRangeFrames: 8, maskPostprocessStrength: 0.3 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(apiClient.PATCH).toHaveBeenCalledWith("/settings", {
-      body: { max_track_range_frames: 8 },
+      body: { max_track_range_frames: 8, mask_postprocess_strength: 0.3 },
+    });
+  });
+
+  it("PATCHes both settings fields and invalidates the settings query", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { max_track_range_frames: 8, mask_postprocess_strength: 0.6 },
+      error: undefined,
+    } as never);
+
+    const { result } = renderHook(() => useUpdateSettings(), { wrapper });
+    result.current.mutate({ maxTrackRangeFrames: 8, maskPostprocessStrength: 0.6 });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.PATCH).toHaveBeenCalledWith("/settings", {
+      body: { max_track_range_frames: 8, mask_postprocess_strength: 0.6 },
     });
   });
 });

@@ -19,7 +19,11 @@ function renderPanel(
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(apiClient, "GET").mockImplementation((async (path: string) => {
     if (path === "/settings") {
-      return { data: { max_track_range_frames: 20 }, error: undefined, response: new Response() };
+      return {
+        data: { max_track_range_frames: 20, mask_postprocess_strength: 0.3 },
+        error: undefined,
+        response: new Response(),
+      };
     }
     return { data: [], error: undefined, response: new Response() };
   }) as never);

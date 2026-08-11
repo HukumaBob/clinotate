@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
@@ -100,6 +100,31 @@ describe("SettingsPage", () => {
       expect(
         screen.getByText("Input should be greater than or equal to 1")
       ).toBeInTheDocument()
+    );
+  });
+
+  it("renders a mask smoothing strength field pre-filled from settings and saves both fields together", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: { max_track_range_frames: 10, mask_postprocess_strength: 0.3 },
+      error: undefined,
+    } as never);
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: { max_track_range_frames: 10, mask_postprocess_strength: 0.7 },
+      error: undefined,
+    } as never);
+
+    render(<SettingsPage />, { wrapper });
+
+    const strengthInput = await screen.findByLabelText(/default mask smoothing strength/i);
+    expect(strengthInput).toHaveValue(0.3);
+
+    fireEvent.change(strengthInput, { target: { value: "0.7" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() =>
+      expect(apiClient.PATCH).toHaveBeenCalledWith("/settings", {
+        body: { max_track_range_frames: 10, mask_postprocess_strength: 0.7 },
+      }),
     );
   });
 });
