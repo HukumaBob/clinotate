@@ -5,6 +5,7 @@ import { useAnnotations, useDeleteAnnotation } from "../../entities/useAnnotatio
 import { useFrame } from "../../entities/useFrames";
 import { useJob } from "../../entities/useJobs";
 import { useSequence } from "../../entities/useSequence";
+import { useSettings } from "../../entities/useSettings";
 import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import { useSam2Predict, useSam2Track } from "../../entities/useSegmentation";
 import { createFrameEditorStore, type PromptDraft } from "./frameEditorStore";
@@ -12,7 +13,6 @@ import { FrameCanvas } from "./FrameCanvas";
 import { JobErrorNotice } from "./JobErrorNotice";
 import { buildLabelColorMap } from "./labelColors";
 import { ToolsPanel } from "./ToolsPanel";
-import { MAX_COMBINED_TRACK_RANGE } from "./TrackControls";
 import type { components } from "../../shared/api/generated/schema";
 
 type FrameRead = components["schemas"]["FrameRead"];
@@ -68,6 +68,7 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   const predictMutation = useSam2Predict();
   const trackMutation = useSam2Track();
   const deleteAnnotation = useDeleteAnnotation(frameId);
+  const settingsQuery = useSettings();
 
   const labelColorById = useMemo(() => buildLabelColorMap(taxonomyTreeQuery.data ?? []), [taxonomyTreeQuery.data]);
 
@@ -96,12 +97,21 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
     store.getState().resetForNewFrame();
     // Capped at the same combined-range limit TrackControls enforces (see
     // docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md)
-    // -- otherwise a sequence with >20 frames ahead would default forward
-    // above the cap before the user touches either input.
-    store.getState().setForward(Math.min(maxForward, MAX_COMBINED_TRACK_RANGE));
-    // maxForward intentionally excluded: it's a pure function of frameId
-    // (via currentIndex) here, so including it would double-fire this
-    // effect on every render where it's recomputed as the same value.
+    // -- otherwise a sequence with more frames ahead than the cap would
+    // default forward above it before the user touches either input.
+    const combinedCap = settingsQuery.data?.max_track_range_frames ?? maxForward;
+    store.getState().setForward(Math.min(maxForward, combinedCap));
+    // maxForward and settingsQuery.data intentionally excluded: maxForward
+    // is a pure function of frameId (via currentIndex) here, so including
+    // it would double-fire this effect on every render where it's
+    // recomputed as the same value; settingsQuery.data is excluded for the
+    // same reason -- this effect only needs to run once per frame change,
+    // not re-run when the settings query resolves after it. See Task 6
+    // Step 5 in docs/superpowers/sdd/2026-08-11-settings-page/plan.md for
+    // the accepted narrow gap this leaves (forward may briefly default
+    // above the eventual cap on first load before the setting resolves;
+    // TrackControls's own budget clamp corrects it on the next interaction,
+    // and Track stays gated on trackDisabled so no invalid request ships).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameId, store]);
 

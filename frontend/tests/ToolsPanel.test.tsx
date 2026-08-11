@@ -17,7 +17,12 @@ function renderPanel(
   },
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  vi.spyOn(apiClient, "GET").mockResolvedValue({ data: [], error: undefined, response: new Response() } as never);
+  vi.spyOn(apiClient, "GET").mockImplementation((async (path: string) => {
+    if (path === "/settings") {
+      return { data: { max_track_range_frames: 20 }, error: undefined, response: new Response() };
+    }
+    return { data: [], error: undefined, response: new Response() };
+  }) as never);
   render(
     <QueryClientProvider client={queryClient}>
       <ToolsPanel
@@ -116,6 +121,7 @@ describe("ToolsPanel", () => {
 
   it("passes maxBackward/maxForward through to the Track section's Max buttons", async () => {
     const store = renderPanel();
+    await screen.findByText(/combined backward \+ forward is capped at 20/i);
 
     await userEvent.click(screen.getByRole("button", { name: "Max backward" }));
     expect(store.getState().backward).toBe(10);

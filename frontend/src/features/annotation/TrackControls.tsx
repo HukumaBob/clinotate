@@ -1,5 +1,6 @@
 import { useStore } from "zustand/react";
 
+import { useSettings } from "../../entities/useSettings";
 import type { FrameEditorStore } from "./frameEditorStore";
 
 interface TrackControlsProps {
@@ -11,14 +12,6 @@ interface TrackControlsProps {
   maxForward: number;
 }
 
-// See docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md:
-// backward + forward must never exceed this, independent of how many
-// frames are actually available in the sequence, to keep SAM2 tracking
-// jobs within the GPU VRAM budget this GPU can safely handle. Mirrors
-// MAX_TRACK_RANGE_FRAMES in backend/app/jobs/schemas.py -- keep both in
-// sync if this value ever changes.
-export const MAX_COMBINED_TRACK_RANGE = 20;
-
 export function TrackControls({ store, onTrack, maxBackward, maxForward }: TrackControlsProps) {
   const backward = useStore(store, (state) => state.backward);
   const forward = useStore(store, (state) => state.forward);
@@ -28,8 +21,16 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
   const pendingPrompts = useStore(store, (state) => state.pendingPrompts);
   const trackDisabled = labelTagId === null || pendingPrompts.length === 0;
 
-  const backwardBudget = Math.max(0, MAX_COMBINED_TRACK_RANGE - forward);
-  const forwardBudget = Math.max(0, MAX_COMBINED_TRACK_RANGE - backward);
+  const settingsQuery = useSettings();
+  // See docs/superpowers/specs/2026-08-11-settings-page-design.md: while
+  // the setting is still loading, no combined cap is applied yet (budget
+  // clamp skipped) rather than blocking the whole control on a spinner --
+  // Track range inputs render immediately using only the per-sequence
+  // bounds, and re-clamp once the value arrives.
+  const combinedCap = settingsQuery.data?.max_track_range_frames ?? Infinity;
+
+  const backwardBudget = Math.max(0, combinedCap - forward);
+  const forwardBudget = Math.max(0, combinedCap - backward);
 
   return (
     <div className="space-y-2">
@@ -77,9 +78,11 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
           </div>
         </label>
       </div>
-      <p className="text-xs text-gray-500">
-        Combined backward + forward is capped at {MAX_COMBINED_TRACK_RANGE} frames to protect GPU memory.
-      </p>
+      {settingsQuery.data && (
+        <p className="text-xs text-gray-500">
+          Combined backward + forward is capped at {combinedCap} frames to protect GPU memory.
+        </p>
+      )}
       <button
         type="button"
         disabled={trackDisabled}
