@@ -32,6 +32,16 @@ class Annotation(Base):
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # The untouched SAM2 mask output, written once at Annotation-creation
+    # time by ml-worker's tasks.py and never overwritten afterward.
+    # `storage_key` is always the CURRENT post-processed mask (may equal
+    # this value if post-processing strength is 0); this column is what
+    # both the default-apply step (jobs/router.py's get_job) and the
+    # per-mask re-apply endpoint (PATCH .../mask-postprocess) re-derive
+    # from. NULL for annotations created before this column existed, and
+    # for SAM3 annotations (post-processing is SAM2-only for now) -- see
+    # docs/superpowers/specs/2026-08-11-mask-postprocessing-design.md.
+    raw_mask_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
