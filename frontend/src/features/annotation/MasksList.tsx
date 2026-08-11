@@ -4,6 +4,7 @@ import { useStore } from "zustand/react";
 import { useDeleteAnnotation, useDeleteJobAnnotations } from "../../entities/useAnnotations";
 import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import type { components } from "../../shared/api/generated/schema";
+import { MaskSmoothingControl } from "./MaskSmoothingControl";
 import { resolveLabelFromTree } from "./resolveLabel";
 import type { FrameEditorStore } from "./frameEditorStore";
 
@@ -119,6 +120,11 @@ export function MasksList({ annotations, store, frameId, procedureId }: MasksLis
               />
               {categoryName && tagName ? `${categoryName} / ${tagName}` : `label ${annotation.label_id}`}
             </button>
+            <MaskSmoothingControl
+              annotationId={annotation.id}
+              initialStrength={annotation.mask_postprocess_strength ?? null}
+              frameId={frameId}
+            />
             {annotation.job_id !== null && (
               <button
                 type="button"
