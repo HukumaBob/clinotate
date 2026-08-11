@@ -56,6 +56,15 @@ export function AppHeader() {
       </div>
       {user && (
         <div className="flex items-center gap-4">
+          {user.role === "admin" && (
+            <Link
+              to="/settings"
+              aria-label="Settings"
+              className="text-sm font-medium text-gray-300 hover:text-gray-100"
+            >
+              Settings
+            </Link>
+          )}
           <span className="text-sm text-gray-400">{user.email}</span>
           <button
             type="button"
