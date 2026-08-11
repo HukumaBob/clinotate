@@ -61,7 +61,7 @@ export function ToolsPanel({
   }, [labelPickerPulseAt]);
 
   return (
-    <aside className="flex w-[420px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-800 bg-gray-950 p-4">
+    <aside className="flex w-[630px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-gray-800 bg-gray-950 p-4">
       <section className="space-y-1">
         <h2 className="text-[11px] font-medium text-gray-500">Model</h2>
         <div role="tablist" className="flex gap-1 rounded-md border border-gray-800 bg-gray-900 p-1">

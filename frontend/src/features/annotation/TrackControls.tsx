@@ -36,71 +36,67 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
+      <div className="flex items-end gap-2">
+        <button
+          type="button"
+          aria-label="Max backward"
+          onClick={() => setBackward(backwardBudget)}
+          className="shrink-0 rounded border border-gray-700 px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+        >
+          Max
+        </button>
         <label className="flex-1 text-xs text-gray-400">
           Backward
-          <div className="mt-1 flex gap-1">
-            <input
-              type="number"
-              min={0}
-              max={backwardBudget}
-              value={backward}
-              onChange={(event) => {
-                const next = clampTrackRange({ backward: Number(event.target.value), forward }, bounds);
-                setBackward(next.backward);
-                setForward(next.forward);
-              }}
-              className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
-            />
-            <button
-              type="button"
-              aria-label="Max backward"
-              onClick={() => setBackward(backwardBudget)}
-              className="shrink-0 rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-gray-200"
-            >
-              Max
-            </button>
-          </div>
+          <input
+            type="number"
+            min={0}
+            max={backwardBudget}
+            value={backward}
+            onChange={(event) => {
+              const next = clampTrackRange({ backward: Number(event.target.value), forward }, bounds);
+              setBackward(next.backward);
+              setForward(next.forward);
+            }}
+            className="mt-1 w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
+          />
         </label>
+        <button
+          type="button"
+          disabled={trackDisabled}
+          onClick={onTrack}
+          className="shrink-0 rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Track
+        </button>
         <label className="flex-1 text-xs text-gray-400">
           Forward
-          <div className="mt-1 flex gap-1">
-            <input
-              type="number"
-              min={0}
-              max={forwardBudget}
-              value={forward}
-              onChange={(event) => {
-                const next = clampTrackRange({ backward, forward: Number(event.target.value) }, bounds);
-                setBackward(next.backward);
-                setForward(next.forward);
-              }}
-              className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
-            />
-            <button
-              type="button"
-              aria-label="Max forward"
-              onClick={() => setForward(forwardBudget)}
-              className="shrink-0 rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-gray-200"
-            >
-              Max
-            </button>
-          </div>
+          <input
+            type="number"
+            min={0}
+            max={forwardBudget}
+            value={forward}
+            onChange={(event) => {
+              const next = clampTrackRange({ backward, forward: Number(event.target.value) }, bounds);
+              setBackward(next.backward);
+              setForward(next.forward);
+            }}
+            className="mt-1 w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
+          />
         </label>
+        <button
+          type="button"
+          aria-label="Max forward"
+          onClick={() => setForward(forwardBudget)}
+          className="shrink-0 rounded border border-gray-700 px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+        >
+          Max
+        </button>
       </div>
       {settingsQuery.data && (
         <p className="text-xs text-gray-500">
           Combined backward + forward is capped at {combinedCap} frames to protect GPU memory.
         </p>
       )}
-      <button
-        type="button"
-        disabled={trackDisabled}
-        onClick={onTrack}
-        className="w-full rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        Track
-      </button>
     </div>
   );
 }
