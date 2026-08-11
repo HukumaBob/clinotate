@@ -197,6 +197,11 @@ export function FrameCanvas({
   const selectedAnnotationId = useStore(store, (state) => state.selectedAnnotationId);
   const hoveredAnnotationId = useStore(store, (state) => state.hoveredAnnotationId);
   const draftAnnotationId = useStore(store, (state) => state.draftAnnotationId);
+  const hiddenAnnotationIds = useStore(store, (state) => state.hiddenAnnotationIds);
+  // Masks the user toggled off in the "Masks on this frame" list are
+  // excluded here, before loading/caching, hit-testing, or drawing --
+  // hidden means genuinely not rendered, not drawn-then-covered.
+  const visibleAnnotations = annotations.filter((annotation) => !hiddenAnnotationIds.has(annotation.id));
 
   useEffect(() => {
     const img = new Image();
@@ -224,7 +229,7 @@ export function FrameCanvas({
 
     maskImageDataCacheRef.current = new Map();
 
-    for (const annotation of annotations) {
+    for (const annotation of visibleAnnotations) {
       if (!annotation.mask_url) continue;
       const maskImg = new Image();
       maskImg.crossOrigin = "anonymous";
@@ -271,7 +276,7 @@ export function FrameCanvas({
     // pass of every mask per mouseenter/mouseleave while sweeping the
     // cursor across MasksList rows.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frameImage, frame.width, frame.height, annotations]);
+  }, [frameImage, frame.width, frame.height, visibleAnnotations]);
 
   // Decode the current mask prompt's mask_png (if any) into an Image so
   // drawPendingOverlay can redraw the rough-mask stroke on every redraw,
@@ -304,7 +309,15 @@ export function FrameCanvas({
   useEffect(() => {
     drawPendingOverlay(pendingBox);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPrompts, pendingMaskStrokeImage, draftAnnotationId, selectedAnnotationId, hoveredAnnotationId, labelColorById]);
+  }, [
+    pendingPrompts,
+    pendingMaskStrokeImage,
+    draftAnnotationId,
+    selectedAnnotationId,
+    hoveredAnnotationId,
+    labelColorById,
+    hiddenAnnotationIds,
+  ]);
 
   function toNormalized(clientX: number, clientY: number): [number, number] {
     const canvas = canvasRef.current;
@@ -327,16 +340,16 @@ export function FrameCanvas({
     // while a newer, still-loading one on top of it at this exact pixel
     // gets skipped entirely. Decline to act at all until every annotation
     // has a cache entry, rather than silently testing a partial set.
-    const allCached = annotations.every((annotation) => maskImageDataCacheRef.current.has(annotation.id));
+    const allCached = visibleAnnotations.every((annotation) => maskImageDataCacheRef.current.has(annotation.id));
     if (!allCached) return null;
 
     const pixelX = Math.floor(normX * canvas.width);
     const pixelY = Math.floor(normY * canvas.height);
 
-    // Topmost = last-rendered = last element of `annotations` with a
+    // Topmost = last-rendered = last element of `visibleAnnotations` with a
     // nonzero alpha at this pixel.
-    for (let i = annotations.length - 1; i >= 0; i -= 1) {
-      const annotation = annotations[i];
+    for (let i = visibleAnnotations.length - 1; i >= 0; i -= 1) {
+      const annotation = visibleAnnotations[i];
       const imageData = maskImageDataCacheRef.current.get(annotation.id);
       if (!imageData) continue;
       const pixelIndex = (pixelY * canvas.width + pixelX) * 4;
@@ -443,7 +456,7 @@ export function FrameCanvas({
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(frameImage, 0, 0, canvas.width, canvas.height);
-    for (const annotation of annotations) {
+    for (const annotation of visibleAnnotations) {
       const imageData = maskImageDataCacheRef.current.get(annotation.id);
       if (!imageData) continue;
       const highlighted = isHighlighted(annotation.id, selectedAnnotationId, hoveredAnnotationId);

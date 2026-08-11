@@ -411,6 +411,108 @@ describe("FrameCanvas", () => {
     HTMLCanvasElement.prototype.getContext = originalGetContext;
   });
 
+  it("does not load or hit-test a mask the user toggled hidden via hiddenAnnotationIds", () => {
+    const realImage = window.Image;
+    const instances: FakeImage[] = [];
+
+    class FakeImage {
+      onload: (() => void) | null = null;
+      crossOrigin = "";
+      private _src = "";
+      width = 400;
+      height = 200;
+
+      constructor() {
+        instances.push(this);
+      }
+
+      set src(value: string) {
+        this._src = value;
+      }
+
+      get src() {
+        return this._src;
+      }
+    }
+
+    // @ts-expect-error -- test double replacing the global Image constructor
+    window.Image = FakeImage;
+
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
+      const data = new Uint8ClampedArray(this.width * this.height * 4).fill(255);
+      return {
+        clearRect: () => {},
+        drawImage: () => {},
+        putImageData: () => {},
+        fillRect: () => {},
+        beginPath: () => {},
+        closePath: () => {},
+        moveTo: () => {},
+        lineTo: () => {},
+        arc: () => {},
+        fill: () => {},
+        strokeRect: () => {},
+        stroke: () => {},
+        strokeStyle: "",
+        fillStyle: "",
+        lineWidth: 0,
+        lineCap: "round",
+        globalAlpha: 1,
+        globalCompositeOperation: "source-over",
+        getImageData: () => ({ data, width: this.width, height: this.height, colorSpace: "srgb" }) as ImageData,
+      } as never;
+    };
+
+    const store = createFrameEditorStore();
+    // Hide annotation 2 before it ever renders.
+    store.getState().toggleAnnotationVisibility(2);
+    const onRemoveAnnotation = vi.fn();
+
+    const annotations = [
+      { id: 1, frame_id: 1, type: "mask", payload: {}, mask_url: "https://example.test/mask-1.png" },
+      { id: 2, frame_id: 1, type: "mask", payload: {}, mask_url: "https://example.test/mask-2.png" },
+    ];
+
+    render(
+      <FrameCanvas
+        frame={FRAME}
+        annotations={annotations as never}
+        store={store}
+        onPointOrBoxSubmit={vi.fn()}
+        onRemoveAnnotation={onRemoveAnnotation}
+      />,
+    );
+
+    act(() => {
+      instances[0]?.onload?.();
+    });
+
+    // Only the visible annotation's mask image is constructed -- the
+    // hidden one never gets loaded at all.
+    const maskImages = instances.slice(1);
+    expect(maskImages).toHaveLength(1);
+    expect(maskImages[0]?.src).toBe("https://example.test/mask-1.png");
+
+    act(() => {
+      maskImages[0]?.onload?.();
+    });
+
+    // Clicking where the hidden mask would have been must not hit it
+    // (nothing to remove, since it was never drawn or cached).
+    const canvas = screen.getByTestId("frame-canvas");
+    setBoundingRect(canvas);
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0, ctrlKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0, ctrlKey: true });
+
+    // The only cached (visible) annotation is id 1 -- ctrl+click over its
+    // fully-opaque fake mask data hits it, not the hidden id 2.
+    expect(onRemoveAnnotation).toHaveBeenCalledWith(1);
+
+    window.Image = realImage;
+    HTMLCanvasElement.prototype.getContext = originalGetContext;
+  });
+
   it("redraws pending point markers after a mask image finishes loading, instead of leaving them clobbered", () => {
     // Regression test: a mask annotation's Image.onload draws straight onto
     // the shared visible canvas (ctx.drawImage), which previously wiped out

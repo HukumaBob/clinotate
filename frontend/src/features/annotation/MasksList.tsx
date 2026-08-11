@@ -30,6 +30,8 @@ export function MasksList({ annotations, store, frameId, procedureId }: MasksLis
   const setHoveredAnnotation = useStore(store, (state) => state.setHoveredAnnotation);
   const setLabelSelection = useStore(store, (state) => state.setLabelSelection);
   const setColor = useStore(store, (state) => state.setColor);
+  const hiddenAnnotationIds = useStore(store, (state) => state.hiddenAnnotationIds);
+  const toggleAnnotationVisibility = useStore(store, (state) => state.toggleAnnotationVisibility);
 
   const maskAnnotations = annotations.filter((annotation) => annotation.annotation_type === "mask");
 
@@ -94,6 +96,14 @@ export function MasksList({ annotations, store, frameId, procedureId }: MasksLis
 
         return (
           <li key={annotation.id} className="flex items-center gap-1">
+            <input
+              type="checkbox"
+              aria-label="Toggle visibility"
+              title="Show/hide this mask on the frame"
+              checked={!hiddenAnnotationIds.has(annotation.id)}
+              onChange={() => toggleAnnotationVisibility(annotation.id)}
+              className="shrink-0"
+            />
             <button
               type="button"
               onClick={() => handleSelect(annotation)}

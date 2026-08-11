@@ -248,3 +248,61 @@ describe("MasksList hover", () => {
     expect(store.getState().selectedAnnotationId).toBeNull();
   });
 });
+
+describe("MasksList visibility checkbox", () => {
+  it("shows a checked-by-default visibility checkbox for each mask", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+    const checkbox = screen.getByRole("checkbox", { name: /toggle visibility/i });
+    expect(checkbox).toBeChecked();
+  });
+
+  it("toggles hiddenAnnotationIds in the store when the checkbox is clicked", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+    const checkbox = screen.getByRole("checkbox", { name: /toggle visibility/i });
+
+    await userEvent.click(checkbox);
+    expect(store.getState().hiddenAnnotationIds.has(55)).toBe(true);
+    expect(checkbox).not.toBeChecked();
+
+    await userEvent.click(checkbox);
+    expect(store.getState().hiddenAnnotationIds.has(55)).toBe(false);
+    expect(checkbox).toBeChecked();
+  });
+
+  it("clicking the checkbox does not select the mask", async () => {
+    const store = createFrameEditorStore();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(apiClient, "GET").mockResolvedValue({ data: TREE, error: undefined, response: new Response() } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MasksList annotations={ANNOTATIONS as never} store={store} frameId={1} procedureId={5} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("lesion / 0-Ip")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("checkbox", { name: /toggle visibility/i }));
+
+    expect(store.getState().selectedAnnotationId).toBeNull();
+  });
+});

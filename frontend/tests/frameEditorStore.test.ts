@@ -144,4 +144,40 @@ describe("frameEditorStore", () => {
     expect(state.activeTool).toBe("mask");
     expect(state.activeModel).toBe("sam3");
   });
+
+  it("defaults hiddenAnnotationIds to empty (every mask visible)", () => {
+    const store = createFrameEditorStore();
+    expect(store.getState().hiddenAnnotationIds.size).toBe(0);
+  });
+
+  it("toggleAnnotationVisibility hides a visible annotation and re-shows a hidden one", () => {
+    const store = createFrameEditorStore();
+
+    store.getState().toggleAnnotationVisibility(7);
+    expect(store.getState().hiddenAnnotationIds.has(7)).toBe(true);
+
+    store.getState().toggleAnnotationVisibility(7);
+    expect(store.getState().hiddenAnnotationIds.has(7)).toBe(false);
+  });
+
+  it("toggleAnnotationVisibility only affects the toggled annotation", () => {
+    const store = createFrameEditorStore();
+
+    store.getState().toggleAnnotationVisibility(7);
+    store.getState().toggleAnnotationVisibility(8);
+
+    const hidden = store.getState().hiddenAnnotationIds;
+    expect(hidden.has(7)).toBe(true);
+    expect(hidden.has(8)).toBe(true);
+    expect(hidden.has(9)).toBe(false);
+  });
+
+  it("resetForNewFrame clears hiddenAnnotationIds (every mask visible again on a new frame)", () => {
+    const store = createFrameEditorStore();
+    store.getState().toggleAnnotationVisibility(7);
+
+    store.getState().resetForNewFrame();
+
+    expect(store.getState().hiddenAnnotationIds.size).toBe(0);
+  });
 });

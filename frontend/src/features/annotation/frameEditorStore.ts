@@ -24,6 +24,10 @@ export interface FrameEditorState {
   draftAnnotationId: number | null;
   selectedAnnotationId: number | null;
   hoveredAnnotationId: number | null;
+  // Masks the user has toggled off in the "Masks on this frame" list --
+  // hidden from the canvas but not deleted. Per-frame, like selection: see
+  // resetForNewFrame.
+  hiddenAnnotationIds: Set<number>;
   // Bumped to a fresh timestamp each time the user clicks the canvas without
   // a tag selected -- the Label section in ToolsPanel watches this to fire a
   // brief highlight animation, nudging the user toward the control they
@@ -44,6 +48,7 @@ export interface FrameEditorState {
   setDraftAnnotationId: (id: number | null) => void;
   setSelectedAnnotation: (id: number | null) => void;
   setHoveredAnnotation: (id: number | null) => void;
+  toggleAnnotationVisibility: (id: number) => void;
   triggerLabelPickerPulse: () => void;
   // Called when the user navigates to a different frame within the same
   // sequence (the store now lives for the whole FrameEditor session, not
@@ -78,6 +83,7 @@ export function createFrameEditorStore() {
     draftAnnotationId: null,
     selectedAnnotationId: null,
     hoveredAnnotationId: null,
+    hiddenAnnotationIds: new Set(),
     labelPickerPulseAt: null,
     labelCategoryId: null,
     labelClassification: null,
@@ -106,6 +112,16 @@ export function createFrameEditorStore() {
     setDraftAnnotationId: (id) => set({ draftAnnotationId: id }),
     setSelectedAnnotation: (id) => set({ selectedAnnotationId: id }),
     setHoveredAnnotation: (id) => set({ hoveredAnnotationId: id }),
+    toggleAnnotationVisibility: (id) =>
+      set((state) => {
+        const next = new Set(state.hiddenAnnotationIds);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return { hiddenAnnotationIds: next };
+      }),
     triggerLabelPickerPulse: () => set({ labelPickerPulseAt: Date.now() + Math.random() }),
     resetForNewFrame: () =>
       set({
@@ -113,6 +129,7 @@ export function createFrameEditorStore() {
         draftAnnotationId: null,
         selectedAnnotationId: null,
         hoveredAnnotationId: null,
+        hiddenAnnotationIds: new Set(),
       }),
     setLabelSelection: (partial) => set(partial),
     setColor: (color) => set({ color }),
@@ -125,6 +142,7 @@ export function createFrameEditorStore() {
         draftAnnotationId: null,
         selectedAnnotationId: null,
         hoveredAnnotationId: null,
+        hiddenAnnotationIds: new Set(),
         labelCategoryId: null,
         labelClassification: null,
         labelTagId: null,
