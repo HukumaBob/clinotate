@@ -276,6 +276,7 @@ def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
             status=AnnotationStatus.DRAFT,
             created_by_id=job.created_by_id,
             storage_key=mask_key,
+            raw_mask_storage_key=mask_key,
             job_id=job_id,
         )
         session.add(annotation)
@@ -375,6 +376,7 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
                 status=AnnotationStatus.DRAFT,
                 created_by_id=job.created_by_id,
                 storage_key=mask_key,
+                raw_mask_storage_key=mask_key,
                 job_id=job_id,
             )
             session.add(annotation)

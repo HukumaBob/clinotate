@@ -116,6 +116,12 @@ class Annotation(Base):
     status: Mapped[AnnotationStatus] = mapped_column(Enum(AnnotationStatus))
     created_by_id: Mapped[int] = mapped_column(Integer)
     storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Mirrors backend/app/annotation/models.py's raw_mask_storage_key --
+    # see that file's docstring and
+    # docs/superpowers/specs/2026-08-11-mask-postprocessing-design.md.
+    # ml-worker always writes this equal to storage_key at creation time;
+    # only backend ever changes storage_key afterward (post-processing).
+    raw_mask_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Plain int, not a ForeignKey("jobs.id"): same reasoning as
     # Label.procedure_id above — this module has no duplicate Job table
     # mapping usable as an FK target within this process's metadata.

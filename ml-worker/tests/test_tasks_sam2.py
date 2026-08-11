@@ -254,6 +254,90 @@ def test_run_sam2_predict_creates_annotation_and_marks_job_succeeded():
     mock_session.add.assert_called_once()
 
 
+def test_run_sam2_predict_sets_raw_mask_storage_key_equal_to_storage_key():
+    fake_adapter = MagicMock()
+    fake_adapter.predict.return_value = MagicMock(mask_png=b"png-bytes", score=0.87)
+
+    mock_session = MagicMock()
+    mock_job = MagicMock(payload={"frame_id": 1, "label_id": 2, "prompts": []}, created_by_id=1)
+    mock_frame = MagicMock(id=1, storage_key="frames/1.png")
+    mock_label = MagicMock(id=2, taxonomy_version=3)
+
+    def get_side_effect(model, pk):
+        from app.models import Frame, Job
+        if model is Job:
+            return mock_job
+        if model is Frame:
+            return mock_frame
+        return None
+
+    mock_session.get.side_effect = get_side_effect
+
+    with (
+        patch.object(tasks_module, "_get_default_sam2_adapter", return_value=fake_adapter),
+        patch.object(tasks_module, "_evict_sam3_models"),
+        patch.object(tasks_module, "_load_label", return_value=mock_label),
+        patch("app.tasks.SessionLocal", return_value=mock_session),
+        patch("app.tasks.get_storage_service"),
+    ):
+        tasks_module.run_sam2_predict(job_id=1)
+
+    created_annotation = mock_session.add.call_args[0][0]
+    assert created_annotation.raw_mask_storage_key == created_annotation.storage_key
+    assert created_annotation.raw_mask_storage_key is not None
+
+
+def test_run_sam2_track_sets_raw_mask_storage_key_on_every_created_annotation():
+    fake_adapter = MagicMock()
+    fake_adapter.track.return_value = [
+        MagicMock(mask_png=b"png-0", score=1.0),
+        MagicMock(mask_png=b"png-1", score=1.0),
+    ]
+
+    mock_session = MagicMock()
+    mock_job = MagicMock(
+        payload={
+            "sequence_id": 1, "label_id": 2, "prompts": [], "anchor_frame_id": 100,
+            "backward": 0, "forward": 1,
+        },
+        created_by_id=1,
+    )
+    mock_label = MagicMock(id=2, taxonomy_version=3)
+    mock_frames = [
+        MagicMock(id=100, frame_index=0, storage_key="frames/100.png"),
+        MagicMock(id=101, frame_index=1, storage_key="frames/101.png"),
+    ]
+
+    def get_side_effect(model, pk):
+        from app.models import Job
+        if model is Job:
+            return mock_job
+        return None
+
+    mock_session.get.side_effect = get_side_effect
+    mock_query = MagicMock()
+    mock_query.filter.return_value.order_by.return_value.all.return_value = mock_frames
+    mock_session.query.return_value = mock_query
+
+    with (
+        patch.object(tasks_module, "_get_default_sam2_adapter", return_value=fake_adapter),
+        patch.object(tasks_module, "_evict_sam3_models"),
+        patch.object(tasks_module, "_load_label", return_value=mock_label),
+        patch("app.tasks.SessionLocal", return_value=mock_session),
+        patch("app.tasks.get_storage_service") as mock_get_storage,
+        patch("app.tasks.torch.cuda.mem_get_info", return_value=(4_294_967_296, 8_589_934_592)),
+        patch("app.tasks.torch.cuda.memory_reserved", return_value=0),
+    ):
+        mock_get_storage.return_value.download.return_value = _small_frame_png_bytes()
+        tasks_module.run_sam2_track(job_id=1)
+
+    created_annotations = [call_args[0][0] for call_args in mock_session.add.call_args_list]
+    mask_annotations = [a for a in created_annotations if hasattr(a, "raw_mask_storage_key")]
+    assert len(mask_annotations) == 2
+    for annotation in mask_annotations:
+        assert annotation.raw_mask_storage_key == annotation.storage_key
+
+
 def test_run_sam2_predict_sets_job_id_on_created_annotation():
     fake_adapter = MagicMock()
     fake_adapter.predict.return_value = MagicMock(mask_png=b"png-bytes", score=0.87)
