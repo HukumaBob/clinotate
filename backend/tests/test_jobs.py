@@ -567,3 +567,118 @@ def test_get_job_vram_fields_default_to_null():
     body = response.json()
     assert body["vram_used_bytes"] is None
     assert body["vram_total_bytes"] is None
+
+
+def test_get_job_applies_default_postprocess_strength_on_first_succeeded_poll():
+    from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+    from app.storage import get_storage_service
+
+    token = _register_and_login("jobs-postprocess1@example.com")
+    frame_id, _ = _create_frame(token)
+    label_id = _create_label()
+
+    storage = get_storage_service()
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    raw_mask = np.zeros((100, 100), dtype=bool)
+    raw_mask[20:80, 20:80] = True
+    raw_mask[10:12, 10:12] = True  # isolated speckle for the default (0.3) strength to remove
+    buffer = io.BytesIO()
+    Image.fromarray((raw_mask.astype("uint8")) * 255, mode="L").save(buffer, format="PNG")
+    raw_key = "masks/postprocess-test/raw.png"
+    storage.upload(raw_key, buffer.getvalue(), content_type="image/png")
+
+    session = SessionLocal()
+    user = session.query(User).filter(User.email == "jobs-postprocess1@example.com").one()
+    job = Job(
+        job_type=JobType.SAM2_PREDICT,
+        status=JobStatus.SUCCEEDED,
+        progress=100,
+        payload={"frame_id": frame_id, "label_id": label_id, "prompts": []},
+        created_by_id=user.id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    annotation = Annotation(
+        frame_id=frame_id,
+        label_id=label_id,
+        taxonomy_version=1,
+        annotation_type=AnnotationType.MASK,
+        payload={},
+        status=AnnotationStatus.DRAFT,
+        created_by_id=user.id,
+        storage_key=raw_key,
+        raw_mask_storage_key=raw_key,
+        job_id=job.id,
+    )
+    session.add(annotation)
+    session.commit()
+    session.refresh(annotation)
+    job_id = job.id
+    annotation_id = annotation.id
+    session.close()
+
+    response = client.get(f"/jobs/{job_id}", headers=_auth_headers(token))
+    assert response.status_code == 200
+
+    session = SessionLocal()
+    refreshed = session.get(Annotation, annotation_id)
+    assert refreshed.payload.get("mask_postprocess_strength") == 0.3
+    postprocessed_bytes = storage.download(refreshed.storage_key)
+    session.close()
+
+    # Content actually changed from the raw upload (speckle removed by the
+    # default 0.3 strength).
+    postprocessed = np.array(Image.open(io.BytesIO(postprocessed_bytes)))
+    assert not (postprocessed[10:12, 10:12] > 0).any()
+
+
+def test_get_job_does_not_reapply_postprocess_on_second_poll():
+    from unittest.mock import patch
+
+    from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+    from app.storage import get_storage_service
+
+    token = _register_and_login("jobs-postprocess2@example.com")
+    frame_id, _ = _create_frame(token)
+    label_id = _create_label()
+
+    storage = get_storage_service()
+    raw_key = "masks/postprocess-test/raw2.png"
+    storage.upload(raw_key, b"fake-png-bytes-not-decoded-in-this-test", content_type="image/png")
+
+    session = SessionLocal()
+    user = session.query(User).filter(User.email == "jobs-postprocess2@example.com").one()
+    job = Job(
+        job_type=JobType.SAM2_PREDICT, status=JobStatus.SUCCEEDED, progress=100,
+        payload={"frame_id": frame_id, "label_id": label_id, "prompts": [], "mask_postprocess_strength": 0.0},
+        created_by_id=user.id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    annotation = Annotation(
+        frame_id=frame_id, label_id=label_id, taxonomy_version=1,
+        annotation_type=AnnotationType.MASK, payload={}, status=AnnotationStatus.DRAFT,
+        created_by_id=user.id, storage_key=raw_key, raw_mask_storage_key=raw_key, job_id=job.id,
+    )
+    session.add(annotation)
+    session.commit()
+    job_id = job.id
+    session.close()
+
+    client.get(f"/jobs/{job_id}", headers=_auth_headers(token))
+
+    with patch("app.annotation.service.postprocess_mask") as mock_postprocess:
+        client.get(f"/jobs/{job_id}", headers=_auth_headers(token))
+        mock_postprocess.assert_not_called()

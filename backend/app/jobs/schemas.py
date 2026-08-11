@@ -63,6 +63,7 @@ class Sam2PredictRequest(BaseModel):
     frame_id: int
     label_id: int
     prompts: list[PromptIn]
+    mask_postprocess_strength: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class Sam2TrackRequest(BaseModel):
@@ -72,3 +73,4 @@ class Sam2TrackRequest(BaseModel):
     anchor_frame_id: int
     backward: int = Field(ge=0)
     forward: int = Field(ge=0)
+    mask_postprocess_strength: float | None = Field(default=None, ge=0.0, le=1.0)

@@ -24,6 +24,9 @@ def _annotation_read(annotation: Annotation, storage: StorageService) -> Annotat
         reviewed_by_id=annotation.reviewed_by_id,
         mask_url=storage.url_for(annotation.storage_key) if annotation.storage_key else None,
         job_id=annotation.job_id,
+        mask_postprocess_strength=annotation.payload.get("mask_postprocess_strength")
+        if annotation.payload
+        else None,
     )
 
 

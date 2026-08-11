@@ -2512,6 +2512,17 @@
               }
             ],
             "title": "Job Id"
+          },
+          "mask_postprocess_strength": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Postprocess Strength"
           }
         },
         "type": "object",
@@ -3285,6 +3296,19 @@
             },
             "type": "array",
             "title": "Prompts"
+          },
+          "mask_postprocess_strength": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Postprocess Strength"
           }
         },
         "type": "object",
@@ -3325,6 +3349,19 @@
             "type": "integer",
             "minimum": 0.0,
             "title": "Forward"
+          },
+          "mask_postprocess_strength": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Postprocess Strength"
           }
         },
         "type": "object",

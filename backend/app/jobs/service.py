@@ -54,14 +54,24 @@ def enqueue_sam3_track(
 
 
 def enqueue_sam2_predict(
-    session: Session, frame_id: int, label_id: int, prompts: list[dict], created_by: User
+    session: Session,
+    frame_id: int,
+    label_id: int,
+    prompts: list[dict],
+    created_by: User,
+    mask_postprocess_strength: float | None = None,
 ) -> Job:
     _require_label(session, label_id)
 
     job = Job(
         job_type=JobType.SAM2_PREDICT,
         status=JobStatus.PENDING,
-        payload={"frame_id": frame_id, "label_id": label_id, "prompts": prompts},
+        payload={
+            "frame_id": frame_id,
+            "label_id": label_id,
+            "prompts": prompts,
+            "mask_postprocess_strength": mask_postprocess_strength,
+        },
         created_by_id=created_by.id,
     )
     session.add(job)
@@ -81,6 +91,7 @@ def enqueue_sam2_track(
     backward: int,
     forward: int,
     created_by: User,
+    mask_postprocess_strength: float | None = None,
 ) -> Job:
     _require_label(session, label_id)
 
@@ -104,6 +115,7 @@ def enqueue_sam2_track(
             "anchor_frame_id": anchor_frame_id,
             "backward": backward,
             "forward": forward,
+            "mask_postprocess_strength": mask_postprocess_strength,
         },
         created_by_id=created_by.id,
     )

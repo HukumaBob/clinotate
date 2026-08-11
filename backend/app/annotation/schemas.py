@@ -23,3 +23,4 @@ class AnnotationRead(BaseModel):
     reviewed_by_id: int | None
     mask_url: str | None = None
     job_id: int | None = None
+    mask_postprocess_strength: float | None = None
