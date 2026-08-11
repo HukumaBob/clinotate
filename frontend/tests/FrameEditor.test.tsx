@@ -306,6 +306,45 @@ describe("FrameEditor", () => {
     );
   });
 
+  it("includes the mask smoothing slider's value as mask_postprocess_strength in Predict and Track request bodies", async () => {
+    renderEditor();
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
+    fireEvent.change(screen.getByLabelText("Mask smoothing"), { target: { value: "0.75" } });
+    expect(screen.getByLabelText("Mask smoothing")).toHaveValue("0.75");
+
+    const canvas = screen.getByTestId("frame-canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    });
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+
+    await waitFor(() =>
+      expect(apiClient.POST).toHaveBeenCalledWith(
+        "/jobs/sam2/predict",
+        expect.objectContaining({
+          body: expect.objectContaining({ mask_postprocess_strength: 0.75 }),
+        }),
+      ),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^track$/i }));
+
+    await waitFor(() =>
+      expect(apiClient.POST).toHaveBeenCalledWith(
+        "/jobs/sam2/track",
+        expect.objectContaining({
+          body: expect.objectContaining({ mask_postprocess_strength: 0.75 }),
+        }),
+      ),
+    );
+  });
+
   it("re-clamps backward/forward right before sending, even if the store holds a stale over-cap value", async () => {
     const { queryClient } = renderEditor(42, vi.fn(), vi.fn(), undefined, 20);
 
