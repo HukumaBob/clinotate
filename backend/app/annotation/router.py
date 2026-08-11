@@ -2,8 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.annotation.models import Annotation
-from app.annotation.schemas import AnnotationCreate, AnnotationRead, AnnotationStatusUpdate
-from app.annotation.service import create_classification_annotation, require_reviewer_or_admin
+from app.annotation.schemas import (
+    AnnotationCreate,
+    AnnotationRead,
+    AnnotationStatusUpdate,
+    MaskPostprocessUpdate,
+)
+from app.annotation.service import (
+    create_classification_annotation,
+    reapply_mask_postprocess,
+    require_reviewer_or_admin,
+)
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import get_session
@@ -83,6 +92,17 @@ def delete_annotation(
         storage.delete(annotation.storage_key)
     session.delete(annotation)
     session.commit()
+
+
+@router.patch("/annotations/{annotation_id}/mask-postprocess", response_model=AnnotationRead)
+def update_mask_postprocess(
+    annotation_id: int,
+    payload: MaskPostprocessUpdate,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> AnnotationRead:
+    annotation = reapply_mask_postprocess(session, annotation_id, payload.strength, storage)
+    return _annotation_read(annotation, storage)
 
 
 @router.delete("/jobs/{job_id}/annotations")

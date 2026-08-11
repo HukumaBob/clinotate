@@ -2059,6 +2059,63 @@
         }
       }
     },
+    "/annotation/annotations/{annotation_id}/mask-postprocess": {
+      "patch": {
+        "tags": [
+          "annotation"
+        ],
+        "summary": "Update Mask Postprocess",
+        "operationId": "update_mask_postprocess_annotation_annotations__annotation_id__mask_postprocess_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "annotation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Annotation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaskPostprocessUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/annotation/jobs/{job_id}/annotations": {
       "delete": {
         "tags": [
@@ -3102,6 +3159,21 @@
         },
         "type": "object",
         "title": "LabelUpdate"
+      },
+      "MaskPostprocessUpdate": {
+        "properties": {
+          "strength": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Strength"
+          }
+        },
+        "type": "object",
+        "required": [
+          "strength"
+        ],
+        "title": "MaskPostprocessUpdate"
       },
       "MediaLibraryItem": {
         "properties": {

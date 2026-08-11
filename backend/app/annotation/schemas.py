@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.annotation.models import AnnotationStatus, AnnotationType
 
@@ -9,6 +9,10 @@ class AnnotationCreate(BaseModel):
 
 class AnnotationStatusUpdate(BaseModel):
     status: AnnotationStatus
+
+
+class MaskPostprocessUpdate(BaseModel):
+    strength: float = Field(ge=0.0, le=1.0)
 
 
 class AnnotationRead(BaseModel):

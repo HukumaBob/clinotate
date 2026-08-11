@@ -89,3 +89,27 @@ def apply_default_postprocess_for_job(session: Session, job: Job, storage: Stora
         annotation.payload = {**(annotation.payload or {}), "mask_postprocess_strength": strength}
 
     session.commit()
+
+
+def reapply_mask_postprocess(
+    session: Session, annotation_id: int, strength: float, storage: StorageService
+) -> Annotation:
+    annotation = session.get(Annotation, annotation_id)
+    if annotation is None or annotation.raw_mask_storage_key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Annotation or raw mask not found")
+
+    raw_bytes = storage.download(annotation.raw_mask_storage_key)
+    raw_image = Image.open(io.BytesIO(raw_bytes)).convert("L")
+    raw_mask = np.array(raw_image) > 127
+
+    cleaned_mask = postprocess_mask(raw_mask, strength)
+
+    cleaned_image = Image.fromarray((cleaned_mask.astype(np.uint8)) * 255, mode="L")
+    buffer = io.BytesIO()
+    cleaned_image.save(buffer, format="PNG")
+    storage.upload(annotation.storage_key, buffer.getvalue(), content_type="image/png")
+
+    annotation.payload = {**(annotation.payload or {}), "mask_postprocess_strength": strength}
+    session.commit()
+    session.refresh(annotation)
+    return annotation
