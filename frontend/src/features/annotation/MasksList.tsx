@@ -113,17 +113,19 @@ export function MasksList({ annotations, store, frameId, procedureId }: MasksLis
               <button
                 type="button"
                 aria-label={isPendingBulk ? "Confirm delete all" : "Delete all from this run"}
+                title={isPendingBulk ? "Click again to confirm" : "Delete this mask on every tracked frame"}
                 onClick={() => handleBulkDeleteClick(annotation.job_id as number)}
                 className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${
                   isPendingBulk ? "bg-red-700 text-white" : "text-gray-500 hover:text-red-400"
                 }`}
               >
-                {isPendingBulk ? "Confirm all" : "⊗"}
+                {isPendingBulk ? "Confirm all" : "🗑️"}
               </button>
             )}
             <button
               type="button"
               aria-label={isPendingDelete ? "Confirm delete mask" : "Delete mask"}
+              title={isPendingDelete ? "Click again to confirm" : "Delete this mask on this frame only"}
               onClick={() => handleDeleteClick(annotation.id)}
               className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${
                 isPendingDelete ? "bg-red-700 text-white" : "text-gray-500 hover:text-red-400"
