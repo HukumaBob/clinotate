@@ -28,7 +28,11 @@ def postprocess_mask(mask: np.ndarray, strength: float) -> np.ndarray:
     if not 0.0 <= strength <= 1.0:
         raise ValueError(f"strength must be in [0, 1], got {strength}")
     if strength == 0.0:
-        return mask
+        # A copy, not the caller's own array -- callers that keep the
+        # "processed" result around (e.g. for a diff/undo comparison
+        # against a pipeline stage that later mutates it in place) must
+        # not silently corrupt the original mask they still hold.
+        return mask.copy()
 
     height, width = mask.shape
     kernel_size = max(1, round(strength * _RELATIVE_KERNEL_FRACTION * min(height, width)))
