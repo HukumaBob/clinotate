@@ -8,6 +8,7 @@ import { useSequence } from "../../entities/useSequence";
 import { useSettings } from "../../entities/useSettings";
 import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import { useSam2Predict, useSam2Track } from "../../entities/useSegmentation";
+import { clampTrackRange } from "./clampTrackRange";
 import { createFrameEditorStore, type PromptDraft } from "./frameEditorStore";
 import { FrameCanvas } from "./FrameCanvas";
 import { JobErrorNotice } from "./JobErrorNotice";
@@ -95,23 +96,36 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   // deliberately left untouched by resetForNewFrame -- see the store.
   useEffect(() => {
     store.getState().resetForNewFrame();
-    // Capped at the same combined-range limit TrackControls enforces (see
-    // docs/superpowers/specs/2026-08-08-sam2-gpu-oom-host-crash-design.md)
-    // -- otherwise a sequence with more frames ahead than the cap would
-    // default forward above it before the user touches either input.
-    const combinedCap = settingsQuery.data?.max_track_range_frames ?? maxForward;
-    store.getState().setForward(Math.min(maxForward, combinedCap));
-    // maxForward and settingsQuery.data intentionally excluded: maxForward
-    // is a pure function of frameId (via currentIndex) here, so including
-    // it would double-fire this effect on every render where it's
-    // recomputed as the same value; settingsQuery.data is excluded for the
-    // same reason -- this effect only needs to run once per frame change,
-    // not re-run when the settings query resolves after it. See Task 6
-    // Step 5 in docs/superpowers/sdd/2026-08-11-settings-page/plan.md for
-    // the accepted narrow gap this leaves (forward may briefly default
-    // above the eventual cap on first load before the setting resolves;
-    // TrackControls's own budget clamp corrects it on the next interaction,
-    // and Track stays gated on trackDisabled so no invalid request ships).
+    // Forward defaults to "the rest of the sequence" on every frame change
+    // (ignoring whatever it was on the frame just left); Backward keeps
+    // whatever the user last set, but both are re-clamped together against
+    // the new frame's per-sequence bounds and the combined GPU-safety cap
+    // from Settings (see docs/superpowers/specs/2026-08-11-settings-page-design.md)
+    // -- otherwise a Backward set on a frame with more room behind it would
+    // stay past the new frame's start, and a sequence with more frames
+    // ahead than the cap would default Forward above it.
+    const combinedCap = settingsQuery.data?.max_track_range_frames ?? Infinity;
+    const currentBackward = store.getState().backward;
+    const next = clampTrackRange(
+      { backward: currentBackward, forward: maxForward },
+      { maxBackward, maxForward, combinedCap },
+    );
+    store.getState().setBackward(next.backward);
+    store.getState().setForward(next.forward);
+    // maxBackward, maxForward, and settingsQuery.data intentionally
+    // excluded: maxBackward/maxForward are pure functions of frameId (via
+    // currentIndex) here, so including them would double-fire this effect
+    // on every render where they're recomputed as the same value;
+    // settingsQuery.data is excluded for the same reason -- this effect
+    // only needs to run once per frame change, not re-run when the
+    // settings query resolves after it. See Task 6 Step 5 in
+    // docs/superpowers/sdd/2026-08-11-settings-page/plan.md for the
+    // accepted narrow gap this leaves (forward may briefly default above
+    // the eventual cap on first load before the setting resolves). If the
+    // user clicks Track before that resolves or before touching either
+    // input, handleTrack re-clamps the value itself right before sending,
+    // so the request the backend receives is always valid regardless of
+    // what's displayed at that instant.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameId, store]);
 
@@ -198,14 +212,25 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   function handleTrack() {
     const state = store.getState();
     if (state.labelTagId === null || state.pendingPrompts.length === 0) return;
+    // Re-clamp right before sending, not just trust the store's current
+    // value -- TrackControls clamps as the user edits, but if the settings
+    // query resolves to a lower cap (or its default changes) between the
+    // user's last edit and clicking Track, the stored value could still be
+    // stale. This guarantees the request itself is always valid, matching
+    // what the backend's own live check in enqueue_sam2_track enforces.
+    const combinedCap = settingsQuery.data?.max_track_range_frames ?? Infinity;
+    const { backward, forward } = clampTrackRange(
+      { backward: state.backward, forward: state.forward },
+      { maxBackward, maxForward, combinedCap },
+    );
     trackMutation.mutate(
       {
         sequence_id: frameQuery.data?.sequence_id ?? 0,
         label_id: state.labelTagId,
         prompts: state.pendingPrompts,
         anchor_frame_id: frameId,
-        backward: state.backward,
-        forward: state.forward,
+        backward,
+        forward,
       },
       {
         onSuccess: (data) => {

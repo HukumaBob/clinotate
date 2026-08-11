@@ -29,6 +29,7 @@ function renderEditor(
   onClose = vi.fn(),
   onFrameChange = vi.fn(),
   jobData?: { status: string; progress: number; error: string | null },
+  maxTrackRangeFrames = 20,
 ) {
   vi.restoreAllMocks();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -46,6 +47,9 @@ function renderEditor(
     }
     if (path === "/media/sequences/{sequence_id}") {
       return { data: { id: 9, procedure_id: 9, video_id: null, start_time: 0, duration: 0 }, error: undefined, response: new Response() };
+    }
+    if (path === "/settings") {
+      return { data: { max_track_range_frames: maxTrackRangeFrames }, error: undefined, response: new Response() };
     }
     if (path === "/jobs/{job_id}") {
       if (!jobData) return { data: undefined, error: undefined, response: new Response() };
@@ -73,11 +77,14 @@ function renderEditor(
     response: new Response(),
   } as never);
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <FrameEditor frameId={frameId} frames={FRAMES} onClose={onClose} onFrameChange={onFrameChange} />
-    </QueryClientProvider>,
-  );
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <FrameEditor frameId={frameId} frames={FRAMES} onClose={onClose} onFrameChange={onFrameChange} />
+      </QueryClientProvider>,
+    ),
+    queryClient,
+  };
 }
 
 describe("FrameEditor", () => {
@@ -294,6 +301,75 @@ describe("FrameEditor", () => {
       ),
     );
   });
+
+  it("re-clamps backward/forward right before sending, even if the store holds a stale over-cap value", async () => {
+    const { queryClient } = renderEditor(42, vi.fn(), vi.fn(), undefined, 20);
+
+    await waitFor(() => expect(screen.getByTestId("frame-canvas")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("option", { name: "lesion" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
+    await userEvent.selectOptions(screen.getByLabelText("Tag"), "2");
+
+    const canvas = screen.getByTestId("frame-canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200 }),
+    });
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100, button: 0 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 100, button: 0 });
+    await waitFor(() =>
+      expect(apiClient.POST).toHaveBeenCalledWith("/jobs/sam2/predict", expect.anything()),
+    );
+
+    // Frame 42 has only 1 frame ahead of it, so forward defaulted to 1 --
+    // set it directly via the input up to that per-sequence bound.
+    fireEvent.change(screen.getByLabelText("Backward"), { target: { value: "1" } });
+
+    // Simulate the settings query resolving to a lower cap than what the
+    // store's current backward+forward already satisfied (e.g. an admin
+    // lowered it between page load and now) -- the settings query mock now
+    // reports a cap of 1, while the store still holds backward=1, forward=1
+    // (total=2), a combination that was valid a moment ago but no longer is.
+    vi.spyOn(apiClient, "GET").mockImplementation((async (path: string, options?: { params?: { path?: { frame_id?: number } } }) => {
+      if (path === "/media/frames/{frame_id}") {
+        const match = FRAMES.find((f) => f.id === (options?.params?.path?.frame_id ?? 42)) ?? FRAMES[1];
+        return { data: match, error: undefined, response: new Response() };
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined, response: new Response() };
+      }
+      if (path === "/taxonomy/tree") {
+        return { data: TAXONOMY_TREE, error: undefined, response: new Response() };
+      }
+      if (path === "/media/sequences/{sequence_id}") {
+        return { data: { id: 9, procedure_id: 9, video_id: null, start_time: 0, duration: 0 }, error: undefined, response: new Response() };
+      }
+      if (path === "/settings") {
+        return { data: { max_track_range_frames: 1 }, error: undefined, response: new Response() };
+      }
+      return { data: undefined, error: undefined, response: new Response() };
+    }) as never);
+    await queryClient.invalidateQueries({ queryKey: ["settings"] });
+    await waitFor(() => expect(screen.getByText(/capped at 1 frames/i)).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /^track$/i }));
+
+    await waitFor(() =>
+      expect(apiClient.POST).toHaveBeenCalledWith(
+        "/jobs/sam2/track",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            backward: expect.any(Number),
+            forward: expect.any(Number),
+          }),
+        }),
+      ),
+    );
+    const trackCall = vi
+      .mocked(apiClient.POST)
+      .mock.calls.find(([path]) => path === "/jobs/sam2/track");
+    const body = trackCall?.[1]?.body as { backward: number; forward: number };
+    expect(body.backward + body.forward).toBeLessThanOrEqual(1);
+  });
 });
 
 describe("FrameEditor Track backward/forward defaults", () => {
@@ -320,6 +396,27 @@ describe("FrameEditor Track backward/forward defaults", () => {
 
     await waitFor(() => expect(screen.getByLabelText("Frame number")).toHaveValue(3));
     expect(screen.getByLabelText("Forward")).toHaveValue(0);
+  });
+
+  it("clamps backward down when navigating to a frame with fewer frames available behind it", async () => {
+    const { rerender } = renderEditor(43);
+
+    // Frame 43 is index 2 of 3 -- two frames (41, 42) are available behind it.
+    await waitFor(() => expect(screen.getByLabelText("Backward")).toHaveValue(0));
+    fireEvent.change(screen.getByLabelText("Backward"), { target: { value: "2" } });
+    expect(screen.getByLabelText("Backward")).toHaveValue(2);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <FrameEditor frameId={41} frames={FRAMES} onClose={vi.fn()} onFrameChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    // Frame 41 is index 0 -- no frames available behind it, so the
+    // previously-set backward=2 must be clamped down to 0.
+    await waitFor(() => expect(screen.getByLabelText("Frame number")).toHaveValue(1));
+    expect(screen.getByLabelText("Backward")).toHaveValue(0);
   });
 });
 

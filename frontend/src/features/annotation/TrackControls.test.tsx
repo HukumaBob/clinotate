@@ -57,7 +57,7 @@ describe("TrackControls combined-range cap", () => {
     expect(store.getState().forward).toBe(2);
   });
 
-  it("clamps manual backward input so backward + forward never exceeds 20", async () => {
+  it("shrinks forward to make room when a manual backward edit pushes the total over 20", async () => {
     const { store } = renderControls();
     await screen.findByText(/combined backward \+ forward is capped at 20/i);
     act(() => {
@@ -67,7 +67,10 @@ describe("TrackControls combined-range cap", () => {
     const backwardInput = screen.getByLabelText(/backward/i, { selector: "input" });
     fireEvent.change(backwardInput, { target: { value: "30" } });
 
-    expect(store.getState().backward).toBe(8);
+    // forward(12) gives up all it has (12), leaving backward at 30 - 10 = 20
+    // once the remaining overage is trimmed off backward itself.
+    expect(store.getState().backward).toBe(20);
+    expect(store.getState().forward).toBe(0);
   });
 
   it("clamps manual forward input so backward + forward never exceeds 20", async () => {
@@ -81,5 +84,27 @@ describe("TrackControls combined-range cap", () => {
     fireEvent.change(forwardInput, { target: { value: "30" } });
 
     expect(store.getState().forward).toBe(1);
+  });
+
+  it("clamps manual backward input to the frames actually available behind the current frame", async () => {
+    const { store } = renderControls({ maxBackward: 4 });
+    await screen.findByText(/combined backward \+ forward is capped at 20/i);
+
+    const backwardInput = screen.getByLabelText(/backward/i, { selector: "input" });
+    fireEvent.change(backwardInput, { target: { value: "30" } });
+
+    // Even though the combined cap (20) would allow more, only 4 frames
+    // exist behind the current frame in this sequence.
+    expect(store.getState().backward).toBe(4);
+  });
+
+  it("clamps manual forward input to the frames actually available ahead of the current frame", async () => {
+    const { store } = renderControls({ maxForward: 3 });
+    await screen.findByText(/combined backward \+ forward is capped at 20/i);
+
+    const forwardInput = screen.getByLabelText(/forward/i, { selector: "input" });
+    fireEvent.change(forwardInput, { target: { value: "30" } });
+
+    expect(store.getState().forward).toBe(3);
   });
 });

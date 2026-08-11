@@ -1,6 +1,7 @@
 import { useStore } from "zustand/react";
 
 import { useSettings } from "../../entities/useSettings";
+import { clampTrackRange } from "./clampTrackRange";
 import type { FrameEditorStore } from "./frameEditorStore";
 
 interface TrackControlsProps {
@@ -28,9 +29,10 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
   // Track range inputs render immediately using only the per-sequence
   // bounds, and re-clamp once the value arrives.
   const combinedCap = settingsQuery.data?.max_track_range_frames ?? Infinity;
+  const bounds = { maxBackward, maxForward, combinedCap };
 
-  const backwardBudget = Math.max(0, combinedCap - forward);
-  const forwardBudget = Math.max(0, combinedCap - backward);
+  const backwardBudget = Math.min(maxBackward, Math.max(0, combinedCap - forward));
+  const forwardBudget = Math.min(maxForward, Math.max(0, combinedCap - backward));
 
   return (
     <div className="space-y-2">
@@ -43,13 +45,17 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
               min={0}
               max={backwardBudget}
               value={backward}
-              onChange={(event) => setBackward(Math.min(Number(event.target.value), backwardBudget))}
+              onChange={(event) => {
+                const next = clampTrackRange({ backward: Number(event.target.value), forward }, bounds);
+                setBackward(next.backward);
+                setForward(next.forward);
+              }}
               className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
             />
             <button
               type="button"
               aria-label="Max backward"
-              onClick={() => setBackward(Math.min(maxBackward, backwardBudget))}
+              onClick={() => setBackward(backwardBudget)}
               className="shrink-0 rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-gray-200"
             >
               Max
@@ -64,13 +70,17 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
               min={0}
               max={forwardBudget}
               value={forward}
-              onChange={(event) => setForward(Math.min(Number(event.target.value), forwardBudget))}
+              onChange={(event) => {
+                const next = clampTrackRange({ backward, forward: Number(event.target.value) }, bounds);
+                setBackward(next.backward);
+                setForward(next.forward);
+              }}
               className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
             />
             <button
               type="button"
               aria-label="Max forward"
-              onClick={() => setForward(Math.min(maxForward, forwardBudget))}
+              onClick={() => setForward(forwardBudget)}
               className="shrink-0 rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-gray-200"
             >
               Max
