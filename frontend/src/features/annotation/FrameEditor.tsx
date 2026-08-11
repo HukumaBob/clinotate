@@ -112,22 +112,34 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
     );
     store.getState().setBackward(next.backward);
     store.getState().setForward(next.forward);
-    // maxBackward, maxForward, and settingsQuery.data intentionally
-    // excluded: maxBackward/maxForward are pure functions of frameId (via
-    // currentIndex) here, so including them would double-fire this effect
-    // on every render where they're recomputed as the same value;
-    // settingsQuery.data is excluded for the same reason -- this effect
-    // only needs to run once per frame change, not re-run when the
-    // settings query resolves after it. See Task 6 Step 5 in
-    // docs/superpowers/sdd/2026-08-11-settings-page/plan.md for the
-    // accepted narrow gap this leaves (forward may briefly default above
-    // the eventual cap on first load before the setting resolves). If the
-    // user clicks Track before that resolves or before touching either
-    // input, handleTrack re-clamps the value itself right before sending,
-    // so the request the backend receives is always valid regardless of
-    // what's displayed at that instant.
+    // maxBackward and maxForward intentionally excluded: they're pure
+    // functions of frameId (via currentIndex) here, so including them
+    // would double-fire this effect on every render where they're
+    // recomputed as the same value. settingsQuery.data is also excluded
+    // -- this effect only needs to run once per frame change; the
+    // separate effect below re-clamps against the cap once it resolves,
+    // so this one doesn't need to duplicate that.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameId, store]);
+
+  // The settings query resolves asynchronously, generally after the
+  // above effect has already set Forward to the frame's full per-sequence
+  // bound (uncapped, since settingsQuery.data is undefined on that first
+  // run). Without this, Forward/Backward would display an uncapped value
+  // indefinitely until the user happens to change frames -- misleading,
+  // even though handleTrack's own re-clamp before sending keeps the
+  // actual request safe regardless. Re-clamping here as soon as the cap
+  // is known (or changes) keeps what's displayed honest too.
+  useEffect(() => {
+    if (settingsQuery.data === undefined) return;
+    const state = store.getState();
+    const next = clampTrackRange(
+      { backward: state.backward, forward: state.forward },
+      { maxBackward, maxForward, combinedCap: settingsQuery.data.max_track_range_frames },
+    );
+    if (next.backward !== state.backward) store.getState().setBackward(next.backward);
+    if (next.forward !== state.forward) store.getState().setForward(next.forward);
+  }, [settingsQuery.data, maxBackward, maxForward, store]);
 
   useEffect(() => {
     if (jobQuery.data?.status === "succeeded") {

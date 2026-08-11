@@ -418,6 +418,63 @@ describe("FrameEditor Track backward/forward defaults", () => {
     await waitFor(() => expect(screen.getByLabelText("Frame number")).toHaveValue(1));
     expect(screen.getByLabelText("Backward")).toHaveValue(0);
   });
+
+  it("re-clamps forward once the settings query resolves, without requiring a frame change", async () => {
+    vi.restoreAllMocks();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    // A deferred /settings response -- the per-frame effect that sets
+    // Forward runs on the very first render, before this resolves, so
+    // Forward initially defaults to the full per-sequence bound (2, for
+    // frame 41) with no cap applied (combinedCap falls back to Infinity
+    // while settingsQuery.data is undefined).
+    let resolveSettings!: (value: { data: { max_track_range_frames: number } }) => void;
+    const settingsPromise = new Promise<{ data: { max_track_range_frames: number } }>((resolve) => {
+      resolveSettings = resolve;
+    });
+
+    vi.spyOn(apiClient, "GET").mockImplementation((async (path: string, options?: { params?: { path?: { frame_id?: number } } }) => {
+      if (path === "/media/frames/{frame_id}") {
+        const match = FRAMES.find((f) => f.id === (options?.params?.path?.frame_id ?? 41)) ?? FRAMES[0];
+        return { data: match, error: undefined, response: new Response() };
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined, response: new Response() };
+      }
+      if (path === "/taxonomy/tree") {
+        return { data: TAXONOMY_TREE, error: undefined, response: new Response() };
+      }
+      if (path === "/media/sequences/{sequence_id}") {
+        return { data: { id: 9, procedure_id: 9, video_id: null, start_time: 0, duration: 0 }, error: undefined, response: new Response() };
+      }
+      if (path === "/settings") {
+        const { data } = await settingsPromise;
+        return { data, error: undefined, response: new Response() };
+      }
+      return { data: undefined, error: undefined, response: new Response() };
+    }) as never);
+    vi.spyOn(apiClient, "POST").mockResolvedValue({
+      data: { id: 1, job_type: "sam2_predict", status: "pending", progress: 0, result_ref: null, error: null, created_by_id: 1, started_at: null, finished_at: null },
+      error: undefined,
+      response: new Response(),
+    } as never);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <FrameEditor frameId={41} frames={FRAMES} onClose={vi.fn()} onFrameChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    // Before the settings query resolves, Forward defaults to the full
+    // per-sequence bound (2), uncapped.
+    await waitFor(() => expect(screen.getByLabelText("Forward")).toHaveValue(2));
+
+    // Now the settings query resolves to a cap (1) lower than that
+    // uncapped default -- Forward must come down to fit it, without the
+    // user navigating to a different frame.
+    resolveSettings({ data: { max_track_range_frames: 1 } });
+    await waitFor(() => expect(screen.getByLabelText("Forward")).toHaveValue(1));
+  });
 });
 
 describe("FrameEditor frame-number input", () => {
