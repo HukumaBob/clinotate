@@ -17,6 +17,6 @@ class PlatformSettings(Base):
     max_track_range_frames: Mapped[int] = mapped_column(Integer, default=10)
 
     def __init__(self, **kwargs):
-        if 'max_track_range_frames' not in kwargs:
-            kwargs['max_track_range_frames'] = 10
+        if "max_track_range_frames" not in kwargs:
+            kwargs["max_track_range_frames"] = 10
         super().__init__(**kwargs)

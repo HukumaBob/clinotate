@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useSettings, useUpdateSettings } from "../../entities/useSettings";
+import { errorDetail } from "../../shared/api/errors";
 
 export function SettingsPage() {
   const settingsQuery = useSettings();
@@ -37,9 +38,7 @@ export function SettingsPage() {
       { maxTrackRangeFrames },
       {
         onError: (mutationError: unknown) => {
-          const detail =
-            (mutationError as { detail?: string } | undefined)?.detail ?? "Save failed";
-          setError(detail);
+          setError(errorDetail(mutationError, "Save failed"));
         },
       }
     );

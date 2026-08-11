@@ -331,7 +331,10 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
         # propagate_in_video() walks afterward, not what init_state() loads up
         # front. Downloading/passing the whole sequence here would let the real
         # VRAM footprint balloon far past what the pre-flight estimate below
-        # (and Layer 2's 20-frame combined-range cap) models.
+        # (and Layer 2's combined-range cap) models. That cap is no longer a
+        # fixed 20-frame constant -- it's a tunable, database-backed setting
+        # (default 10) read live from the platform_settings table via the
+        # Settings page; see docs/superpowers/specs/2026-08-11-settings-page-design.md.
         frame_bytes_list = [storage.download(f.storage_key) for f in tracked_frames]
 
         with Image.open(io.BytesIO(frame_bytes_list[0])) as first_frame_image:

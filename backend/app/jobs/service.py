@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.celery_app import celery_app
 from app.jobs.models import Job, JobStatus, JobType
-from app.settings.service import get_settings
+from app.settings.service import get_platform_settings
 from app.taxonomy.models import Label
 
 
@@ -84,7 +84,7 @@ def enqueue_sam2_track(
 ) -> Job:
     _require_label(session, label_id)
 
-    max_range = get_settings(session).max_track_range_frames
+    max_range = get_platform_settings(session).max_track_range_frames
     if backward + forward > max_range:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

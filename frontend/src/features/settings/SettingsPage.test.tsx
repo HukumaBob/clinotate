@@ -72,4 +72,34 @@ describe("SettingsPage", () => {
 
     await waitFor(() => expect(screen.getByText("Admin role required")).toBeInTheDocument());
   });
+
+  it("renders a readable message instead of crashing when detail is a FastAPI 422 array", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: { max_track_range_frames: 10 },
+      error: undefined,
+    } as never);
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: undefined,
+      error: {
+        detail: [
+          {
+            type: "greater_than_equal",
+            loc: ["body", "max_track_range_frames"],
+            msg: "Input should be greater than or equal to 1",
+            input: 0,
+          },
+        ],
+      },
+    } as never);
+
+    render(<SettingsPage />, { wrapper });
+
+    await userEvent.click(await screen.findByRole("button", { name: /save/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Input should be greater than or equal to 1")
+      ).toBeInTheDocument()
+    );
+  });
 });
