@@ -60,9 +60,9 @@ export function AppHeader() {
             <Link
               to="/settings"
               aria-label="Settings"
-              className="text-sm font-medium text-gray-300 hover:text-gray-100"
+              className="text-lg text-gray-300 hover:text-gray-100"
             >
-              Settings
+              ⚙️
             </Link>
           )}
           <span className="text-sm text-gray-400">{user.email}</span>
