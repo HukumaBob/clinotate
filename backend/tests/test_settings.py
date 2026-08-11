@@ -34,13 +34,21 @@ def test_patch_settings_requires_auth():
 
 def test_patch_settings_rejects_non_admin():
     token = _register_and_login("settings-patch1@example.com", role="annotator")
-    response = client.patch("/settings", json={"max_track_range_frames": 5}, headers=_headers(token))
+    response = client.patch(
+        "/settings",
+        json={"max_track_range_frames": 5, "mask_postprocess_strength": 0.3},
+        headers=_headers(token),
+    )
     assert response.status_code == 403
 
 
 def test_patch_settings_allows_admin_and_persists_value():
     token = _register_and_login("settings-patch2@example.com", role="admin")
-    response = client.patch("/settings", json={"max_track_range_frames": 8}, headers=_headers(token))
+    response = client.patch(
+        "/settings",
+        json={"max_track_range_frames": 8, "mask_postprocess_strength": 0.3},
+        headers=_headers(token),
+    )
     assert response.status_code == 200
     assert response.json()["max_track_range_frames"] == 8
 
@@ -49,10 +57,51 @@ def test_patch_settings_allows_admin_and_persists_value():
 
     # Restore the seeded default so later tests (and manual runs) aren't
     # affected by this test's side effect on the singleton row.
-    client.patch("/settings", json={"max_track_range_frames": 10}, headers=_headers(token))
+    client.patch(
+        "/settings",
+        json={"max_track_range_frames": 10, "mask_postprocess_strength": 0.3},
+        headers=_headers(token),
+    )
 
 
 def test_patch_settings_rejects_value_below_one():
     token = _register_and_login("settings-patch3@example.com", role="admin")
     response = client.patch("/settings", json={"max_track_range_frames": 0}, headers=_headers(token))
+    assert response.status_code == 422
+
+
+def test_get_settings_includes_mask_postprocess_strength():
+    token = _register_and_login("settings-get2@example.com", role="annotator")
+    response = client.get("/settings", headers=_headers(token))
+    assert response.status_code == 200
+    assert "mask_postprocess_strength" in response.json()
+
+
+def test_patch_settings_allows_admin_to_update_mask_postprocess_strength():
+    token = _register_and_login("settings-patch4@example.com", role="admin")
+    response = client.patch(
+        "/settings",
+        json={"max_track_range_frames": 10, "mask_postprocess_strength": 0.6},
+        headers=_headers(token),
+    )
+    assert response.status_code == 200
+    assert response.json()["mask_postprocess_strength"] == 0.6
+
+    get_response = client.get("/settings", headers=_headers(token))
+    assert get_response.json()["mask_postprocess_strength"] == 0.6
+
+    client.patch(
+        "/settings",
+        json={"max_track_range_frames": 10, "mask_postprocess_strength": 0.3},
+        headers=_headers(token),
+    )
+
+
+def test_patch_settings_rejects_mask_postprocess_strength_out_of_range():
+    token = _register_and_login("settings-patch5@example.com", role="admin")
+    response = client.patch(
+        "/settings",
+        json={"max_track_range_frames": 10, "mask_postprocess_strength": 1.5},
+        headers=_headers(token),
+    )
     assert response.status_code == 422

@@ -3677,11 +3677,16 @@
           "max_track_range_frames": {
             "type": "integer",
             "title": "Max Track Range Frames"
+          },
+          "mask_postprocess_strength": {
+            "type": "number",
+            "title": "Mask Postprocess Strength"
           }
         },
         "type": "object",
         "required": [
-          "max_track_range_frames"
+          "max_track_range_frames",
+          "mask_postprocess_strength"
         ],
         "title": "SettingsRead"
       },
@@ -3691,11 +3696,18 @@
             "type": "integer",
             "minimum": 1.0,
             "title": "Max Track Range Frames"
+          },
+          "mask_postprocess_strength": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Mask Postprocess Strength"
           }
         },
         "type": "object",
         "required": [
-          "max_track_range_frames"
+          "max_track_range_frames",
+          "mask_postprocess_strength"
         ],
         "title": "SettingsUpdate"
       },

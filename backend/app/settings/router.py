@@ -21,4 +21,6 @@ def patch_settings(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> SettingsRead:
-    return update_settings(session, payload.max_track_range_frames, current_user)
+    return update_settings(
+        session, payload.max_track_range_frames, payload.mask_postprocess_strength, current_user
+    )

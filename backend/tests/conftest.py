@@ -22,8 +22,8 @@ def test_engine():
     with engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO platform_settings (id, max_track_range_frames) "
-                "VALUES (1, 10) ON CONFLICT (id) DO NOTHING"
+                "INSERT INTO platform_settings (id, max_track_range_frames, mask_postprocess_strength) "
+                "VALUES (1, 10, 0.3) ON CONFLICT (id) DO NOTHING"
             )
         )
     yield engine
