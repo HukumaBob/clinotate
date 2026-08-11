@@ -287,37 +287,6 @@ def test_sam2_track_request_accepts_full_payload():
     assert request.forward == 5
 
 
-def test_sam2_track_request_rejects_combined_range_over_twenty():
-    from pydantic import ValidationError
-
-    from app.jobs.schemas import PromptIn, Sam2TrackRequest
-
-    with pytest.raises(ValidationError):
-        Sam2TrackRequest(
-            sequence_id=1,
-            label_id=1,
-            prompts=[PromptIn(type="point", coords=[0.5, 0.5], label=True)],
-            anchor_frame_id=10,
-            backward=15,
-            forward=6,
-        )
-
-
-def test_sam2_track_request_accepts_combined_range_at_twenty():
-    from app.jobs.schemas import PromptIn, Sam2TrackRequest
-
-    request = Sam2TrackRequest(
-        sequence_id=1,
-        label_id=1,
-        prompts=[PromptIn(type="point", coords=[0.5, 0.5], label=True)],
-        anchor_frame_id=10,
-        backward=10,
-        forward=10,
-    )
-    assert request.backward == 10
-    assert request.forward == 10
-
-
 def test_sam2_track_request_rejects_negative_backward():
     from pydantic import ValidationError
 
@@ -387,6 +356,78 @@ def test_enqueue_sam2_track_stores_anchor_and_direction_in_payload():
     assert job.payload["anchor_frame_id"] == frame_id
     assert job.payload["backward"] == 2
     assert job.payload["forward"] == 4
+
+
+def test_enqueue_sam2_track_rejects_combined_range_over_live_setting():
+    from app.db import SessionLocal
+    from app.settings.models import PlatformSettings
+
+    token = _register_and_login("jobs-range1@example.com")
+    frame_id, sequence_id = _create_frame(token)
+    label_id = _create_label()
+
+    session = SessionLocal()
+    settings_row = session.get(PlatformSettings, 1)
+    original_value = settings_row.max_track_range_frames
+    settings_row.max_track_range_frames = 10
+    session.commit()
+    session.close()
+
+    response = client.post(
+        "/jobs/sam2/track",
+        json={
+            "sequence_id": sequence_id,
+            "label_id": label_id,
+            "prompts": [{"type": "point", "coords": [0.5, 0.5], "label": True}],
+            "anchor_frame_id": frame_id,
+            "backward": 6,
+            "forward": 6,
+        },
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+    session = SessionLocal()
+    settings_row = session.get(PlatformSettings, 1)
+    settings_row.max_track_range_frames = original_value
+    session.commit()
+    session.close()
+
+
+def test_enqueue_sam2_track_accepts_combined_range_at_live_setting():
+    from app.db import SessionLocal
+    from app.settings.models import PlatformSettings
+
+    token = _register_and_login("jobs-range2@example.com")
+    frame_id, sequence_id = _create_frame(token)
+    label_id = _create_label()
+
+    session = SessionLocal()
+    settings_row = session.get(PlatformSettings, 1)
+    original_value = settings_row.max_track_range_frames
+    settings_row.max_track_range_frames = 10
+    session.commit()
+    session.close()
+
+    response = client.post(
+        "/jobs/sam2/track",
+        json={
+            "sequence_id": sequence_id,
+            "label_id": label_id,
+            "prompts": [{"type": "point", "coords": [0.5, 0.5], "label": True}],
+            "anchor_frame_id": frame_id,
+            "backward": 5,
+            "forward": 5,
+        },
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 201
+
+    session = SessionLocal()
+    settings_row = session.get(PlatformSettings, 1)
+    settings_row.max_track_range_frames = original_value
+    session.commit()
+    session.close()
 
 
 def test_enqueue_sam2_predict_endpoint_creates_pending_job():
