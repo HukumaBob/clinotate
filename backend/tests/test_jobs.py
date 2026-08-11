@@ -654,8 +654,17 @@ def test_get_job_does_not_reapply_postprocess_on_second_poll():
     label_id = _create_label()
 
     storage = get_storage_service()
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    raw_mask = np.zeros((100, 100), dtype=bool)
+    raw_mask[20:80, 20:80] = True
+    buffer = io.BytesIO()
+    Image.fromarray((raw_mask.astype("uint8")) * 255, mode="L").save(buffer, format="PNG")
     raw_key = "masks/postprocess-test/raw2.png"
-    storage.upload(raw_key, b"fake-png-bytes-not-decoded-in-this-test", content_type="image/png")
+    storage.upload(raw_key, buffer.getvalue(), content_type="image/png")
 
     session = SessionLocal()
     user = session.query(User).filter(User.email == "jobs-postprocess2@example.com").one()

@@ -54,14 +54,6 @@ def apply_default_postprocess_for_job(session: Session, job: Job, storage: Stora
     from, so they're skipped rather than erroring the whole job-status
     request.
     """
-    strength = job.payload.get("mask_postprocess_strength") if job.payload else None
-    if strength is not None:
-        # The job already carries an explicit strength (set at enqueue
-        # time via the request's mask_postprocess_strength field, wired
-        # up in jobs/service.py) -- that path applies its own strength,
-        # so the *default* strength has nothing to do here.
-        return
-
     annotations = session.query(Annotation).filter(Annotation.job_id == job.id).all()
     pending = [
         a
@@ -72,7 +64,15 @@ def apply_default_postprocess_for_job(session: Session, job: Job, storage: Stora
     if not pending:
         return
 
-    strength = get_platform_settings(session).mask_postprocess_strength
+    # The job's own request can carry an explicit strength (set at enqueue
+    # time via the request's mask_postprocess_strength field, e.g. the
+    # user moved the ToolsPanel slider before hitting Predict/Track) --
+    # that value is used here rather than the platform default, so a mask
+    # gets cleaned up either way: with the request-time choice if one was
+    # made, or the admin-configured default otherwise.
+    strength = job.payload.get("mask_postprocess_strength") if job.payload else None
+    if strength is None:
+        strength = get_platform_settings(session).mask_postprocess_strength
 
     for annotation in pending:
         raw_bytes = storage.download(annotation.raw_mask_storage_key)
