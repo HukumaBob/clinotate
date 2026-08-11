@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 import app.db as db_module
@@ -13,6 +13,19 @@ def test_engine():
     test_db_url = settings.database_url.rsplit("/", 1)[0] + "/endoscopy_test"
     engine = create_engine(test_db_url)
     Base.metadata.create_all(engine)
+    # `create_all` builds tables from the ORM models, not from Alembic
+    # migrations -- so data-seeding migrations (e.g. the
+    # `platform_settings` singleton row inserted by
+    # 65dffec667fb_add_platform_settings_table) never run against this
+    # database. Re-seed by hand for any table whose app code relies on a
+    # pre-existing row rather than creating one on demand.
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO platform_settings (id, max_track_range_frames) "
+                "VALUES (1, 10) ON CONFLICT (id) DO NOTHING"
+            )
+        )
     yield engine
     Base.metadata.drop_all(engine)
 

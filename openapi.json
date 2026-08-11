@@ -2344,6 +2344,76 @@
         }
       }
     },
+    "/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Read Settings",
+        "operationId": "read_settings_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsRead"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Patch Settings",
+        "operationId": "patch_settings_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -3601,6 +3671,33 @@
         },
         "type": "object",
         "title": "SequenceUpdate"
+      },
+      "SettingsRead": {
+        "properties": {
+          "max_track_range_frames": {
+            "type": "integer",
+            "title": "Max Track Range Frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "max_track_range_frames"
+        ],
+        "title": "SettingsRead"
+      },
+      "SettingsUpdate": {
+        "properties": {
+          "max_track_range_frames": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Track Range Frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "max_track_range_frames"
+        ],
+        "title": "SettingsUpdate"
       },
       "SuggestSequenceNameResponse": {
         "properties": {
