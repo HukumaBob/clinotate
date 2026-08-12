@@ -12,6 +12,13 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pyiqa>=0.1.13",
     "opencv-python-headless>=4.10.0",
+    # sam3's model_builder.py imports pkg_resources at module load time, but
+    # setuptools>=81 no longer bundles pkg_resources by default (it was split
+    # out and the compatibility shim was removed) -- an unpinned resolve can
+    # silently pick up a newer setuptools that breaks this import with
+    # `ModuleNotFoundError: No module named 'pkg_resources'`, crash-looping
+    # the whole ml-worker container. Pin below that split.
+    "setuptools<81",
 ]
 
 [dependency-groups]
