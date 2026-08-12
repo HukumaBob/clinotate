@@ -691,3 +691,22 @@ def test_get_job_does_not_reapply_postprocess_on_second_poll():
     with patch("app.annotation.service.postprocess_mask") as mock_postprocess:
         client.get(f"/jobs/{job_id}", headers=_auth_headers(token))
         mock_postprocess.assert_not_called()
+
+
+def test_enqueue_rank_quality_creates_pending_job():
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.models import JobStatus, JobType
+    from app.jobs.service import enqueue_rank_quality
+
+    token = _register_and_login("rank-quality-enqueue@example.com")
+
+    session = SessionLocal()
+    user = session.query(User).filter(User.email == "rank-quality-enqueue@example.com").one()
+    job = enqueue_rank_quality(session, sequence_id=123, percent=20, created_by=user)
+    session.close()
+
+    assert job.id is not None
+    assert job.job_type == JobType.RANK_QUALITY
+    assert job.status == JobStatus.PENDING
+    assert job.payload == {"sequence_id": 123, "percent": 20}

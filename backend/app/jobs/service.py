@@ -145,3 +145,18 @@ def enqueue_video_transcode(session: Session, video_id: int, created_by: User) -
     # worker. See app/worker/celery_app.py's matching queue declaration.
     celery_app.send_task("video_transcode", args=[job.id], queue="video_transcode")
     return job
+
+
+def enqueue_rank_quality(session: Session, sequence_id: int, percent: int, created_by: User) -> Job:
+    job = Job(
+        job_type=JobType.RANK_QUALITY,
+        status=JobStatus.PENDING,
+        payload={"sequence_id": sequence_id, "percent": percent},
+        created_by_id=created_by.id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    celery_app.send_task("rank_quality", args=[job.id])
+    return job
