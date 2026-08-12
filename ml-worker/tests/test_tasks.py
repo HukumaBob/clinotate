@@ -316,3 +316,40 @@ def test_run_find_similar_marks_all_but_best_quality_frame_in_a_cluster_as_dupli
     assert job.status == JobStatus.SUCCEEDED
     assert job.payload["result"]["duplicate_ids"] == [frame_b_id]
     session.close()
+
+
+def test_run_find_similar_evicts_quality_models_at_task_start():
+    """A prior rank_quality job in this same long-lived worker process can
+    leave TOPIQ resident in GPU memory. run_find_similar must evict it at
+    task start -- same as every other task evicts the model families it
+    doesn't own -- so DINOv2 never runs the embedding loop concurrently
+    with a resident quality model. Regression test for the gap found in
+    the whole-branch review: run_find_similar's top-of-task eviction block
+    only called _evict_sam3_models()/_evict_sam2_models(), omitting
+    _evict_quality_models()."""
+    session = SessionLocal()
+    job_id, _frame_ids = _make_pending_find_similar_job_with_frames(session)
+    session.close()
+
+    import numpy as np
+
+    embedding = np.array([1.0, 0.0, 0.0])
+    fake_similarity_adapter = MagicMock()
+    fake_similarity_adapter.embed.return_value = embedding
+
+    fake_quality_adapter = MagicMock()
+    fake_quality_adapter.score.return_value = 0.5
+
+    import app.tasks as tasks_module
+
+    with (
+        patch.object(tasks_module, "_get_default_quality_adapter", return_value=fake_quality_adapter),
+        patch.object(tasks_module, "_evict_quality_models") as mock_evict_quality,
+        patch.object(tasks_module, "_evict_sam3_models") as mock_evict_sam3,
+        patch.object(tasks_module, "_evict_sam2_models") as mock_evict_sam2,
+    ):
+        run_find_similar(job_id, adapter=fake_similarity_adapter)
+
+    mock_evict_quality.assert_called_once()
+    mock_evict_sam3.assert_called_once()
+    mock_evict_sam2.assert_called_once()

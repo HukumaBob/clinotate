@@ -546,6 +546,7 @@ def run_find_similar(job_id: int, adapter: SimilarityAdapter | None = None) -> N
     storage = get_storage_service()
     _evict_sam3_models()
     _evict_sam2_models()
+    _evict_quality_models()
     resolved_adapter = adapter if adapter is not None else _get_default_similarity_adapter()
 
     job = session.get(Job, job_id)
