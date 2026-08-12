@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("POSTGRES_USER", "endoscopy")
 os.environ.setdefault("POSTGRES_PASSWORD", "endoscopy_dev_password")
@@ -16,7 +16,7 @@ from app.db import SessionLocal
 from app.models import Frame, Job, JobStatus, JobType, Label
 from app.sam3_adapter import MaskResult
 from app.storage import get_storage_service
-from app.tasks import run_rank_quality, run_sam3_predict
+from app.tasks import run_find_similar, run_rank_quality, run_sam3_predict
 
 
 def _make_label(session) -> tuple[int, int]:
@@ -241,4 +241,78 @@ def test_run_rank_quality_marks_job_failed_on_adapter_error():
     job = session.get(Job, job_id)
     assert job.status == JobStatus.FAILED
     assert "quality model failed to load" in job.error
+    session.close()
+
+
+def _make_pending_find_similar_job_with_frames(session) -> tuple[int, dict]:
+    """Uploads three distinct fake PNG payloads (frame_a/b/c) under
+    distinct storage keys, mirroring _make_pending_rank_quality_job_with_frames
+    but needing per-frame-distinct bytes since SimilarityAdapter.embed and
+    QualityAdapter.score are both mocked keyed off exact frame_bytes."""
+    storage = get_storage_service()
+    storage.upload("test/find-similar-frame-a.png", b"frame_a_bytes", content_type="image/png")
+    storage.upload("test/find-similar-frame-b.png", b"frame_b_bytes", content_type="image/png")
+    storage.upload("test/find-similar-frame-c.png", b"frame_c_bytes", content_type="image/png")
+
+    sequence_id = _make_fresh_sequence_id(session)
+    user_id = _existing_row_id(session, "users")
+    frame_a = Frame(sequence_id=sequence_id, storage_key="test/find-similar-frame-a.png", frame_index=0, width=10, height=10)
+    frame_b = Frame(sequence_id=sequence_id, storage_key="test/find-similar-frame-b.png", frame_index=1, width=10, height=10)
+    frame_c = Frame(sequence_id=sequence_id, storage_key="test/find-similar-frame-c.png", frame_index=2, width=10, height=10)
+    session.add_all([frame_a, frame_b, frame_c])
+    session.commit()
+    session.refresh(frame_a)
+    session.refresh(frame_b)
+    session.refresh(frame_c)
+
+    job = Job(
+        job_type=JobType.FIND_SIMILAR,
+        status=JobStatus.PENDING,
+        progress=0,
+        payload={"sequence_id": sequence_id, "percent": 85},
+        created_by_id=user_id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job.id, {"a": frame_a.id, "b": frame_b.id, "c": frame_c.id}
+
+
+def test_run_find_similar_marks_all_but_best_quality_frame_in_a_cluster_as_duplicate():
+    session = SessionLocal()
+    job_id, frame_ids = _make_pending_find_similar_job_with_frames(session)
+    session.close()
+
+    frame_a_id, frame_b_id, frame_c_id = frame_ids["a"], frame_ids["b"], frame_ids["c"]
+
+    import numpy as np
+
+    # frame_a and frame_b are near-duplicates (cosine similarity ~0.95);
+    # frame_c is distinct.
+    embedding_by_bytes = {
+        b"frame_a_bytes": np.array([1.0, 0.0, 0.0]),
+        b"frame_b_bytes": np.array([0.95, 0.05, 0.0]) / np.linalg.norm([0.95, 0.05, 0.0]),
+        b"frame_c_bytes": np.array([0.0, 0.0, 1.0]),
+    }
+    fake_similarity_adapter = MagicMock()
+    fake_similarity_adapter.embed.side_effect = lambda frame_bytes: embedding_by_bytes[frame_bytes]
+
+    fake_quality_adapter = MagicMock()
+    # frame_a scores better (higher) than frame_b, so frame_b (not frame_a)
+    # should be the one marked duplicate within their shared cluster.
+    fake_quality_adapter.score.side_effect = lambda frame_bytes: {
+        b"frame_a_bytes": 0.9,
+        b"frame_b_bytes": 0.2,
+        b"frame_c_bytes": 0.5,
+    }[frame_bytes]
+
+    import app.tasks as tasks_module
+
+    with patch.object(tasks_module, "_get_default_quality_adapter", return_value=fake_quality_adapter):
+        run_find_similar(job_id, adapter=fake_similarity_adapter)
+
+    session = SessionLocal()
+    job = session.get(Job, job_id)
+    assert job.status == JobStatus.SUCCEEDED
+    assert job.payload["result"]["duplicate_ids"] == [frame_b_id]
     session.close()

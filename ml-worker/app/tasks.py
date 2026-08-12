@@ -3,6 +3,7 @@ import os
 import sys
 from datetime import datetime, timezone
 
+import numpy as np
 import torch
 from PIL import Image
 
@@ -13,7 +14,9 @@ from app.models import Annotation, AnnotationStatus, AnnotationType, Frame, Job,
 from app.quality_adapter import QualityAdapter
 from app.sam2_adapter import Sam2Adapter
 from app.sam3_adapter import Sam3Adapter
+from app.similarity_adapter import SimilarityAdapter
 from app.storage import get_storage_service
+from app.union_find import cluster_by_threshold
 
 
 def _load_label(session, label_id: int) -> Label:
@@ -33,6 +36,7 @@ def _load_label(session, label_id: int) -> Label:
 _sam3_adapter_singleton: Sam3Adapter | None = None
 _sam2_adapter_singleton: Sam2Adapter | None = None
 _quality_adapter_singleton: QualityAdapter | None = None
+_similarity_adapter_singleton: SimilarityAdapter | None = None
 
 
 def _get_default_sam3_adapter() -> Sam3Adapter:
@@ -54,6 +58,28 @@ def _get_default_quality_adapter() -> QualityAdapter:
     if _quality_adapter_singleton is None:
         _quality_adapter_singleton = QualityAdapter()
     return _quality_adapter_singleton
+
+
+def _get_default_similarity_adapter() -> SimilarityAdapter:
+    global _similarity_adapter_singleton
+    if _similarity_adapter_singleton is None:
+        _similarity_adapter_singleton = SimilarityAdapter()
+    return _similarity_adapter_singleton
+
+
+def _evict_similarity_models() -> None:
+    """Releases the SimilarityAdapter singleton's DINOv2 model if resident,
+    same cross-family VRAM-sharing reason as the other _evict_*_models
+    helpers."""
+    adapter = _get_default_similarity_adapter()
+    adapter._model = None
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 def _evict_quality_models() -> None:
@@ -159,6 +185,7 @@ def run_sam3_predict(job_id: int, adapter: Sam3Adapter | None = None) -> None:
     storage = get_storage_service()
     _evict_sam2_models()
     _evict_quality_models()
+    _evict_similarity_models()
     resolved_adapter = adapter if adapter is not None else _get_default_sam3_adapter()
 
     job = session.get(Job, job_id)
@@ -215,6 +242,7 @@ def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
     storage = get_storage_service()
     _evict_sam2_models()
     _evict_quality_models()
+    _evict_similarity_models()
     resolved_adapter = adapter if adapter is not None else _get_default_sam3_adapter()
 
     job = session.get(Job, job_id)
@@ -275,6 +303,7 @@ def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
     storage = get_storage_service()
     _evict_sam3_models()
     _evict_quality_models()
+    _evict_similarity_models()
     resolved_adapter = adapter if adapter is not None else _get_default_sam2_adapter()
 
     job = session.get(Job, job_id)
@@ -341,6 +370,7 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
     storage = get_storage_service()
     _evict_sam3_models()
     _evict_quality_models()
+    _evict_similarity_models()
     resolved_adapter = adapter if adapter is not None else _get_default_sam2_adapter()
 
     job = session.get(Job, job_id)
@@ -462,6 +492,7 @@ def run_rank_quality(job_id: int, adapter: QualityAdapter | None = None) -> None
     storage = get_storage_service()
     _evict_sam3_models()
     _evict_sam2_models()
+    _evict_similarity_models()
     resolved_adapter = adapter if adapter is not None else _get_default_quality_adapter()
 
     job = session.get(Job, job_id)
@@ -493,6 +524,93 @@ def run_rank_quality(job_id: int, adapter: QualityAdapter | None = None) -> None
         worst_ids = [entry["frame_id"] for entry in scores[:worst_count]]
 
         job.payload = {**job.payload, "result": {"scores": scores, "worst_ids": worst_ids}}
+        job.status = JobStatus.SUCCEEDED
+        job.progress = 100
+        job.finished_at = datetime.now(timezone.utc)
+        _record_vram_usage(job)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        job = session.get(Job, job_id)
+        job.status = JobStatus.FAILED
+        job.error = str(exc)
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="find_similar")
+def run_find_similar(job_id: int, adapter: SimilarityAdapter | None = None) -> None:
+    session = SessionLocal()
+    storage = get_storage_service()
+    _evict_sam3_models()
+    _evict_sam2_models()
+    resolved_adapter = adapter if adapter is not None else _get_default_similarity_adapter()
+
+    job = session.get(Job, job_id)
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime.now(timezone.utc)
+    session.commit()
+
+    try:
+        sequence_id = job.payload["sequence_id"]
+        percent = job.payload["percent"]
+        frames = (
+            session.query(Frame)
+            .filter(Frame.sequence_id == sequence_id)
+            .order_by(Frame.frame_index)
+            .all()
+        )
+
+        embeddings = []
+        for index, frame in enumerate(frames):
+            frame_bytes = storage.download(frame.storage_key)
+            embeddings.append(resolved_adapter.embed(frame_bytes))
+            job.progress = int(((index + 1) / len(frames)) * 50)  # embedding is the first half
+            session.commit()
+
+        matrix = np.stack(embeddings) @ np.stack(embeddings).T
+        ids = [f.id for f in frames]
+        threshold = percent / 100.0
+        clusters = cluster_by_threshold(matrix, ids, threshold)
+
+        id_to_frame = {f.id: f for f in frames}
+        id_to_index = {f.id: i for i, f in enumerate(frames)}
+
+        # Evict the similarity model before loading the quality model --
+        # both are GPU-resident deep models and this GPU has room for only
+        # one large model family at a time (see _evict_*_models docstrings).
+        _evict_similarity_models()
+        quality_adapter = _get_default_quality_adapter()
+
+        duplicate_ids: list[int] = []
+        pairs: list[dict] = []
+        similarity_map: dict[str, float] = {}
+
+        for cluster_index, cluster_ids in enumerate(clusters):
+            if len(cluster_ids) < 2:
+                continue
+            scored = []
+            for frame_id in cluster_ids:
+                frame_bytes = storage.download(id_to_frame[frame_id].storage_key)
+                score = quality_adapter.score(frame_bytes)
+                scored.append((frame_id, score))
+            scored.sort(key=lambda entry: entry[1], reverse=True)  # best (highest) first
+            best_id = scored[0][0]
+            for frame_id, _score in scored[1:]:
+                duplicate_ids.append(frame_id)
+                similarity = float(matrix[id_to_index[best_id]][id_to_index[frame_id]])
+                pairs.append({"frame_a": best_id, "frame_b": frame_id, "similarity": similarity})
+                similarity_map[str(frame_id)] = similarity
+
+            job.progress = 50 + int(((cluster_index + 1) / len(clusters)) * 50)
+            session.commit()
+
+        job.payload = {
+            **job.payload,
+            "result": {"duplicate_ids": duplicate_ids, "pairs": pairs, "similarity_map": similarity_map},
+        }
         job.status = JobStatus.SUCCEEDED
         job.progress = 100
         job.finished_at = datetime.now(timezone.utc)

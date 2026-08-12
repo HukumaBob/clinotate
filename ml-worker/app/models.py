@@ -13,6 +13,7 @@ class JobType(str, enum.Enum):
     SAM2_PREDICT = "sam2_predict"
     SAM2_TRACK = "sam2_track"
     RANK_QUALITY = "rank_quality"
+    FIND_SIMILAR = "find_similar"
 
 
 class JobStatus(str, enum.Enum):
