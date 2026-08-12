@@ -1819,3 +1819,61 @@ def test_bulk_delete_frame_with_no_annotations_succeeds():
 
     assert response.status_code == 200
     assert response.json() == {"deleted_ids": [frame_id]}
+
+
+def test_rank_quality_creates_job():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "rank-quality-procedure"}, headers=headers
+    ).json()["id"]
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+    sequence_id = client.post(
+        "/media/sequences/photos",
+        data={"name": "Rank quality seq", "procedure_id": str(procedure_id)},
+        files=[("files", ("a.png", image_bytes, "image/png"))],
+        headers=headers,
+    ).json()["id"]
+
+    response = client.post(
+        f"/media/sequences/{sequence_id}/rank-quality", json={"percent": 20}, headers=headers
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["job_type"] == "rank_quality"
+    assert body["status"] == "pending"
+
+
+def test_rank_quality_404_for_missing_sequence():
+    headers = _auth_headers()
+    response = client.post(
+        "/media/sequences/999999999/rank-quality", json={"percent": 20}, headers=headers
+    )
+    assert response.status_code == 404
+
+
+def test_rank_quality_409_when_already_pending():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "rank-quality-double-procedure"}, headers=headers
+    ).json()["id"]
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+    sequence_id = client.post(
+        "/media/sequences/photos",
+        data={"name": "Rank quality double seq", "procedure_id": str(procedure_id)},
+        files=[("files", ("a.png", image_bytes, "image/png"))],
+        headers=headers,
+    ).json()["id"]
+
+    first = client.post(
+        f"/media/sequences/{sequence_id}/rank-quality", json={"percent": 20}, headers=headers
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        f"/media/sequences/{sequence_id}/rank-quality", json={"percent": 20}, headers=headers
+    )
+    assert second.status_code == 409

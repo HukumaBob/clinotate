@@ -1856,6 +1856,63 @@
         }
       }
     },
+    "/media/sequences/{sequence_id}/rank-quality": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Rank Sequence Quality",
+        "operationId": "rank_sequence_quality_media_sequences__sequence_id__rank_quality_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RankQualityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/annotation/frames/{frame_id}/annotations": {
       "post": {
         "tags": [
@@ -3040,7 +3097,9 @@
           "sam3_track",
           "sam2_predict",
           "sam2_track",
-          "video_transcode"
+          "video_transcode",
+          "rank_quality",
+          "find_similar"
         ],
         "title": "JobType"
       },
@@ -3351,6 +3410,19 @@
           "type"
         ],
         "title": "PromptIn"
+      },
+      "RankQualityRequest": {
+        "properties": {
+          "percent": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Percent",
+            "default": 20
+          }
+        },
+        "type": "object",
+        "title": "RankQualityRequest"
       },
       "Sam2PredictRequest": {
         "properties": {

@@ -134,3 +134,7 @@ class FrameBulkDelete(BaseModel):
 
 class FrameBulkDeleteResult(BaseModel):
     deleted_ids: list[int]
+
+
+class RankQualityRequest(BaseModel):
+    percent: int = Field(default=20, ge=1, le=99)
