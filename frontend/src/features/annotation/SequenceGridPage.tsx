@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { useDeleteFrames, useFrames, useRankQuality } from "../../entities/useFrames";
+import { useDeleteFrames, useFindSimilar, useFrames, useRankQuality } from "../../entities/useFrames";
 import { useJob } from "../../entities/useJobs";
 import { useSequence } from "../../entities/useSequence";
 import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
@@ -20,6 +20,7 @@ export function SequenceGridPage() {
   const [autoCheckedFrameIds, setAutoCheckedFrameIds] = useState<Set<number>>(new Set());
   const [frameMarkReasons, setFrameMarkReasons] = useState<Map<number, MarkReason>>(new Map());
   const [qualityPercent, setQualityPercent] = useState(20);
+  const [similarityPercent, setSimilarityPercent] = useState(85);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const [activeJobKind, setActiveJobKind] = useState<"quality" | "similarity" | null>(null);
 
@@ -29,6 +30,7 @@ export function SequenceGridPage() {
   const taxonomyTree = taxonomyTreeQuery.data ?? [];
   const deleteFrames = useDeleteFrames(sequenceIdNumber);
   const rankQuality = useRankQuality(sequenceIdNumber);
+  const findSimilar = useFindSimilar(sequenceIdNumber);
   const jobQuery = useJob(activeJobId);
 
   useEffect(() => {
@@ -44,6 +46,25 @@ export function SequenceGridPage() {
           const next = new Map(current);
           for (const id of result.worst_ids) {
             next.set(id, { kind: "quality", label: "low quality" });
+          }
+          return next;
+        });
+      }
+      setActiveJobId(null);
+      setActiveJobKind(null);
+    } else if (jobQuery.data?.status === "succeeded" && activeJobKind === "similarity") {
+      const result = jobQuery.data.payload?.result as
+        | { duplicate_ids: number[]; similarity_map: Record<string, number> }
+        | undefined;
+      if (result) {
+        setIsSelectMode(true);
+        setSelectedFrameIds((current) => new Set([...current, ...result.duplicate_ids]));
+        setAutoCheckedFrameIds((current) => new Set([...current, ...result.duplicate_ids]));
+        setFrameMarkReasons((current) => {
+          const next = new Map(current);
+          for (const id of result.duplicate_ids) {
+            const similarity = result.similarity_map[String(id)] ?? 0;
+            next.set(id, { kind: "similarity", label: `dup ${Math.round(similarity * 100)}%` });
           }
           return next;
         });
@@ -119,6 +140,17 @@ export function SequenceGridPage() {
     });
   }
 
+  function handleFindSimilar() {
+    findSimilar.mutate(similarityPercent, {
+      onSuccess: (data) => {
+        if (data) {
+          setActiveJobId(data.id);
+          setActiveJobKind("similarity");
+        }
+      },
+    });
+  }
+
   function handleClearMarks() {
     setSelectedFrameIds((current) => {
       const next = new Set(current);
@@ -145,6 +177,10 @@ export function SequenceGridPage() {
           onQualityPercentChange={setQualityPercent}
           onRankQuality={handleRankQuality}
           isRankQualityRunning={activeJobKind === "quality"}
+          similarityPercent={similarityPercent}
+          onSimilarityPercentChange={setSimilarityPercent}
+          onFindSimilar={handleFindSimilar}
+          isFindSimilarRunning={activeJobKind === "similarity"}
           hasAutoMarks={autoCheckedFrameIds.size > 0}
           onClearMarks={handleClearMarks}
         />

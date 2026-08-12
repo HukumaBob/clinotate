@@ -308,4 +308,137 @@ describe("SequenceGridToolbar", () => {
 
     expect(onQualityPercentChange).toHaveBeenCalledWith(1);
   });
+
+  it("shows the similarity percent input and Find Similar button in select mode", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        similarityPercent={85}
+        onSimilarityPercentChange={() => {}}
+        onFindSimilar={() => {}}
+        isFindSimilarRunning={false}
+      />,
+    );
+
+    expect(screen.getByRole("spinbutton", { name: /similarity/i })).toHaveValue(85);
+    expect(screen.getByRole("button", { name: /find similar/i })).toBeInTheDocument();
+  });
+
+  it("calls onFindSimilar with no arguments when the Find Similar button is clicked", async () => {
+    const user = userEvent.setup();
+    const onFindSimilar = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        similarityPercent={85}
+        onSimilarityPercentChange={() => {}}
+        onFindSimilar={onFindSimilar}
+        isFindSimilarRunning={false}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /find similar/i }));
+    expect(onFindSimilar).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the Find Similar button while a find-similar job is running", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        similarityPercent={85}
+        onSimilarityPercentChange={() => {}}
+        onFindSimilar={() => {}}
+        isFindSimilarRunning
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /find similar/i })).toBeDisabled();
+  });
+
+  it("clamps an out-of-range similarity percent typed above the max down to 99", () => {
+    const onSimilarityPercentChange = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        similarityPercent={85}
+        onSimilarityPercentChange={onSimilarityPercentChange}
+        onFindSimilar={() => {}}
+        isFindSimilarRunning={false}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: /similarity/i }), {
+      target: { value: "500" },
+    });
+
+    expect(onSimilarityPercentChange).toHaveBeenCalledWith(99);
+  });
+
+  it("clamps an out-of-range similarity percent typed below the min up to 1", () => {
+    const onSimilarityPercentChange = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        similarityPercent={85}
+        onSimilarityPercentChange={onSimilarityPercentChange}
+        onFindSimilar={() => {}}
+        isFindSimilarRunning={false}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: /similarity/i }), {
+      target: { value: "0" },
+    });
+
+    expect(onSimilarityPercentChange).toHaveBeenCalledWith(1);
+  });
+
+  it("clamps an emptied similarity percent field up to the min of 1", () => {
+    const onSimilarityPercentChange = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        similarityPercent={85}
+        onSimilarityPercentChange={onSimilarityPercentChange}
+        onFindSimilar={() => {}}
+        isFindSimilarRunning={false}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: /similarity/i }), {
+      target: { value: "" },
+    });
+
+    expect(onSimilarityPercentChange).toHaveBeenCalledWith(1);
+  });
 });

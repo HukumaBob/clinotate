@@ -55,3 +55,15 @@ export function useRankQuality(sequenceId: number) {
     },
   });
 }
+
+export function useFindSimilar(sequenceId: number) {
+  return useMutation({
+    mutationFn: async (percent: number) => {
+      const result = await apiClient.POST("/media/sequences/{sequence_id}/find-similar", {
+        params: { path: { sequence_id: sequenceId } },
+        body: { percent },
+      });
+      return result.data;
+    },
+  });
+}

@@ -11,6 +11,10 @@ interface SequenceGridToolbarProps {
   onQualityPercentChange?: (value: number) => void;
   onRankQuality?: () => void;
   isRankQualityRunning?: boolean;
+  similarityPercent?: number;
+  onSimilarityPercentChange?: (value: number) => void;
+  onFindSimilar?: () => void;
+  isFindSimilarRunning?: boolean;
   hasAutoMarks?: boolean;
   onClearMarks?: () => void;
 }
@@ -26,6 +30,10 @@ export function SequenceGridToolbar({
   onQualityPercentChange = () => {},
   onRankQuality = () => {},
   isRankQualityRunning = false,
+  similarityPercent = 85,
+  onSimilarityPercentChange = () => {},
+  onFindSimilar = () => {},
+  isFindSimilarRunning = false,
   hasAutoMarks = false,
   onClearMarks = () => {},
 }: SequenceGridToolbarProps) {
@@ -51,6 +59,12 @@ export function SequenceGridToolbar({
     onQualityPercentChange(clamped);
   }
 
+  function handleSimilarityPercentChange(rawValue: string) {
+    const parsed = Number(rawValue);
+    const clamped = Math.min(99, Math.max(1, Number.isFinite(parsed) ? parsed : 1));
+    onSimilarityPercentChange(clamped);
+  }
+
   return (
     <div className="flex items-center gap-4 border-b border-gray-800 px-8 py-4">
       <h1 className="text-xl font-semibold">{sequenceName}</h1>
@@ -74,6 +88,24 @@ export function SequenceGridToolbar({
               className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
             >
               {isRankQualityRunning ? "Ranking…" : "Rank Quality"}
+            </button>
+            <input
+              type="number"
+              aria-label="Similarity percent"
+              min={1}
+              max={99}
+              value={similarityPercent}
+              onChange={(event) => handleSimilarityPercentChange(event.target.value)}
+              className="w-16 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200"
+            />
+            <button
+              type="button"
+              aria-label="Find Similar"
+              onClick={onFindSimilar}
+              disabled={isFindSimilarRunning}
+              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+            >
+              {isFindSimilarRunning ? "Finding…" : "Find Similar"}
             </button>
             {hasAutoMarks && (
               <button

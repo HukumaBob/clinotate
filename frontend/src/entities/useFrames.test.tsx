@@ -4,7 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { apiClient } from "../shared/api/client";
-import { useDeleteFrames, useFrame, useRankQuality } from "./useFrames";
+import { useDeleteFrames, useFindSimilar, useFrame, useRankQuality } from "./useFrames";
 
 vi.mock("../shared/api/client", () => ({
   apiClient: { GET: vi.fn(), DELETE: vi.fn(), POST: vi.fn() },
@@ -94,6 +94,30 @@ describe("useRankQuality", () => {
       expect.objectContaining({
         params: { path: { sequence_id: 9 } },
         body: { percent: 20 },
+      }),
+    );
+  });
+});
+
+describe("useFindSimilar", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("POSTs to the find-similar endpoint with the given percent", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { id: 43, job_type: "find_similar", status: "pending" },
+      error: undefined,
+    } as never);
+
+    const { result } = renderHook(() => useFindSimilar(9), { wrapper });
+    result.current.mutate(85);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}/find-similar",
+      expect.objectContaining({
+        params: { path: { sequence_id: 9 } },
+        body: { percent: 85 },
       }),
     );
   });
