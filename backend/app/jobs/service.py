@@ -160,3 +160,18 @@ def enqueue_rank_quality(session: Session, sequence_id: int, percent: int, creat
 
     celery_app.send_task("rank_quality", args=[job.id])
     return job
+
+
+def enqueue_find_similar(session: Session, sequence_id: int, percent: int, created_by: User) -> Job:
+    job = Job(
+        job_type=JobType.FIND_SIMILAR,
+        status=JobStatus.PENDING,
+        payload={"sequence_id": sequence_id, "percent": percent},
+        created_by_id=created_by.id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    celery_app.send_task("find_similar", args=[job.id])
+    return job

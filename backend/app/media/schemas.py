@@ -138,3 +138,7 @@ class FrameBulkDeleteResult(BaseModel):
 
 class RankQualityRequest(BaseModel):
     percent: int = Field(default=20, ge=1, le=99)
+
+
+class FindSimilarRequest(BaseModel):
+    percent: int = Field(default=85, ge=1, le=99)

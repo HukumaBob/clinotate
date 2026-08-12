@@ -710,3 +710,22 @@ def test_enqueue_rank_quality_creates_pending_job():
     assert job.job_type == JobType.RANK_QUALITY
     assert job.status == JobStatus.PENDING
     assert job.payload == {"sequence_id": 123, "percent": 20}
+
+
+def test_enqueue_find_similar_creates_pending_job():
+    from app.auth.models import User
+    from app.db import SessionLocal
+    from app.jobs.models import JobStatus, JobType
+    from app.jobs.service import enqueue_find_similar
+
+    token = _register_and_login("find-similar-enqueue@example.com")
+
+    session = SessionLocal()
+    user = session.query(User).filter(User.email == "find-similar-enqueue@example.com").one()
+    job = enqueue_find_similar(session, sequence_id=123, percent=85, created_by=user)
+    session.close()
+
+    assert job.id is not None
+    assert job.job_type == JobType.FIND_SIMILAR
+    assert job.status == JobStatus.PENDING
+    assert job.payload == {"sequence_id": 123, "percent": 85}

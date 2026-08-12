@@ -1877,3 +1877,61 @@ def test_rank_quality_409_when_already_pending():
         f"/media/sequences/{sequence_id}/rank-quality", json={"percent": 20}, headers=headers
     )
     assert second.status_code == 409
+
+
+def test_find_similar_creates_job():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "find-similar-procedure"}, headers=headers
+    ).json()["id"]
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+    sequence_id = client.post(
+        "/media/sequences/photos",
+        data={"name": "Find similar seq", "procedure_id": str(procedure_id)},
+        files=[("files", ("a.png", image_bytes, "image/png"))],
+        headers=headers,
+    ).json()["id"]
+
+    response = client.post(
+        f"/media/sequences/{sequence_id}/find-similar", json={"percent": 85}, headers=headers
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["job_type"] == "find_similar"
+    assert body["status"] == "pending"
+
+
+def test_find_similar_404_for_missing_sequence():
+    headers = _auth_headers()
+    response = client.post(
+        "/media/sequences/999999999/find-similar", json={"percent": 85}, headers=headers
+    )
+    assert response.status_code == 404
+
+
+def test_find_similar_409_when_already_pending():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "find-similar-double-procedure"}, headers=headers
+    ).json()["id"]
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+    sequence_id = client.post(
+        "/media/sequences/photos",
+        data={"name": "Find similar double seq", "procedure_id": str(procedure_id)},
+        files=[("files", ("a.png", image_bytes, "image/png"))],
+        headers=headers,
+    ).json()["id"]
+
+    first = client.post(
+        f"/media/sequences/{sequence_id}/find-similar", json={"percent": 85}, headers=headers
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        f"/media/sequences/{sequence_id}/find-similar", json={"percent": 85}, headers=headers
+    )
+    assert second.status_code == 409

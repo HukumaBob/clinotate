@@ -13,9 +13,10 @@ from app.auth.models import User
 from app.db import get_session
 from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
-from app.jobs.service import enqueue_rank_quality, enqueue_video_transcode
+from app.jobs.service import enqueue_find_similar, enqueue_rank_quality, enqueue_video_transcode
 from app.media.models import Frame, Sequence, Video
 from app.media.schemas import (
+    FindSimilarRequest,
     FrameBulkDelete,
     FrameBulkDeleteResult,
     FrameRead,
@@ -665,3 +666,34 @@ def rank_sequence_quality(
         )
 
     return enqueue_rank_quality(session, sequence_id, payload.percent, current_user)
+
+
+@router.post(
+    "/sequences/{sequence_id}/find-similar", response_model=JobRead, status_code=status.HTTP_201_CREATED
+)
+def find_similar_sequence_frames(
+    sequence_id: int,
+    payload: FindSimilarRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Job:
+    sequence = session.get(Sequence, sequence_id)
+    if sequence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found")
+
+    existing_pending_or_running = (
+        session.query(Job)
+        .filter(
+            Job.job_type == JobType.FIND_SIMILAR,
+            Job.payload["sequence_id"].as_integer() == sequence_id,
+            Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
+        )
+        .first()
+    )
+    if existing_pending_or_running is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A similarity search job is already in progress for this sequence",
+        )
+
+    return enqueue_find_similar(session, sequence_id, payload.percent, current_user)

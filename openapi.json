@@ -1913,6 +1913,63 @@
         }
       }
     },
+    "/media/sequences/{sequence_id}/find-similar": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Find Similar Sequence Frames",
+        "operationId": "find_similar_sequence_frames_media_sequences__sequence_id__find_similar_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindSimilarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/annotation/frames/{frame_id}/annotations": {
       "post": {
         "tags": [
@@ -2886,6 +2943,19 @@
         },
         "type": "object",
         "title": "EvaluationTypeUpdate"
+      },
+      "FindSimilarRequest": {
+        "properties": {
+          "percent": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Percent",
+            "default": 85
+          }
+        },
+        "type": "object",
+        "title": "FindSimilarRequest"
       },
       "FrameBulkDelete": {
         "properties": {
