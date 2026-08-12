@@ -265,7 +265,16 @@ def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
         result = resolved_adapter.predict(frame_bytes, prompts)
 
         mask_key = f"masks/{frame_id}/{job_id}.png"
+        # raw_mask_key stores the untouched SAM2 output under its own,
+        # never-overwritten key. storage_key is what backend's
+        # apply_default_postprocess_for_job/reapply_mask_postprocess
+        # overwrite in place with the cleaned-up mask -- if both pointed at
+        # the same key, the first post-processing pass would permanently
+        # destroy the raw mask, making the per-mask "reset to 0" slider
+        # return an already-smoothed result instead of the true raw output.
+        raw_mask_key = f"masks/{frame_id}/{job_id}_raw.png"
         storage.upload(mask_key, result.mask_png, content_type="image/png")
+        storage.upload(raw_mask_key, result.mask_png, content_type="image/png")
 
         annotation = Annotation(
             frame_id=frame_id,
@@ -276,7 +285,7 @@ def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
             status=AnnotationStatus.DRAFT,
             created_by_id=job.created_by_id,
             storage_key=mask_key,
-            raw_mask_storage_key=mask_key,
+            raw_mask_storage_key=raw_mask_key,
             job_id=job_id,
         )
         session.add(annotation)
@@ -366,7 +375,12 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
 
         for index, (frame, result) in enumerate(zip(tracked_frames, results)):
             mask_key = f"masks/{frame.id}/{job_id}.png"
+            # See run_sam2_predict's comment above -- storage_key and
+            # raw_mask_storage_key must be distinct keys, or the first
+            # post-processing pass destroys the raw SAM2 mask forever.
+            raw_mask_key = f"masks/{frame.id}/{job_id}_raw.png"
             storage.upload(mask_key, result.mask_png, content_type="image/png")
+            storage.upload(raw_mask_key, result.mask_png, content_type="image/png")
             annotation = Annotation(
                 frame_id=frame.id,
                 label_id=label.id,
@@ -376,7 +390,7 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
                 status=AnnotationStatus.DRAFT,
                 created_by_id=job.created_by_id,
                 storage_key=mask_key,
-                raw_mask_storage_key=mask_key,
+                raw_mask_storage_key=raw_mask_key,
                 job_id=job_id,
             )
             session.add(annotation)

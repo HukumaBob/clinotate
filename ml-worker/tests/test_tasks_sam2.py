@@ -254,7 +254,7 @@ def test_run_sam2_predict_creates_annotation_and_marks_job_succeeded():
     mock_session.add.assert_called_once()
 
 
-def test_run_sam2_predict_sets_raw_mask_storage_key_equal_to_storage_key():
+def test_run_sam2_predict_sets_raw_mask_storage_key_distinct_from_storage_key():
     fake_adapter = MagicMock()
     fake_adapter.predict.return_value = MagicMock(mask_png=b"png-bytes", score=0.87)
 
@@ -283,8 +283,14 @@ def test_run_sam2_predict_sets_raw_mask_storage_key_equal_to_storage_key():
         tasks_module.run_sam2_predict(job_id=1)
 
     created_annotation = mock_session.add.call_args[0][0]
-    assert created_annotation.raw_mask_storage_key == created_annotation.storage_key
+    # Must be two distinct storage keys/files -- backend's
+    # apply_default_postprocess_for_job overwrites storage_key's object with
+    # the post-processed mask in place, so if raw_mask_storage_key pointed
+    # at the same key, the raw SAM2 output would be lost the moment default
+    # post-processing runs, making the per-mask "reset to 0" slider return
+    # an already-smoothed mask instead of the true raw one.
     assert created_annotation.raw_mask_storage_key is not None
+    assert created_annotation.raw_mask_storage_key != created_annotation.storage_key
 
 
 def test_run_sam2_track_sets_raw_mask_storage_key_on_every_created_annotation():
@@ -335,7 +341,8 @@ def test_run_sam2_track_sets_raw_mask_storage_key_on_every_created_annotation():
     mask_annotations = [a for a in created_annotations if hasattr(a, "raw_mask_storage_key")]
     assert len(mask_annotations) == 2
     for annotation in mask_annotations:
-        assert annotation.raw_mask_storage_key == annotation.storage_key
+        assert annotation.raw_mask_storage_key is not None
+        assert annotation.raw_mask_storage_key != annotation.storage_key
 
 
 def test_run_sam2_predict_sets_job_id_on_created_annotation():
