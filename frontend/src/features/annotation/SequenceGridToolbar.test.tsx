@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { SequenceGridToolbar } from "./SequenceGridToolbar";
@@ -229,5 +229,83 @@ describe("SequenceGridToolbar", () => {
       />,
     );
     expect(screen.getByRole("button", { name: /clear marks/i })).toBeInTheDocument();
+  });
+
+  it("clamps an out-of-range quality percent typed above the max down to 99", () => {
+    const onQualityPercentChange = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        qualityPercent={20}
+        onQualityPercentChange={onQualityPercentChange}
+        onRankQuality={() => {}}
+        isRankQualityRunning={false}
+        hasAutoMarks={false}
+        onClearMarks={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: /quality/i }), {
+      target: { value: "500" },
+    });
+
+    expect(onQualityPercentChange).toHaveBeenCalledWith(99);
+  });
+
+  it("clamps an out-of-range quality percent typed below the min up to 1", () => {
+    const onQualityPercentChange = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        qualityPercent={20}
+        onQualityPercentChange={onQualityPercentChange}
+        onRankQuality={() => {}}
+        isRankQualityRunning={false}
+        hasAutoMarks={false}
+        onClearMarks={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: /quality/i }), {
+      target: { value: "0" },
+    });
+
+    expect(onQualityPercentChange).toHaveBeenCalledWith(1);
+  });
+
+  it("clamps an emptied quality percent field up to the min of 1", () => {
+    const onQualityPercentChange = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        qualityPercent={20}
+        onQualityPercentChange={onQualityPercentChange}
+        onRankQuality={() => {}}
+        isRankQualityRunning={false}
+        hasAutoMarks={false}
+        onClearMarks={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: /quality/i }), {
+      target: { value: "" },
+    });
+
+    expect(onQualityPercentChange).toHaveBeenCalledWith(1);
   });
 });

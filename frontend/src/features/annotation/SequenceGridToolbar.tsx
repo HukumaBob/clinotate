@@ -45,6 +45,12 @@ export function SequenceGridToolbar({
     onCancel();
   }
 
+  function handleQualityPercentChange(rawValue: string) {
+    const parsed = Number(rawValue);
+    const clamped = Math.min(99, Math.max(1, Number.isFinite(parsed) ? parsed : 1));
+    onQualityPercentChange(clamped);
+  }
+
   return (
     <div className="flex items-center gap-4 border-b border-gray-800 px-8 py-4">
       <h1 className="text-xl font-semibold">{sequenceName}</h1>
@@ -57,7 +63,7 @@ export function SequenceGridToolbar({
               min={1}
               max={99}
               value={qualityPercent}
-              onChange={(event) => onQualityPercentChange(Number(event.target.value))}
+              onChange={(event) => handleQualityPercentChange(event.target.value)}
               className="w-16 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200"
             />
             <button
