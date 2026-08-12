@@ -597,6 +597,38 @@ across 9 tasks (8 implementation + Task 9 real-browser E2E verification),
 each independently committed to a dedicated worktree, fast-forward merged
 into master once verification passed.
 
+### Phase 2e: Sequence grid Rank Quality / Find Similar — DONE (2026-08-12)
+
+Plan: [docs/superpowers/plans/2026-08-12-sequence-grid-quality-similarity-suggestions.md](docs/superpowers/plans/2026-08-12-sequence-grid-quality-similarity-suggestions.md),
+spec: [docs/superpowers/specs/2026-08-12-sequence-grid-quality-similarity-suggestions-design.md](docs/superpowers/specs/2026-08-12-sequence-grid-quality-similarity-suggestions-design.md).
+
+Two new `ml-worker` adapters — `QualityAdapter` (TOPIQ no-reference quality
+score, OpenCV Laplacian-variance fallback) and `SimilarityAdapter` (DINOv2
+ViT-B/14 embeddings) — power two new sequence-grid toolbar actions. Rank
+Quality auto-checks the worst N% of frames by quality score. Find Similar
+clusters near-duplicate frames via Union-Find over embedding distance,
+keeps the best-quality frame per cluster unchecked, and auto-marks the
+rest for deletion; both re-runs are idempotent and non-destructive of a
+pre-existing manual selection. Both jobs evict every model family they
+don't own at task start (a discipline that predates this phase, driven by
+this GPU's history of VRAM-related host crashes) — the final-review pass
+caught `run_find_similar` missing `_evict_quality_models()`, fixed in
+`d94a693`. Executed via `superpowers:subagent-driven-development` across
+11 tasks, each independently committed to a dedicated worktree, fast-
+forward merged into master once verification passed.
+
+**Deviation from the plan, decided during execution:** the pause between
+sessions (host shutdown) surfaced an unrelated, pre-existing problem: the
+real `ml-worker` Docker container was crash-looping in production
+(`ModuleNotFoundError: pkg_resources`), caused by an earlier unpinned
+rebuild picking up `setuptools>=81`, which dropped the `pkg_resources`
+compatibility shim that `sam3`'s `model_builder.py` imports at module load
+time. Fixed by pinning `setuptools<81` in `ml-worker/pyproject.toml`
+(`fb16238`) and confirmed via a full, real image rebuild after the pause:
+`setuptools==78.1.0`, `torch==2.7.1+cu126`, `torchvision==0.22.1+cu126` —
+pin holds, no version drift on the CUDA pair, container reaches Celery
+`ready` state and stays up.
+
 **Deviations from the plan, decided during execution:**
 
 - The implementation session doing Task 9's manual E2E verification was
