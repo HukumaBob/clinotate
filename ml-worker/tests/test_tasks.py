@@ -16,7 +16,7 @@ from app.db import SessionLocal
 from app.models import Frame, Job, JobStatus, JobType, Label
 from app.sam3_adapter import MaskResult
 from app.storage import get_storage_service
-from app.tasks import run_sam3_predict
+from app.tasks import run_rank_quality, run_sam3_predict
 
 
 def _make_label(session) -> tuple[int, int]:
@@ -150,4 +150,95 @@ def test_run_sam3_predict_marks_job_failed_on_adapter_error():
     job = session.get(Job, job_id)
     assert job.status == JobStatus.FAILED
     assert "no masks above threshold" in job.error
+    session.close()
+
+
+def _make_fresh_sequence_id(session) -> int:
+    """Inserts a brand-new sequences row rather than reusing
+    _existing_row_id's "first row" pick -- run_rank_quality scores every
+    Frame attached to the given sequence_id, and the real dev database
+    accumulates leftover frames from prior test runs against whichever
+    sequence happens to sort first, which would make this test's exact
+    3-frame/3-score expectation flaky. ml-worker has no Sequence ORM model
+    (see _existing_row_id's docstring), so this inserts via raw SQL."""
+    from sqlalchemy import text
+
+    row = session.execute(
+        text(
+            "INSERT INTO sequences (start_time, duration, name, created_at) "
+            "VALUES (0, 1, 'rank-quality-test-sequence', now()) RETURNING id"
+        )
+    ).first()
+    session.commit()
+    return row[0]
+
+
+def _make_pending_rank_quality_job_with_frames(session) -> tuple[int, list[int]]:
+    storage = get_storage_service()
+    storage.upload("test/rank-quality-frame.png", b"fake png bytes", content_type="image/png")
+
+    sequence_id = _make_fresh_sequence_id(session)
+    user_id = _existing_row_id(session, "users")
+    frame_a = Frame(sequence_id=sequence_id, storage_key="test/rank-quality-frame.png", frame_index=0, width=10, height=10)
+    frame_b = Frame(sequence_id=sequence_id, storage_key="test/rank-quality-frame.png", frame_index=1, width=10, height=10)
+    frame_c = Frame(sequence_id=sequence_id, storage_key="test/rank-quality-frame.png", frame_index=2, width=10, height=10)
+    session.add_all([frame_a, frame_b, frame_c])
+    session.commit()
+    session.refresh(frame_a)
+    session.refresh(frame_b)
+    session.refresh(frame_c)
+
+    job = Job(
+        job_type=JobType.RANK_QUALITY,
+        status=JobStatus.PENDING,
+        progress=0,
+        # 34% of 3 frames -> round(1.02) -> 1 worst frame.
+        payload={"sequence_id": sequence_id, "percent": 34},
+        created_by_id=user_id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job.id, [frame_a.id, frame_b.id, frame_c.id]
+
+
+def test_run_rank_quality_scores_frames_worst_first_and_writes_result():
+    session = SessionLocal()
+    job_id, frame_ids = _make_pending_rank_quality_job_with_frames(session)
+    session.close()
+
+    frame_a_id, frame_b_id, frame_c_id = frame_ids
+
+    fake_adapter = MagicMock()
+    # frame_b scores worst (lowest = worst, per QualityAdapter's polarity).
+    fake_adapter.score.side_effect = [0.9, 0.1, 0.5]
+
+    run_rank_quality(job_id, adapter=fake_adapter)
+
+    session = SessionLocal()
+    job = session.get(Job, job_id)
+    assert job.status == JobStatus.SUCCEEDED
+    assert job.progress == 100
+    assert job.payload["result"]["worst_ids"] == [frame_b_id]
+    scores_by_id = {s["frame_id"]: s["score"] for s in job.payload["result"]["scores"]}
+    assert scores_by_id[frame_b_id] == 0.1
+    assert scores_by_id[frame_a_id] == 0.9
+    assert scores_by_id[frame_c_id] == 0.5
+    session.close()
+
+
+def test_run_rank_quality_marks_job_failed_on_adapter_error():
+    session = SessionLocal()
+    job_id, _ = _make_pending_rank_quality_job_with_frames(session)
+    session.close()
+
+    fake_adapter = MagicMock()
+    fake_adapter.score.side_effect = RuntimeError("quality model failed to load")
+
+    run_rank_quality(job_id, adapter=fake_adapter)
+
+    session = SessionLocal()
+    job = session.get(Job, job_id)
+    assert job.status == JobStatus.FAILED
+    assert "quality model failed to load" in job.error
     session.close()

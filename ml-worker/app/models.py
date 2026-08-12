@@ -12,6 +12,7 @@ class JobType(str, enum.Enum):
     SAM3_TRACK = "sam3_track"
     SAM2_PREDICT = "sam2_predict"
     SAM2_TRACK = "sam2_track"
+    RANK_QUALITY = "rank_quality"
 
 
 class JobStatus(str, enum.Enum):
@@ -50,6 +51,7 @@ class Frame(Base):
     frame_index: Mapped[int] = mapped_column(Integer)
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

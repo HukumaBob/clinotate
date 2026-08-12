@@ -10,6 +10,7 @@ from app.celery_app import WORKER_VRAM_FRACTION as _WORKER_VRAM_FRACTION
 from app.celery_app import celery_app
 from app.db import SessionLocal
 from app.models import Annotation, AnnotationStatus, AnnotationType, Frame, Job, JobStatus, Label
+from app.quality_adapter import QualityAdapter
 from app.sam2_adapter import Sam2Adapter
 from app.sam3_adapter import Sam3Adapter
 from app.storage import get_storage_service
@@ -31,6 +32,7 @@ def _load_label(session, label_id: int) -> Label:
 
 _sam3_adapter_singleton: Sam3Adapter | None = None
 _sam2_adapter_singleton: Sam2Adapter | None = None
+_quality_adapter_singleton: QualityAdapter | None = None
 
 
 def _get_default_sam3_adapter() -> Sam3Adapter:
@@ -45,6 +47,29 @@ def _get_default_sam2_adapter() -> Sam2Adapter:
     if _sam2_adapter_singleton is None:
         _sam2_adapter_singleton = Sam2Adapter()
     return _sam2_adapter_singleton
+
+
+def _get_default_quality_adapter() -> QualityAdapter:
+    global _quality_adapter_singleton
+    if _quality_adapter_singleton is None:
+        _quality_adapter_singleton = QualityAdapter()
+    return _quality_adapter_singleton
+
+
+def _evict_quality_models() -> None:
+    """Releases the QualityAdapter singleton's TOPIQ model if resident,
+    for the same cross-family VRAM-sharing reason as _evict_sam3_models/
+    _evict_sam2_models. QualityAdapter has no video predictor to release,
+    only the single lazy _metric."""
+    adapter = _get_default_quality_adapter()
+    adapter._metric = None
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 def _evict_sam3_models() -> None:
@@ -133,6 +158,7 @@ def run_sam3_predict(job_id: int, adapter: Sam3Adapter | None = None) -> None:
     session = SessionLocal()
     storage = get_storage_service()
     _evict_sam2_models()
+    _evict_quality_models()
     resolved_adapter = adapter if adapter is not None else _get_default_sam3_adapter()
 
     job = session.get(Job, job_id)
@@ -188,6 +214,7 @@ def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
     session = SessionLocal()
     storage = get_storage_service()
     _evict_sam2_models()
+    _evict_quality_models()
     resolved_adapter = adapter if adapter is not None else _get_default_sam3_adapter()
 
     job = session.get(Job, job_id)
@@ -247,6 +274,7 @@ def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
     session = SessionLocal()
     storage = get_storage_service()
     _evict_sam3_models()
+    _evict_quality_models()
     resolved_adapter = adapter if adapter is not None else _get_default_sam2_adapter()
 
     job = session.get(Job, job_id)
@@ -312,6 +340,7 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
     session = SessionLocal()
     storage = get_storage_service()
     _evict_sam3_models()
+    _evict_quality_models()
     resolved_adapter = adapter if adapter is not None else _get_default_sam2_adapter()
 
     job = session.get(Job, job_id)
@@ -423,6 +452,59 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
         session.close()
         _restart_worker_process_after_track_failure()
         return
+    finally:
+        session.close()
+
+
+@celery_app.task(name="rank_quality")
+def run_rank_quality(job_id: int, adapter: QualityAdapter | None = None) -> None:
+    session = SessionLocal()
+    storage = get_storage_service()
+    _evict_sam3_models()
+    _evict_sam2_models()
+    resolved_adapter = adapter if adapter is not None else _get_default_quality_adapter()
+
+    job = session.get(Job, job_id)
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime.now(timezone.utc)
+    session.commit()
+
+    try:
+        sequence_id = job.payload["sequence_id"]
+        percent = job.payload["percent"]
+        frames = (
+            session.query(Frame)
+            .filter(Frame.sequence_id == sequence_id)
+            .order_by(Frame.frame_index)
+            .all()
+        )
+
+        scores: list[dict] = []
+        for index, frame in enumerate(frames):
+            frame_bytes = storage.download(frame.storage_key)
+            score = resolved_adapter.score(frame_bytes)
+            scores.append({"frame_id": frame.id, "score": score})
+
+            job.progress = int(((index + 1) / len(frames)) * 100)
+            session.commit()
+
+        scores.sort(key=lambda entry: entry["score"])
+        worst_count = round(len(frames) * percent / 100)
+        worst_ids = [entry["frame_id"] for entry in scores[:worst_count]]
+
+        job.payload = {**job.payload, "result": {"scores": scores, "worst_ids": worst_ids}}
+        job.status = JobStatus.SUCCEEDED
+        job.progress = 100
+        job.finished_at = datetime.now(timezone.utc)
+        _record_vram_usage(job)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        job = session.get(Job, job_id)
+        job.status = JobStatus.FAILED
+        job.error = str(exc)
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
     finally:
         session.close()
 
