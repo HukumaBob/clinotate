@@ -40,6 +40,13 @@ const MASK_FILL_ALPHA = 0.35;
 const MASK_FILL_ALPHA_HIGHLIGHTED = 0.55;
 const MASK_OUTLINE_COLOR = "rgba(255, 255, 255, 0.95)";
 const DEFAULT_MASK_COLOR = "#22d3ee";
+// The rough-mask prompt stroke stays in pendingPrompts (and therefore
+// stays drawn) after Predict runs, sitting on top of the resulting draft
+// mask -- a solid fill here would hide the very prediction it produced.
+// Low alpha + outline keeps the stroke visible as a hint without blocking
+// the predicted mask underneath.
+const MASK_STROKE_FILL_ALPHA = 0.25;
+const MASK_STROKE_OUTLINE_COLOR = "rgba(34, 211, 238, 0.9)";
 
 // Stored mask PNGs (see ml-worker's sam2_adapter.py/sam3_adapter.py,
 // Image.fromarray(mask_array, mode="L")) are plain opaque grayscale --
@@ -484,9 +491,13 @@ export function FrameCanvas({
       // white stroke on a transparent/white canvas (see handleMouseMove's
       // maskCtx below), never meant to be shown to the user as-is (it's
       // invisible against a white/light frame). Recolor it to the same
-      // visible brush color used while actively drawing, using the raw
-      // mask as an alpha stencil via 'source-in' -- this reproduces
-      // exactly the stroke the user drew, nothing more.
+      // brush color used while actively drawing, using the raw mask as an
+      // alpha stencil via 'source-in' -- this reproduces exactly the stroke
+      // the user drew, nothing more. Drawn at low fill alpha (rather than
+      // solid) plus an outline, same treatment as the draft mask's dashed
+      // silhouette above, because this stroke stays visible after Predict
+      // runs and would otherwise completely hide the resulting draft mask
+      // underneath it.
       const canvasW = canvas.width;
       const canvasH = canvas.height;
       let tintCanvas = maskTintCanvasRef.current;
@@ -501,11 +512,17 @@ export function FrameCanvas({
         tintCtx.clearRect(0, 0, canvasW, canvasH);
         tintCtx.drawImage(pendingMaskStrokeImage, 0, 0, canvasW, canvasH);
         tintCtx.globalCompositeOperation = "source-in";
-        tintCtx.fillStyle = "rgba(34, 211, 238, 0.9)";
+        tintCtx.fillStyle = MASK_STROKE_OUTLINE_COLOR;
         tintCtx.fillRect(0, 0, canvasW, canvasH);
         tintCtx.globalCompositeOperation = "source-over";
 
+        ctx.globalAlpha = MASK_STROKE_FILL_ALPHA;
         ctx.drawImage(tintCanvas, 0, 0, canvasW, canvasH);
+        ctx.globalAlpha = 1;
+
+        const strokeImageData = tintCtx.getImageData(0, 0, canvasW, canvasH);
+        ctx.fillStyle = MASK_STROKE_OUTLINE_COLOR;
+        traceAlphaOutline(ctx, strokeImageData, canvasW, canvasH);
       }
     }
 
