@@ -577,6 +577,50 @@ with 409-on-conflict).
     design spec's original hedge on this gap assumed no delete method
     existed, which turned out not to hold.
 
+### Phase 2d: Mask post-processing — DONE (2026-08-12)
+
+Plan: [docs/superpowers/plans/2026-08-11-mask-postprocessing.md](docs/superpowers/plans/2026-08-11-mask-postprocessing.md),
+spec: [docs/superpowers/specs/2026-08-11-mask-postprocessing-design.md](docs/superpowers/specs/2026-08-11-mask-postprocessing-design.md).
+
+OpenCV-based cleanup (opening, closing, largest-connected-component,
+Gaussian contour smoothing) for SAM2 mask output, with a per-mask
+adjustable strength slider that re-applies instantly on the CPU without
+re-running SAM2. `ml-worker` still writes only the raw SAM2 mask, now
+alongside a new `Annotation.raw_mask_storage_key`; `backend` owns the one
+canonical `postprocess_mask()` and applies it automatically once on job
+success (default strength from `PlatformSettings.mask_postprocess_strength`,
+admin-editable on the Settings page) and on demand via
+`PATCH /annotation/annotations/{id}/mask-postprocess`. A `ToolsPanel`
+slider lets a user override the default before running Predict/Track for
+the current session. Executed via `superpowers:subagent-driven-development`
+across 9 tasks (8 implementation + Task 9 real-browser E2E verification),
+each independently committed to a dedicated worktree, fast-forward merged
+into master once verification passed.
+
+**Deviations from the plan, decided during execution:**
+
+- The implementation session doing Task 9's manual E2E verification was
+  interrupted by a hard system crash (~21:50/21:58 on 2026-08-11) — likely
+  the still-open [[project_sam2_vram_crash_open_issue]] VRAM issue,
+  triggered by Track. No work was lost: all 8 implementation tasks were
+  already committed to the `worktree-mask-postprocessing` git worktree
+  (chat history is not the source of truth for committed code). Task 9 was
+  resumed and completed across two sessions (2026-08-11 and 2026-08-12).
+- Track was deliberately exercised during Task 9 with `backward=0,
+  forward=2` (summing to 2 frames) instead of the platform's default cap
+  of 10, specifically to avoid re-triggering the VRAM crash while
+  confirming Track still works with post-processing wired in — not a
+  permanent change to `max_track_range_frames`. Completed in ~3.6s with
+  VRAM staying at ~2.3-2.4 GiB / 7.6 GiB, no crash.
+- Task 9 Step 6 (confirm SAM3 unaffected) could not be executed — SAM-3 is
+  unreachable on this GPU (RTX 2070/Turing, insufficient VRAM), consistent
+  with Phase 2a.2's own scope note. All other Task 9 steps (default
+  post-processing on Predict, live per-mask slider re-apply confirmed via
+  DB read-back, ToolsPanel default affecting only the next Predict and not
+  existing masks, Settings page round-trip for both admin and non-admin)
+  passed against the real running stack per `CLAUDE.md`'s testing
+  philosophy.
+
 ---
 
 ## How to use this file
