@@ -10,6 +10,8 @@ dependencies = [
     "psycopg2-binary>=2.9.12",
     "pydantic-settings>=2.14.2",
     "sqlalchemy>=2.0",
+    "pyiqa>=0.1.13",
+    "opencv-python-headless>=4.10.0",
 ]
 
 [dependency-groups]

@@ -79,6 +79,28 @@ ENV SAM2_BUILD_CUDA=0
 RUN uv pip install --no-deps "sam-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4"
 RUN uv pip install "hydra-core>=1.3.2" "iopath>=0.1.10" "tqdm>=4.66.1"
 
+# TOPIQ (Rank Quality's primary no-reference quality metric) and the
+# OpenCV Laplacian-variance fallback used when pyiqa/torch fail to load --
+# see docs/superpowers/specs/2026-08-12-sequence-grid-quality-similarity-suggestions-design.md.
+# Both are pure-PyPI packages that work against the already-pinned
+# torch==2.7.1 above; opencv-python-headless (not opencv-python) since this
+# is a server container with no display.
+#
+# The second install is required, not redundant: pyiqa's transitive
+# dependency facexlib declares a dependency on plain opencv-python (GUI
+# build), so the first command's resolver installs *both* opencv-python
+# and opencv-python-headless side by side -- confirmed empirically inside
+# this image. Both packages provide the same top-level `cv2` module, and
+# whichever wins the import breaks: this base image is nvidia/cuda:*-
+# runtime (no X11/libxcb, confirmed via `ldconfig -p | grep xcb` finding
+# nothing), so if plain opencv-python's native extension is what loads,
+# `import cv2` raises `ImportError: libxcb.so.1: cannot open shared
+# object file`. --force-reinstall --no-deps replaces whatever `cv2`
+# ended up installed with the headless build's, without re-resolving or
+# disturbing pyiqa/facexlib's other already-satisfied dependencies.
+RUN uv pip install "pyiqa>=0.1.13" "opencv-python-headless>=4.10.0" \
+    && uv pip install --force-reinstall --no-deps "opencv-python-headless>=4.10.0"
+
 COPY app ./app
 
 # --pool=solo: the default prefork pool forks worker subprocesses per task,
