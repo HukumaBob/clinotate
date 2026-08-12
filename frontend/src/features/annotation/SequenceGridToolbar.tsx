@@ -7,6 +7,12 @@ interface SequenceGridToolbarProps {
   selectedCount: number;
   onDeleteSelected: () => void;
   onCancel: () => void;
+  qualityPercent?: number;
+  onQualityPercentChange?: (value: number) => void;
+  onRankQuality?: () => void;
+  isRankQualityRunning?: boolean;
+  hasAutoMarks?: boolean;
+  onClearMarks?: () => void;
 }
 
 export function SequenceGridToolbar({
@@ -16,6 +22,12 @@ export function SequenceGridToolbar({
   selectedCount,
   onDeleteSelected,
   onCancel,
+  qualityPercent = 20,
+  onQualityPercentChange = () => {},
+  onRankQuality = () => {},
+  isRankQualityRunning = false,
+  hasAutoMarks = false,
+  onClearMarks = () => {},
 }: SequenceGridToolbarProps) {
   const [deleteArmed, setDeleteArmed] = useState(false);
 
@@ -39,6 +51,34 @@ export function SequenceGridToolbar({
       <div className="ml-auto flex items-center gap-3">
         {isSelectMode && (
           <>
+            <input
+              type="number"
+              aria-label="Quality percent"
+              min={1}
+              max={99}
+              value={qualityPercent}
+              onChange={(event) => onQualityPercentChange(Number(event.target.value))}
+              className="w-16 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200"
+            />
+            <button
+              type="button"
+              aria-label="Rank Quality"
+              onClick={onRankQuality}
+              disabled={isRankQualityRunning}
+              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+            >
+              {isRankQualityRunning ? "Ranking…" : "Rank Quality"}
+            </button>
+            {hasAutoMarks && (
+              <button
+                type="button"
+                aria-label="Clear marks"
+                onClick={onClearMarks}
+                className="rounded px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200"
+              >
+                Clear marks
+              </button>
+            )}
             <span className="text-sm text-gray-400">{selectedCount} selected</span>
             <button
               type="button"

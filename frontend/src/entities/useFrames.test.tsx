@@ -4,10 +4,10 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { apiClient } from "../shared/api/client";
-import { useDeleteFrames, useFrame } from "./useFrames";
+import { useDeleteFrames, useFrame, useRankQuality } from "./useFrames";
 
 vi.mock("../shared/api/client", () => ({
-  apiClient: { GET: vi.fn(), DELETE: vi.fn() },
+  apiClient: { GET: vi.fn(), DELETE: vi.fn(), POST: vi.fn() },
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -70,6 +70,30 @@ describe("useDeleteFrames", () => {
       expect.objectContaining({
         params: { path: { sequence_id: 9 } },
         body: { frame_ids: [1, 2] },
+      }),
+    );
+  });
+});
+
+describe("useRankQuality", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("POSTs to the rank-quality endpoint with the given percent", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { id: 42, job_type: "rank_quality", status: "pending" },
+      error: undefined,
+    } as never);
+
+    const { result } = renderHook(() => useRankQuality(9), { wrapper });
+    result.current.mutate(20);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/media/sequences/{sequence_id}/rank-quality",
+      expect.objectContaining({
+        params: { path: { sequence_id: 9 } },
+        body: { percent: 20 },
       }),
     );
   });

@@ -8,7 +8,7 @@ import { apiClient } from "../../shared/api/client";
 import { SequenceGridPage } from "./SequenceGridPage";
 
 vi.mock("../../shared/api/client", () => ({
-  apiClient: { GET: vi.fn(), DELETE: vi.fn() },
+  apiClient: { GET: vi.fn(), DELETE: vi.fn(), POST: vi.fn() },
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -181,5 +181,62 @@ describe("SequenceGridPage", () => {
 
     expect(await screen.findByText("Colonoscopy run 4")).toBeInTheDocument();
     expect(screen.queryByText(/Sequence #9/)).not.toBeInTheDocument();
+  });
+
+  it("auto-checks the worst frames and shows a quality badge after Rank Quality succeeds", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: { id: 9, name: "Seq", video_id: null, procedure_id: 7, start_time: 0, duration: 0, annotation_count: 0, crop_box: null },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined } as never;
+      }
+      if (path.includes("/frames")) {
+        return {
+          data: [
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png" },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png" },
+          ],
+          error: undefined,
+        } as never;
+      }
+      if (path === "/taxonomy/tree") {
+        return { data: [], error: undefined } as never;
+      }
+      if (path === "/jobs/{job_id}") {
+        return {
+          data: {
+            id: 42,
+            job_type: "rank_quality",
+            status: "succeeded",
+            progress: 100,
+            vram_used_bytes: null,
+            vram_total_bytes: null,
+            result_ref: null,
+            error: null,
+            created_by_id: 1,
+            started_at: null,
+            finished_at: null,
+            payload: { result: { scores: [{ frame_id: 1, score: 0.1 }, { frame_id: 2, score: 0.9 }], worst_ids: [1] } },
+          },
+          error: undefined,
+        } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { id: 42, job_type: "rank_quality", status: "pending" },
+      error: undefined,
+    } as never);
+
+    renderAtSequence("9");
+
+    fireEvent.click(screen.getByRole("button", { name: /select/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /rank quality/i }));
+
+    expect(await screen.findByText(/low quality/i)).toBeInTheDocument();
   });
 });

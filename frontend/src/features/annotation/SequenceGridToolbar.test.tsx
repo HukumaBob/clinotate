@@ -125,4 +125,109 @@ describe("SequenceGridToolbar", () => {
     await user.click(screen.getByRole("button", { name: /cancel/i }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it("shows the quality percent input and Rank Quality button in select mode", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        qualityPercent={20}
+        onQualityPercentChange={() => {}}
+        onRankQuality={() => {}}
+        isRankQualityRunning={false}
+        hasAutoMarks={false}
+        onClearMarks={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("spinbutton", { name: /quality/i })).toHaveValue(20);
+    expect(screen.getByRole("button", { name: /rank quality/i })).toBeInTheDocument();
+  });
+
+  it("calls onRankQuality with no arguments when the Rank Quality button is clicked", async () => {
+    const user = userEvent.setup();
+    const onRankQuality = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        qualityPercent={20}
+        onQualityPercentChange={() => {}}
+        onRankQuality={onRankQuality}
+        isRankQualityRunning={false}
+        hasAutoMarks={false}
+        onClearMarks={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /rank quality/i }));
+    expect(onRankQuality).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the Rank Quality button while a rank-quality job is running", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        qualityPercent={20}
+        onQualityPercentChange={() => {}}
+        onRankQuality={() => {}}
+        isRankQualityRunning
+        hasAutoMarks={false}
+        onClearMarks={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /rank quality/i })).toBeDisabled();
+  });
+
+  it("shows Clear marks only when hasAutoMarks is true", () => {
+    const { rerender } = render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        qualityPercent={20}
+        onQualityPercentChange={() => {}}
+        onRankQuality={() => {}}
+        isRankQualityRunning={false}
+        hasAutoMarks={false}
+        onClearMarks={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /clear marks/i })).not.toBeInTheDocument();
+
+    rerender(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        qualityPercent={20}
+        onQualityPercentChange={() => {}}
+        onRankQuality={() => {}}
+        isRankQualityRunning={false}
+        hasAutoMarks
+        onClearMarks={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /clear marks/i })).toBeInTheDocument();
+  });
 });

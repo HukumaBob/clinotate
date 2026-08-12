@@ -14,6 +14,7 @@ interface FrameThumbnailProps {
   selectable: boolean;
   selected: boolean;
   onToggleSelect: () => void;
+  markReason?: { kind: "quality" | "similarity"; label: string };
 }
 
 export function FrameThumbnail({
@@ -24,6 +25,7 @@ export function FrameThumbnail({
   selectable,
   selected,
   onToggleSelect,
+  markReason,
 }: FrameThumbnailProps) {
   const annotationsQuery = useAnnotations(frameId);
   const annotations = annotationsQuery.data ?? [];
@@ -33,7 +35,9 @@ export function FrameThumbnail({
     <button
       type="button"
       onClick={selectable ? onToggleSelect : onClick}
-      className="group relative aspect-square overflow-hidden rounded border border-gray-800 bg-gray-900"
+      className={`group relative aspect-square overflow-hidden rounded border border-gray-800 bg-gray-900 ${
+        markReason ? "ring-2 ring-red-500" : ""
+      }`}
     >
       <img src={imageUrl} alt={`Frame ${frameId}`} className="h-full w-full object-contain" />
       {selectable && (
@@ -44,6 +48,11 @@ export function FrameThumbnail({
           onClick={(event) => event.stopPropagation()}
           className="absolute left-2 top-2 h-5 w-5 accent-blue-500"
         />
+      )}
+      {markReason && (
+        <span className="absolute right-2 top-2 rounded bg-red-700/90 px-1.5 py-0.5 text-xs text-white">
+          {markReason.label}
+        </span>
       )}
       {maskAnnotations.map((annotation) => {
         const resolved = resolveLabelFromTree(taxonomyTree, annotation.label_id);

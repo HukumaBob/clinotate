@@ -43,3 +43,15 @@ export function useDeleteFrames(sequenceId: number) {
     },
   });
 }
+
+export function useRankQuality(sequenceId: number) {
+  return useMutation({
+    mutationFn: async (percent: number) => {
+      const result = await apiClient.POST("/media/sequences/{sequence_id}/rank-quality", {
+        params: { path: { sequence_id: sequenceId } },
+        body: { percent },
+      });
+      return result.data;
+    },
+  });
+}
