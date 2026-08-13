@@ -9,6 +9,7 @@ from app.annotation.mask_postprocess import postprocess_mask
 from app.annotation.models import Annotation, AnnotationType
 from app.auth.models import User, UserRole
 from app.jobs.models import Job
+from app.media.models import Frame
 from app.settings.service import get_platform_settings
 from app.storage import StorageService
 from app.taxonomy.models import Label
@@ -35,6 +36,27 @@ def create_classification_annotation(
     return annotation
 
 
+def _label_ids_in_category_and_evaluation_type(
+    session: Session, category_id: int, evaluation_type_id: int
+) -> set[int]:
+    return {
+        row.id
+        for row in session.query(Label.id)
+        .filter(
+            Label.category_id == category_id,
+            Label.evaluation_type_id == evaluation_type_id,
+        )
+        .all()
+    }
+
+
+def _require_frames_exist(session: Session, frame_ids: list[int]) -> None:
+    found = {row.id for row in session.query(Frame.id).filter(Frame.id.in_(frame_ids)).all()}
+    missing = set(frame_ids) - found
+    if missing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Frames not found: {sorted(missing)}")
+
+
 def bulk_classify_frames(
     session: Session, frame_ids: list[int], label_id: int, created_by: User
 ) -> list[int]:
@@ -42,10 +64,11 @@ def bulk_classify_frames(
     if label is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
 
-    category_label_ids = {
-        row.id
-        for row in session.query(Label).filter(Label.category_id == label.category_id).all()
-    }
+    _require_frames_exist(session, frame_ids)
+
+    category_label_ids = _label_ids_in_category_and_evaluation_type(
+        session, label.category_id, label.evaluation_type_id
+    )
 
     for frame_id in frame_ids:
         existing = (
@@ -75,10 +98,14 @@ def bulk_classify_frames(
     return frame_ids
 
 
-def bulk_clear_classification(session: Session, frame_ids: list[int], category_id: int) -> list[int]:
-    category_label_ids = {
-        row.id for row in session.query(Label).filter(Label.category_id == category_id).all()
-    }
+def bulk_clear_classification(
+    session: Session, frame_ids: list[int], category_id: int, evaluation_type_id: int
+) -> list[int]:
+    _require_frames_exist(session, frame_ids)
+
+    category_label_ids = _label_ids_in_category_and_evaluation_type(
+        session, category_id, evaluation_type_id
+    )
 
     if category_label_ids:
         session.query(Annotation).filter(

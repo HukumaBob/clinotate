@@ -421,7 +421,12 @@ def test_delete_job_annotations_removes_only_that_jobs_annotations():
     assert annotation_b1_id in remaining_ids
 
 
-def _create_label_in_category(token: str, category_name: str, label_name: str) -> int:
+def _create_label_in_category(
+    token: str,
+    category_name: str,
+    label_name: str,
+    evaluation_type_name: str = "annotation-test-evaluation-type",
+) -> int:
     headers = _headers(token)
 
     procedures = client.get("/taxonomy/procedures", headers=headers).json()
@@ -444,11 +449,11 @@ def _create_label_in_category(token: str, category_name: str, label_name: str) -
 
     evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
     evaluation_type = next(
-        (e for e in evaluation_types if e["name"] == "annotation-test-evaluation-type"), None
+        (e for e in evaluation_types if e["name"] == evaluation_type_name), None
     )
     if evaluation_type is None:
         evaluation_type = client.post(
-            "/taxonomy/evaluation-types", json={"name": "annotation-test-evaluation-type"}, headers=headers
+            "/taxonomy/evaluation-types", json={"name": evaluation_type_name}, headers=headers
         ).json()
 
     return client.post(
@@ -549,7 +554,9 @@ def test_bulk_clear_classification_removes_label_in_that_category_only():
     landmark_id = _create_label_in_category(token, "bulk-clear-landmark", "antrum")
     quality_id = _create_label_in_category(token, "bulk-clear-quality", "low_quality")
     landmark_label = client.get("/taxonomy/labels", headers=_headers(token)).json()
-    landmark_category_id = next(l for l in landmark_label if l["id"] == landmark_id)["category_id"]
+    landmark_row = next(l for l in landmark_label if l["id"] == landmark_id)
+    landmark_category_id = landmark_row["category_id"]
+    landmark_evaluation_type_id = landmark_row["evaluation_type_id"]
 
     client.post(
         "/annotation/frames/bulk-classify",
@@ -564,7 +571,11 @@ def test_bulk_clear_classification_removes_label_in_that_category_only():
 
     response = client.post(
         "/annotation/frames/bulk-clear-classification",
-        json={"frame_ids": [frame_id], "category_id": landmark_category_id},
+        json={
+            "frame_ids": [frame_id],
+            "category_id": landmark_category_id,
+            "evaluation_type_id": landmark_evaluation_type_id,
+        },
         headers=_headers(token),
     )
 
@@ -579,13 +590,101 @@ def test_bulk_clear_classification_is_a_no_op_when_nothing_to_clear():
     frame_id = _create_frame(token)
     label_id = _create_label_in_category(token, "bulk-clear-empty", "some_label")
     labels = client.get("/taxonomy/labels", headers=_headers(token)).json()
-    category_id = next(l for l in labels if l["id"] == label_id)["category_id"]
+    label_row = next(l for l in labels if l["id"] == label_id)
 
     response = client.post(
         "/annotation/frames/bulk-clear-classification",
-        json={"frame_ids": [frame_id], "category_id": category_id},
+        json={
+            "frame_ids": [frame_id],
+            "category_id": label_row["category_id"],
+            "evaluation_type_id": label_row["evaluation_type_id"],
+        },
         headers=_headers(token),
     )
 
     assert response.status_code == 200
     assert response.json()["frame_ids"] == [frame_id]
+
+
+def test_bulk_classify_404s_for_unknown_frame_id_without_partial_apply():
+    token = _register_and_login("bulkclass5@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_label_in_category(token, "bulk-classify-missing-frame", "antrum")
+
+    response = client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id, 999999999], "label_id": label_id},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 404
+    annotations = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token)).json()
+    classification_annotations = [a for a in annotations if a["annotation_type"] == "classification"]
+    assert classification_annotations == []
+
+
+def test_bulk_clear_classification_404s_for_unknown_frame_id():
+    token = _register_and_login("bulkclear3@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_label_in_category(token, "bulk-clear-missing-frame", "antrum")
+    labels = client.get("/taxonomy/labels", headers=_headers(token)).json()
+    label_row = next(l for l in labels if l["id"] == label_id)
+
+    response = client.post(
+        "/annotation/frames/bulk-clear-classification",
+        json={
+            "frame_ids": [frame_id, 999999999],
+            "category_id": label_row["category_id"],
+            "evaluation_type_id": label_row["evaluation_type_id"],
+        },
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 404
+
+
+def test_bulk_clear_classification_scopes_by_evaluation_type_not_just_category():
+    token = _register_and_login("bulkclear4@example.com")
+    frame_id = _create_frame(token)
+    frame_classification_id = _create_label_in_category(
+        token,
+        "bulk-clear-shared-category",
+        "antrum",
+        evaluation_type_name="bulk-clear-frame-classification-type",
+    )
+    morphological_id = _create_label_in_category(
+        token,
+        "bulk-clear-shared-category",
+        "polyp-shape",
+        evaluation_type_name="bulk-clear-morphological-type",
+    )
+    labels = client.get("/taxonomy/labels", headers=_headers(token)).json()
+    frame_classification_row = next(l for l in labels if l["id"] == frame_classification_id)
+    morphological_row = next(l for l in labels if l["id"] == morphological_id)
+    assert frame_classification_row["category_id"] == morphological_row["category_id"]
+
+    client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": frame_classification_id},
+        headers=_headers(token),
+    )
+    client.post(
+        f"/annotation/frames/{frame_id}/annotations",
+        json={"label_id": morphological_id},
+        headers=_headers(token),
+    )
+
+    response = client.post(
+        "/annotation/frames/bulk-clear-classification",
+        json={
+            "frame_ids": [frame_id],
+            "category_id": frame_classification_row["category_id"],
+            "evaluation_type_id": frame_classification_row["evaluation_type_id"],
+        },
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 200
+    annotations = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token)).json()
+    label_ids = {a["label_id"] for a in annotations}
+    assert label_ids == {morphological_id}
