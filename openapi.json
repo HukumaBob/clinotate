@@ -187,6 +187,101 @@
         ]
       }
     },
+    "/taxonomy/procedures/{procedure_id}": {
+      "patch": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Update Procedure",
+        "operationId": "update_procedure_taxonomy_procedures__procedure_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procedure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Procedure Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcedureUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcedureRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Delete Procedure",
+        "operationId": "delete_procedure_taxonomy_procedures__procedure_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procedure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Procedure Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/taxonomy/categories": {
       "post": {
         "tags": [
@@ -766,6 +861,36 @@
         }
       }
     },
+    "/taxonomy/labels/mask-counts": {
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "summary": "Label Mask Counts",
+        "operationId": "label_mask_counts_taxonomy_labels_mask_counts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object",
+                  "title": "Response Label Mask Counts Taxonomy Labels Mask Counts Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/taxonomy/tree": {
       "get": {
         "tags": [
@@ -782,9 +907,16 @@
           {
             "name": "procedure_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "integer",
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Procedure Id"
             }
           }
@@ -3599,6 +3731,23 @@
           "name"
         ],
         "title": "ProcedureRead"
+      },
+      "ProcedureUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "ProcedureUpdate"
       },
       "PromptIn": {
         "properties": {

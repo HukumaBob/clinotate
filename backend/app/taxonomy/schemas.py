@@ -5,6 +5,10 @@ class ProcedureCreate(BaseModel):
     name: str
 
 
+class ProcedureUpdate(BaseModel):
+    name: str | None = None
+
+
 class ProcedureRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

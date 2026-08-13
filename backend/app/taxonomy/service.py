@@ -3,13 +3,11 @@ from sqlalchemy.orm import Session
 from app.taxonomy.models import Category, EvaluationType, Label
 
 
-def get_taxonomy_tree(session: Session, procedure_id: int) -> list[dict]:
-    categories = (
-        session.query(Category)
-        .filter(Category.procedure_id == procedure_id)
-        .order_by(Category.name)
-        .all()
-    )
+def get_taxonomy_tree(session: Session, procedure_id: int | None = None) -> list[dict]:
+    query = session.query(Category)
+    if procedure_id is not None:
+        query = query.filter(Category.procedure_id == procedure_id)
+    categories = query.order_by(Category.name).all()
     all_evaluation_types = session.query(EvaluationType).order_by(EvaluationType.name).all()
     category_ids = [c.id for c in categories]
     labels = (

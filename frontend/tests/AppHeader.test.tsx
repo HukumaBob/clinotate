@@ -48,10 +48,17 @@ describe("AppHeader", () => {
     expect(mediaLink).toHaveAttribute("href", "/media");
   });
 
-  it("does not render the other five items as links", () => {
+  it("renders Tags as a real link to /tags", () => {
     renderHeader();
 
-    for (const label of ["Sequences", "Tags", "Dataset", "Train", "Results"]) {
+    const tagsLink = screen.getByRole("link", { name: "Tags" });
+    expect(tagsLink).toHaveAttribute("href", "/tags");
+  });
+
+  it("does not render the remaining four items as links", () => {
+    renderHeader();
+
+    for (const label of ["Sequences", "Dataset", "Train", "Results"]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
   });

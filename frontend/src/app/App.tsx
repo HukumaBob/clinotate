@@ -6,6 +6,7 @@ import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
 import { MediaPage } from "../features/media/MediaPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { TagsPage } from "../features/tags/TagsPage";
 import { AppLayout } from "./AppLayout";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -26,6 +27,7 @@ export function App() {
           }
         >
           <Route path="/media" element={<MediaPage />} />
+          <Route path="/tags" element={<TagsPage />} />
           <Route path="/sequences/:sequenceId" element={<SequenceGridPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

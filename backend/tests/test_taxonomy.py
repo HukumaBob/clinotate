@@ -27,6 +27,32 @@ def test_create_procedure_and_list_it():
     assert "tax1-gastroscopy" in names
 
 
+def test_update_and_delete_procedure():
+    headers = _auth_headers(_register_and_login("tax13@example.com"))
+    procedure = client.post("/taxonomy/procedures", json={"name": "tax13-colono"}, headers=headers).json()
+
+    update_response = client.patch(
+        f"/taxonomy/procedures/{procedure['id']}", json={"name": "tax13-colono renamed"}, headers=headers
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["name"] == "tax13-colono renamed"
+
+    delete_response = client.delete(f"/taxonomy/procedures/{procedure['id']}", headers=headers)
+    assert delete_response.status_code == 204
+
+
+def test_delete_procedure_with_categories_returns_409():
+    headers = _auth_headers(_register_and_login("tax14@example.com"))
+    procedure = client.post("/taxonomy/procedures", json={"name": "tax14-colono"}, headers=headers).json()
+    client.post(
+        "/taxonomy/categories", json={"name": "Anatomy", "procedure_id": procedure["id"]}, headers=headers
+    )
+
+    delete_response = client.delete(f"/taxonomy/procedures/{procedure['id']}", headers=headers)
+    assert delete_response.status_code == 409
+    assert "categories" in delete_response.json()["detail"]
+
+
 def test_create_category_requires_auth():
     response = client.post("/taxonomy/categories", json={"name": "Anatomy", "procedure_id": 1})
     assert response.status_code == 401
@@ -209,3 +235,125 @@ def test_taxonomy_tree_only_returns_categories_for_the_given_procedure():
 
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+def test_taxonomy_tree_without_procedure_id_returns_all_procedures():
+    token = _auth_headers(_register_and_login("tax10@example.com"))
+    procedure_a = client.post("/taxonomy/procedures", json={"name": "tax10-colono"}, headers=token).json()
+    procedure_b = client.post("/taxonomy/procedures", json={"name": "tax10-egds"}, headers=token).json()
+    client.post(
+        "/taxonomy/categories", json={"name": "tax10-Anatomy-A", "procedure_id": procedure_a["id"]}, headers=token
+    )
+    client.post(
+        "/taxonomy/categories", json={"name": "tax10-Anatomy-B", "procedure_id": procedure_b["id"]}, headers=token
+    )
+
+    response = client.get("/taxonomy/tree", headers=token)
+
+    assert response.status_code == 200
+    names = [node["category"]["name"] for node in response.json()]
+    assert "tax10-Anatomy-A" in names
+    assert "tax10-Anatomy-B" in names
+
+
+def _create_frame(token: str) -> int:
+    headers = _auth_headers(token)
+    from pathlib import Path
+
+    from app.db import SessionLocal
+    from app.taxonomy.models import Procedure
+
+    session = SessionLocal()
+    procedure = session.query(Procedure).filter_by(name="tags-frame-procedure").one_or_none()
+    if procedure is None:
+        procedure = Procedure(name="tags-frame-procedure")
+        session.add(procedure)
+        session.commit()
+        session.refresh(procedure)
+    procedure_id = procedure.id
+    session.close()
+
+    fixture = Path(__file__).parent / "fixtures" / "tiny.mp4"
+    with open(fixture, "rb") as f:
+        upload = client.post(
+            "/media/videos", files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "tags source", "procedure_id": procedure_id}, headers=headers,
+        )
+    video_id = upload.json()["id"]
+    sequence = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "tags test sequence", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()
+    frames = client.get(f"/media/sequences/{sequence['id']}/frames", headers=headers).json()
+    return frames[0]["id"]
+
+
+def _create_annotation_for_label(token: str, frame_id: int, label_id: int, taxonomy_version: int) -> None:
+    from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
+    from app.auth.models import User
+    from app.db import SessionLocal
+
+    session = SessionLocal()
+    try:
+        user = session.query(User).order_by(User.id.desc()).first()
+        annotation = Annotation(
+            frame_id=frame_id,
+            label_id=label_id,
+            taxonomy_version=taxonomy_version,
+            annotation_type=AnnotationType.CLASSIFICATION,
+            status=AnnotationStatus.DRAFT,
+            created_by_id=user.id,
+        )
+        session.add(annotation)
+        session.commit()
+    finally:
+        session.close()
+
+
+def test_delete_label_with_annotations_returns_409():
+    token = _register_and_login("tax11@example.com")
+    headers = _auth_headers(token)
+    procedure = client.post("/taxonomy/procedures", json={"name": "tax11-colono"}, headers=headers).json()
+    category = client.post(
+        "/taxonomy/categories", json={"name": "Anatomy", "procedure_id": procedure["id"]}, headers=headers
+    ).json()
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types", json={"name": "tax11-geometric"}, headers=headers
+    ).json()
+    label = client.post(
+        "/taxonomy/labels",
+        json={"name": "pharynx", "category_id": category["id"], "evaluation_type_id": evaluation_type["id"]},
+        headers=headers,
+    ).json()
+    frame_id = _create_frame(token)
+    _create_annotation_for_label(token, frame_id, label["id"], label["taxonomy_version"])
+
+    delete_response = client.delete(f"/taxonomy/labels/{label['id']}", headers=headers)
+
+    assert delete_response.status_code == 409
+
+
+def test_label_mask_counts_reflects_annotation_usage():
+    token = _register_and_login("tax12@example.com")
+    headers = _auth_headers(token)
+    procedure = client.post("/taxonomy/procedures", json={"name": "tax12-colono"}, headers=headers).json()
+    category = client.post(
+        "/taxonomy/categories", json={"name": "Anatomy", "procedure_id": procedure["id"]}, headers=headers
+    ).json()
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types", json={"name": "tax12-geometric"}, headers=headers
+    ).json()
+    label = client.post(
+        "/taxonomy/labels",
+        json={"name": "pharynx", "category_id": category["id"], "evaluation_type_id": evaluation_type["id"]},
+        headers=headers,
+    ).json()
+    frame_id = _create_frame(token)
+    _create_annotation_for_label(token, frame_id, label["id"], label["taxonomy_version"])
+
+    response = client.get("/taxonomy/labels/mask-counts", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[str(label["id"])] == 1

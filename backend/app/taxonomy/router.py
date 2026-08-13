@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
 from app.db import get_session
 from app.taxonomy.models import Category, EvaluationType, Label, Procedure
@@ -17,6 +19,7 @@ from app.taxonomy.schemas import (
     LabelUpdate,
     ProcedureCreate,
     ProcedureRead,
+    ProcedureUpdate,
     TaxonomyTreeNode,
 )
 from app.taxonomy.service import get_taxonomy_tree
@@ -36,6 +39,36 @@ def create_procedure(payload: ProcedureCreate, session: Session = Depends(get_se
 @router.get("/procedures", response_model=list[ProcedureRead])
 def list_procedures(session: Session = Depends(get_session)) -> list[Procedure]:
     return session.query(Procedure).all()
+
+
+@router.patch("/procedures/{procedure_id}", response_model=ProcedureRead)
+def update_procedure(
+    procedure_id: int, payload: ProcedureUpdate, session: Session = Depends(get_session)
+) -> Procedure:
+    procedure = session.get(Procedure, procedure_id)
+    if procedure is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Procedure not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(procedure, field, value)
+    session.commit()
+    session.refresh(procedure)
+    return procedure
+
+
+@router.delete("/procedures/{procedure_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_procedure(procedure_id: int, session: Session = Depends(get_session)) -> None:
+    procedure = session.get(Procedure, procedure_id)
+    if procedure is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Procedure not found")
+    session.delete(procedure)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Procedure still has categories, videos, or sequences referencing it",
+        ) from None
 
 
 @router.post("/categories", response_model=CategoryRead, status_code=status.HTTP_201_CREATED)
@@ -170,9 +203,25 @@ def delete_label(label_id: int, session: Session = Depends(get_session)) -> None
     if label is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
     session.delete(label)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Label still has annotations referencing it"
+        ) from None
+
+
+@router.get("/labels/mask-counts", response_model=dict[int, int])
+def label_mask_counts(session: Session = Depends(get_session)) -> dict[int, int]:
+    rows = (
+        session.query(Annotation.label_id, func.count(Annotation.id))
+        .group_by(Annotation.label_id)
+        .all()
+    )
+    return {label_id: count for label_id, count in rows}
 
 
 @router.get("/tree", response_model=list[TaxonomyTreeNode])
-def taxonomy_tree(procedure_id: int, session: Session = Depends(get_session)) -> list[dict]:
+def taxonomy_tree(procedure_id: int | None = None, session: Session = Depends(get_session)) -> list[dict]:
     return get_taxonomy_tree(session, procedure_id)
