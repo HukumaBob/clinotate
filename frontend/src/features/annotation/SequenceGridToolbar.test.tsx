@@ -442,3 +442,162 @@ describe("SequenceGridToolbar", () => {
     expect(onSimilarityPercentChange).toHaveBeenCalledWith(1);
   });
 });
+
+const sampleTaxonomyTree = [
+  {
+    category: { id: 1, name: "Landmark", procedure_id: 1 },
+    evaluation_types: [
+      {
+        evaluation_type: { id: 9, name: "Frame classification" },
+        labels: [
+          { id: 101, name: "antrum", color: "#ff0000", category_id: 1, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
+          { id: 102, name: "ge_junction", color: "#00ff00", category_id: 1, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
+        ],
+      },
+    ],
+  },
+  {
+    category: { id: 2, name: "Quality", procedure_id: 1 },
+    evaluation_types: [
+      {
+        evaluation_type: { id: 9, name: "Frame classification" },
+        labels: [
+          { id: 201, name: "low_quality", color: "#0000ff", category_id: 2, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
+        ],
+      },
+    ],
+  },
+];
+
+describe("SequenceGridToolbar classification controls", () => {
+  it("hides classification controls when not in select mode", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode={false}
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        taxonomyTree={sampleTaxonomyTree}
+        frameClassificationEvaluationTypeName="Frame classification"
+        onAssignClassification={() => {}}
+        onClearClassification={() => {}}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Classification category")).not.toBeInTheDocument();
+  });
+
+  it("populates the label select from the chosen category", async () => {
+    const user = userEvent.setup();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        taxonomyTree={sampleTaxonomyTree}
+        frameClassificationEvaluationTypeName="Frame classification"
+        onAssignClassification={() => {}}
+        onClearClassification={() => {}}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("Classification category"), "1");
+
+    expect(screen.getByRole("option", { name: "antrum" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "ge_junction" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "low_quality" })).not.toBeInTheDocument();
+  });
+
+  it("calls onAssignClassification with the chosen label id when Assign is clicked", async () => {
+    const user = userEvent.setup();
+    const onAssignClassification = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        taxonomyTree={sampleTaxonomyTree}
+        frameClassificationEvaluationTypeName="Frame classification"
+        onAssignClassification={onAssignClassification}
+        onClearClassification={() => {}}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("Classification category"), "1");
+    await user.selectOptions(screen.getByLabelText("Classification label"), "102");
+    await user.click(screen.getByRole("button", { name: "Assign" }));
+
+    expect(onAssignClassification).toHaveBeenCalledWith(102);
+  });
+
+  it("disables Assign until both a category and a label are chosen", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        taxonomyTree={sampleTaxonomyTree}
+        frameClassificationEvaluationTypeName="Frame classification"
+        onAssignClassification={() => {}}
+        onClearClassification={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Assign" })).toBeDisabled();
+  });
+
+  it("calls onClearClassification with the chosen category id when Clear is clicked", async () => {
+    const user = userEvent.setup();
+    const onClearClassification = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        taxonomyTree={sampleTaxonomyTree}
+        frameClassificationEvaluationTypeName="Frame classification"
+        onAssignClassification={() => {}}
+        onClearClassification={onClearClassification}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("Classification category"), "2");
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+
+    expect(onClearClassification).toHaveBeenCalledWith(2);
+  });
+
+  it("disables Assign and Clear when there is no selection", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        taxonomyTree={sampleTaxonomyTree}
+        frameClassificationEvaluationTypeName="Frame classification"
+        onAssignClassification={() => {}}
+        onClearClassification={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Assign" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
+  });
+});

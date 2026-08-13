@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+import type { components } from "../../shared/api/generated/schema";
+
+type TaxonomyTreeNode = components["schemas"]["TaxonomyTreeNode"];
 
 interface SequenceGridToolbarProps {
   sequenceName: string;
@@ -17,6 +21,10 @@ interface SequenceGridToolbarProps {
   isFindSimilarRunning?: boolean;
   hasAutoMarks?: boolean;
   onClearMarks?: () => void;
+  taxonomyTree?: TaxonomyTreeNode[];
+  frameClassificationEvaluationTypeName?: string;
+  onAssignClassification?: (labelId: number) => void;
+  onClearClassification?: (categoryId: number) => void;
 }
 
 export function SequenceGridToolbar({
@@ -36,8 +44,54 @@ export function SequenceGridToolbar({
   isFindSimilarRunning = false,
   hasAutoMarks = false,
   onClearMarks = () => {},
+  taxonomyTree = [],
+  frameClassificationEvaluationTypeName = "Frame classification",
+  onAssignClassification = () => {},
+  onClearClassification = () => {},
 }: SequenceGridToolbarProps) {
   const [deleteArmed, setDeleteArmed] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
+
+  const classificationCategories = useMemo(
+    () =>
+      taxonomyTree
+        .map((node) => ({
+          category: node.category,
+          labels: node.evaluation_types.find(
+            (evaluationTypeNode) =>
+              evaluationTypeNode.evaluation_type.name === frameClassificationEvaluationTypeName,
+          )?.labels ?? [],
+        }))
+        .filter((entry) => entry.labels.length > 0),
+    [taxonomyTree, frameClassificationEvaluationTypeName],
+  );
+
+  const labelsForSelectedCategory =
+    classificationCategories.find((entry) => entry.category.id === selectedCategoryId)?.labels ?? [];
+
+  function handleCategoryChange(rawValue: string) {
+    const parsed = Number(rawValue);
+    setSelectedCategoryId(Number.isFinite(parsed) && rawValue !== "" ? parsed : null);
+    setSelectedLabelId(null);
+  }
+
+  function handleLabelChange(rawValue: string) {
+    const parsed = Number(rawValue);
+    setSelectedLabelId(Number.isFinite(parsed) && rawValue !== "" ? parsed : null);
+  }
+
+  function handleAssignClick() {
+    if (selectedLabelId !== null) {
+      onAssignClassification(selectedLabelId);
+    }
+  }
+
+  function handleClearClassificationClick() {
+    if (selectedCategoryId !== null) {
+      onClearClassification(selectedCategoryId);
+    }
+  }
 
   function handleDeleteClick() {
     if (deleteArmed) {
@@ -71,6 +125,51 @@ export function SequenceGridToolbar({
       <div className="ml-auto flex items-center gap-3">
         {isSelectMode && (
           <>
+            <select
+              aria-label="Classification category"
+              value={selectedCategoryId ?? ""}
+              onChange={(event) => handleCategoryChange(event.target.value)}
+              className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200"
+            >
+              <option value="">Category…</option>
+              {classificationCategories.map((entry) => (
+                <option key={entry.category.id} value={entry.category.id}>
+                  {entry.category.name}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Classification label"
+              value={selectedLabelId ?? ""}
+              onChange={(event) => handleLabelChange(event.target.value)}
+              disabled={selectedCategoryId === null}
+              className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200 disabled:opacity-40"
+            >
+              <option value="">Label…</option>
+              {labelsForSelectedCategory.map((label) => (
+                <option key={label.id} value={label.id}>
+                  {label.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              aria-label="Assign"
+              onClick={handleAssignClick}
+              disabled={selectedLabelId === null || selectedCount === 0}
+              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+            >
+              Assign
+            </button>
+            <button
+              type="button"
+              aria-label="Clear"
+              onClick={handleClearClassificationClick}
+              disabled={selectedCategoryId === null || selectedCount === 0}
+              className="rounded px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-40"
+            >
+              Clear
+            </button>
             <input
               type="number"
               aria-label="Quality percent"
