@@ -59,3 +59,39 @@ export function useDeleteJobAnnotations(frameId: number) {
     },
   });
 }
+
+export function useBulkClassifyFrames(sequenceId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ frameIds, labelId }: { frameIds: number[]; labelId: number }) => {
+      const result = await apiClient.POST("/annotation/frames/bulk-classify", {
+        body: { frame_ids: frameIds, label_id: labelId },
+      });
+      return result.data;
+    },
+    onSuccess: (_data, variables) => {
+      for (const frameId of variables.frameIds) {
+        queryClient.invalidateQueries({ queryKey: ["annotations", frameId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["frames", sequenceId] });
+    },
+  });
+}
+
+export function useBulkClearClassification(sequenceId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ frameIds, categoryId }: { frameIds: number[]; categoryId: number }) => {
+      const result = await apiClient.POST("/annotation/frames/bulk-clear-classification", {
+        body: { frame_ids: frameIds, category_id: categoryId },
+      });
+      return result.data;
+    },
+    onSuccess: (_data, variables) => {
+      for (const frameId of variables.frameIds) {
+        queryClient.invalidateQueries({ queryKey: ["annotations", frameId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["frames", sequenceId] });
+    },
+  });
+}
