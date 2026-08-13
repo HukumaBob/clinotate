@@ -302,4 +302,77 @@ describe("SequenceGridPage", () => {
 
     expect(await screen.findByText(/dup 96%/i)).toBeInTheDocument();
   });
+
+  it("calls bulk-classify with the current selection when Assign is used", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: {
+            id: 9,
+            name: "Seq",
+            video_id: null,
+            procedure_id: 7,
+            start_time: 0,
+            duration: 0,
+            annotation_count: 0,
+            crop_box: null,
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined } as never;
+      }
+      if (path.includes("/frames")) {
+        return {
+          data: [
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png" },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png" },
+          ],
+          error: undefined,
+        } as never;
+      }
+      if (path === "/taxonomy/tree") {
+        return {
+          data: [
+            {
+              category: { id: 1, name: "Location", procedure_id: 7 },
+              evaluation_types: [
+                {
+                  evaluation_type: { id: 20, name: "Frame classification" },
+                  labels: [{ id: 101, name: "Antrum", color: "#00ff00", category_id: 1 }],
+                },
+              ],
+            },
+          ],
+          error: undefined,
+        } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { updated_count: 2 },
+      error: undefined,
+    } as never);
+
+    renderAtSequence("9");
+
+    fireEvent.click(screen.getByRole("button", { name: /select/i }));
+
+    const images = await screen.findAllByAltText(/Frame \d/);
+    images.forEach((img) => fireEvent.click(img.closest("button")!));
+
+    fireEvent.change(screen.getByLabelText("Classification category"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Classification label"), { target: { value: "101" } });
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/annotation/frames/bulk-classify",
+      expect.objectContaining({
+        body: { frame_ids: [1, 2], label_id: 101 },
+      }),
+    );
+  });
 });

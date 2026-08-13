@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
+import { useBulkClassifyFrames, useBulkClearClassification } from "../../entities/useAnnotations";
 import { useDeleteFrames, useFindSimilar, useFrames, useRankQuality } from "../../entities/useFrames";
 import { useJob } from "../../entities/useJobs";
 import { useSequence } from "../../entities/useSequence";
@@ -31,6 +32,8 @@ export function SequenceGridPage() {
   const deleteFrames = useDeleteFrames(sequenceIdNumber);
   const rankQuality = useRankQuality(sequenceIdNumber);
   const findSimilar = useFindSimilar(sequenceIdNumber);
+  const bulkClassifyFrames = useBulkClassifyFrames(sequenceIdNumber);
+  const bulkClearClassification = useBulkClearClassification(sequenceIdNumber);
   const jobQuery = useJob(activeJobId);
 
   useEffect(() => {
@@ -151,6 +154,14 @@ export function SequenceGridPage() {
     });
   }
 
+  function handleAssignClassification(labelId: number) {
+    bulkClassifyFrames.mutate({ frameIds: Array.from(selectedFrameIds), labelId });
+  }
+
+  function handleClearClassification(categoryId: number) {
+    bulkClearClassification.mutate({ frameIds: Array.from(selectedFrameIds), categoryId });
+  }
+
   function handleClearMarks() {
     setSelectedFrameIds((current) => {
       const next = new Set(current);
@@ -183,6 +194,10 @@ export function SequenceGridPage() {
           isFindSimilarRunning={activeJobKind === "similarity"}
           hasAutoMarks={autoCheckedFrameIds.size > 0}
           onClearMarks={handleClearMarks}
+          taxonomyTree={taxonomyTree}
+          frameClassificationEvaluationTypeName="Frame classification"
+          onAssignClassification={handleAssignClassification}
+          onClearClassification={handleClearClassification}
         />
       </div>
       <div className="grid grid-cols-2 gap-3 p-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
