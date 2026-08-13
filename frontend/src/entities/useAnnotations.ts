@@ -81,9 +81,17 @@ export function useBulkClassifyFrames(sequenceId: number) {
 export function useBulkClearClassification(sequenceId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ frameIds, categoryId }: { frameIds: number[]; categoryId: number }) => {
+    mutationFn: async ({
+      frameIds,
+      categoryId,
+      evaluationTypeId,
+    }: {
+      frameIds: number[];
+      categoryId: number;
+      evaluationTypeId: number;
+    }) => {
       const result = await apiClient.POST("/annotation/frames/bulk-clear-classification", {
-        body: { frame_ids: frameIds, category_id: categoryId },
+        body: { frame_ids: frameIds, category_id: categoryId, evaluation_type_id: evaluationTypeId },
       });
       return result.data;
     },

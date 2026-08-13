@@ -2945,12 +2945,17 @@
           "category_id": {
             "type": "integer",
             "title": "Category Id"
+          },
+          "evaluation_type_id": {
+            "type": "integer",
+            "title": "Evaluation Type Id"
           }
         },
         "type": "object",
         "required": [
           "frame_ids",
-          "category_id"
+          "category_id",
+          "evaluation_type_id"
         ],
         "title": "BulkClearClassificationRequest"
       },

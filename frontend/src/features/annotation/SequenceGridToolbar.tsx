@@ -24,7 +24,7 @@ interface SequenceGridToolbarProps {
   taxonomyTree?: TaxonomyTreeNode[];
   frameClassificationEvaluationTypeName?: string;
   onAssignClassification?: (labelId: number) => void;
-  onClearClassification?: (categoryId: number) => void;
+  onClearClassification?: (categoryId: number, evaluationTypeId: number) => void;
 }
 
 export function SequenceGridToolbar({
@@ -56,13 +56,16 @@ export function SequenceGridToolbar({
   const classificationCategories = useMemo(
     () =>
       taxonomyTree
-        .map((node) => ({
-          category: node.category,
-          labels: node.evaluation_types.find(
-            (evaluationTypeNode) =>
-              evaluationTypeNode.evaluation_type.name === frameClassificationEvaluationTypeName,
-          )?.labels ?? [],
-        }))
+        .map((node) => {
+          const evaluationTypeNode = node.evaluation_types.find(
+            (candidate) => candidate.evaluation_type.name === frameClassificationEvaluationTypeName,
+          );
+          return {
+            category: node.category,
+            evaluationTypeId: evaluationTypeNode?.evaluation_type.id ?? null,
+            labels: evaluationTypeNode?.labels ?? [],
+          };
+        })
         .filter((entry) => entry.labels.length > 0),
     [taxonomyTree, frameClassificationEvaluationTypeName],
   );
@@ -88,8 +91,11 @@ export function SequenceGridToolbar({
   }
 
   function handleClearClassificationClick() {
-    if (selectedCategoryId !== null) {
-      onClearClassification(selectedCategoryId);
+    const evaluationTypeId = classificationCategories.find(
+      (entry) => entry.category.id === selectedCategoryId,
+    )?.evaluationTypeId;
+    if (selectedCategoryId !== null && evaluationTypeId != null) {
+      onClearClassification(selectedCategoryId, evaluationTypeId);
     }
   }
 

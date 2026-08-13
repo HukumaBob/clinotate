@@ -33,16 +33,16 @@ describe("useBulkClassifyFrames", () => {
 });
 
 describe("useBulkClearClassification", () => {
-  it("posts frame_ids and category_id to the bulk-clear-classification endpoint", async () => {
+  it("posts frame_ids, category_id, and evaluation_type_id to the bulk-clear-classification endpoint", async () => {
     vi.mocked(apiClient.POST).mockResolvedValue({ data: { frame_ids: [1, 2] } } as never);
 
     const { result } = renderHook(() => useBulkClearClassification(10), { wrapper });
-    result.current.mutate({ frameIds: [1, 2], categoryId: 3 });
+    result.current.mutate({ frameIds: [1, 2], categoryId: 3, evaluationTypeId: 9 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(apiClient.POST).toHaveBeenCalledWith("/annotation/frames/bulk-clear-classification", {
-      body: { frame_ids: [1, 2], category_id: 3 },
+      body: { frame_ids: [1, 2], category_id: 3, evaluation_type_id: 9 },
     });
   });
 });

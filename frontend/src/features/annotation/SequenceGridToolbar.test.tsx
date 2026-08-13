@@ -557,7 +557,7 @@ describe("SequenceGridToolbar classification controls", () => {
     expect(screen.getByRole("button", { name: "Assign" })).toBeDisabled();
   });
 
-  it("calls onClearClassification with the chosen category id when Clear is clicked", async () => {
+  it("calls onClearClassification with the chosen category id and evaluation type id when Clear is clicked", async () => {
     const user = userEvent.setup();
     const onClearClassification = vi.fn();
     render(
@@ -578,7 +578,7 @@ describe("SequenceGridToolbar classification controls", () => {
     await user.selectOptions(screen.getByLabelText("Classification category"), "2");
     await user.click(screen.getByRole("button", { name: "Clear" }));
 
-    expect(onClearClassification).toHaveBeenCalledWith(2);
+    expect(onClearClassification).toHaveBeenCalledWith(2, 9);
   });
 
   it("disables Assign and Clear when there is no selection", () => {

@@ -158,8 +158,12 @@ export function SequenceGridPage() {
     bulkClassifyFrames.mutate({ frameIds: Array.from(selectedFrameIds), labelId });
   }
 
-  function handleClearClassification(categoryId: number) {
-    bulkClearClassification.mutate({ frameIds: Array.from(selectedFrameIds), categoryId });
+  function handleClearClassification(categoryId: number, evaluationTypeId: number) {
+    bulkClearClassification.mutate({
+      frameIds: Array.from(selectedFrameIds),
+      categoryId,
+      evaluationTypeId,
+    });
   }
 
   function handleClearMarks() {

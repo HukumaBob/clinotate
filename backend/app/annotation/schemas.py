@@ -27,6 +27,7 @@ class BulkClassifyResult(BaseModel):
 class BulkClearClassificationRequest(BaseModel):
     frame_ids: list[int]
     category_id: int
+    evaluation_type_id: int
 
 
 class AnnotationRead(BaseModel):

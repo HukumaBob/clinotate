@@ -450,7 +450,7 @@ describe("SequenceGridPage", () => {
     expect(apiClient.POST).toHaveBeenCalledWith(
       "/annotation/frames/bulk-clear-classification",
       expect.objectContaining({
-        body: { frame_ids: [1, 2], category_id: 1 },
+        body: { frame_ids: [1, 2], category_id: 1, evaluation_type_id: 20 },
       }),
     );
 

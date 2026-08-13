@@ -83,7 +83,9 @@ def bulk_clear_classification_endpoint(
     payload: BulkClearClassificationRequest,
     session: Session = Depends(get_session),
 ) -> BulkClassifyResult:
-    frame_ids = bulk_clear_classification(session, payload.frame_ids, payload.category_id)
+    frame_ids = bulk_clear_classification(
+        session, payload.frame_ids, payload.category_id, payload.evaluation_type_id
+    )
     return BulkClassifyResult(frame_ids=frame_ids)
 
 
