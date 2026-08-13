@@ -15,6 +15,15 @@ class MaskPostprocessUpdate(BaseModel):
     strength: float = Field(ge=0.0, le=1.0)
 
 
+class BulkClassifyRequest(BaseModel):
+    frame_ids: list[int]
+    label_id: int
+
+
+class BulkClassifyResult(BaseModel):
+    frame_ids: list[int]
+
+
 class AnnotationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

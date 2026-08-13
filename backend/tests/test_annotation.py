@@ -419,3 +419,125 @@ def test_delete_job_annotations_removes_only_that_jobs_annotations():
     list_response = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token))
     remaining_ids = [a["id"] for a in list_response.json()]
     assert annotation_b1_id in remaining_ids
+
+
+def _create_label_in_category(token: str, category_name: str, label_name: str) -> int:
+    headers = _headers(token)
+
+    procedures = client.get("/taxonomy/procedures", headers=headers).json()
+    procedure = next((p for p in procedures if p["name"] == "annotation-test-procedure"), None)
+    if procedure is None:
+        procedure = client.post(
+            "/taxonomy/procedures", json={"name": "annotation-test-procedure"}, headers=headers
+        ).json()
+
+    categories = client.get(
+        f"/taxonomy/categories?procedure_id={procedure['id']}", headers=headers
+    ).json()
+    category = next((c for c in categories if c["name"] == category_name), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": category_name, "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next(
+        (e for e in evaluation_types if e["name"] == "annotation-test-evaluation-type"), None
+    )
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types", json={"name": "annotation-test-evaluation-type"}, headers=headers
+        ).json()
+
+    return client.post(
+        "/taxonomy/labels",
+        json={
+            "name": label_name,
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()["id"]
+
+
+def test_bulk_classify_assigns_label_to_all_frames():
+    token = _register_and_login("bulkclass1@example.com")
+    frame_id_1 = _create_frame(token)
+    frame_id_2 = _create_frame(token)
+    label_id = _create_label_in_category(token, "bulk-classify-landmark", "antrum")
+
+    response = client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id_1, frame_id_2], "label_id": label_id},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 201
+    assert set(response.json()["frame_ids"]) == {frame_id_1, frame_id_2}
+
+    for frame_id in (frame_id_1, frame_id_2):
+        annotations = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token)).json()
+        assert len(annotations) == 1
+        assert annotations[0]["label_id"] == label_id
+        assert annotations[0]["annotation_type"] == "classification"
+
+
+def test_bulk_classify_replaces_existing_label_in_same_category():
+    token = _register_and_login("bulkclass2@example.com")
+    frame_id = _create_frame(token)
+    antrum_id = _create_label_in_category(token, "bulk-classify-replace", "antrum")
+    ge_junction_id = _create_label_in_category(token, "bulk-classify-replace", "ge_junction")
+
+    client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": antrum_id},
+        headers=_headers(token),
+    )
+    response = client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": ge_junction_id},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 201
+    annotations = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token)).json()
+    assert len(annotations) == 1
+    assert annotations[0]["label_id"] == ge_junction_id
+
+
+def test_bulk_classify_keeps_labels_in_different_categories_independent():
+    token = _register_and_login("bulkclass3@example.com")
+    frame_id = _create_frame(token)
+    landmark_id = _create_label_in_category(token, "bulk-classify-landmark-axis", "antrum")
+    quality_id = _create_label_in_category(token, "bulk-classify-quality-axis", "low_quality")
+
+    client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": landmark_id},
+        headers=_headers(token),
+    )
+    response = client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": quality_id},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 201
+    annotations = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token)).json()
+    label_ids = {a["label_id"] for a in annotations}
+    assert label_ids == {landmark_id, quality_id}
+
+
+def test_bulk_classify_404s_for_unknown_label():
+    token = _register_and_login("bulkclass4@example.com")
+    frame_id = _create_frame(token)
+
+    response = client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": 999999999},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 404

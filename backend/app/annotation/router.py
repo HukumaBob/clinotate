@@ -6,9 +6,12 @@ from app.annotation.schemas import (
     AnnotationCreate,
     AnnotationRead,
     AnnotationStatusUpdate,
+    BulkClassifyRequest,
+    BulkClassifyResult,
     MaskPostprocessUpdate,
 )
 from app.annotation.service import (
+    bulk_classify_frames,
     create_classification_annotation,
     reapply_mask_postprocess,
     require_reviewer_or_admin,
@@ -59,6 +62,18 @@ def list_annotations(
 ) -> list[AnnotationRead]:
     annotations = session.query(Annotation).filter(Annotation.frame_id == frame_id).all()
     return [_annotation_read(annotation, storage) for annotation in annotations]
+
+
+@router.post(
+    "/frames/bulk-classify", response_model=BulkClassifyResult, status_code=status.HTTP_201_CREATED
+)
+def bulk_classify(
+    payload: BulkClassifyRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> BulkClassifyResult:
+    frame_ids = bulk_classify_frames(session, payload.frame_ids, payload.label_id, current_user)
+    return BulkClassifyResult(frame_ids=frame_ids)
 
 
 @router.patch("/annotations/{annotation_id}/status", response_model=AnnotationRead)

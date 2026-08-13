@@ -2076,6 +2076,52 @@
         }
       }
     },
+    "/annotation/frames/bulk-classify": {
+      "post": {
+        "tags": [
+          "annotation"
+        ],
+        "summary": "Bulk Classify",
+        "operationId": "bulk_classify_annotation_frames_bulk_classify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkClassifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkClassifyResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/annotation/annotations/{annotation_id}/status": {
       "patch": {
         "tags": [
@@ -2803,6 +2849,43 @@
           "procedure_id"
         ],
         "title": "Body_upload_video_media_videos_post"
+      },
+      "BulkClassifyRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Frame Ids"
+          },
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids",
+          "label_id"
+        ],
+        "title": "BulkClassifyRequest"
+      },
+      "BulkClassifyResult": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Frame Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids"
+        ],
+        "title": "BulkClassifyResult"
       },
       "CategoryCreate": {
         "properties": {

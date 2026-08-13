@@ -35,6 +35,46 @@ def create_classification_annotation(
     return annotation
 
 
+def bulk_classify_frames(
+    session: Session, frame_ids: list[int], label_id: int, created_by: User
+) -> list[int]:
+    label = session.get(Label, label_id)
+    if label is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
+
+    category_label_ids = {
+        row.id
+        for row in session.query(Label).filter(Label.category_id == label.category_id).all()
+    }
+
+    for frame_id in frame_ids:
+        existing = (
+            session.query(Annotation)
+            .filter(
+                Annotation.frame_id == frame_id,
+                Annotation.annotation_type == AnnotationType.CLASSIFICATION,
+                Annotation.label_id.in_(category_label_ids),
+            )
+            .all()
+        )
+        for annotation in existing:
+            session.delete(annotation)
+
+        session.add(
+            Annotation(
+                frame_id=frame_id,
+                label_id=label_id,
+                taxonomy_version=label.taxonomy_version,
+                annotation_type=AnnotationType.CLASSIFICATION,
+                payload={},
+                created_by_id=created_by.id,
+            )
+        )
+
+    session.commit()
+    return frame_ids
+
+
 def require_reviewer_or_admin(user: User) -> None:
     if user.role not in (UserRole.REVIEWER, UserRole.ADMIN):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Reviewer or admin role required")
