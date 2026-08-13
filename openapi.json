@@ -2122,6 +2122,52 @@
         ]
       }
     },
+    "/annotation/frames/bulk-clear-classification": {
+      "post": {
+        "tags": [
+          "annotation"
+        ],
+        "summary": "Bulk Clear Classification Endpoint",
+        "operationId": "bulk_clear_classification_endpoint_annotation_frames_bulk_clear_classification_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkClearClassificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkClassifyResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/annotation/annotations/{annotation_id}/status": {
       "patch": {
         "tags": [
@@ -2886,6 +2932,27 @@
           "frame_ids"
         ],
         "title": "BulkClassifyResult"
+      },
+      "BulkClearClassificationRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Frame Ids"
+          },
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids",
+          "category_id"
+        ],
+        "title": "BulkClearClassificationRequest"
       },
       "CategoryCreate": {
         "properties": {
