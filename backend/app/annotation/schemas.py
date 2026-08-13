@@ -24,6 +24,11 @@ class BulkClassifyResult(BaseModel):
     frame_ids: list[int]
 
 
+class BulkClearClassificationRequest(BaseModel):
+    frame_ids: list[int]
+    category_id: int
+
+
 class AnnotationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

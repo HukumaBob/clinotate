@@ -75,6 +75,22 @@ def bulk_classify_frames(
     return frame_ids
 
 
+def bulk_clear_classification(session: Session, frame_ids: list[int], category_id: int) -> list[int]:
+    category_label_ids = {
+        row.id for row in session.query(Label).filter(Label.category_id == category_id).all()
+    }
+
+    if category_label_ids:
+        session.query(Annotation).filter(
+            Annotation.frame_id.in_(frame_ids),
+            Annotation.annotation_type == AnnotationType.CLASSIFICATION,
+            Annotation.label_id.in_(category_label_ids),
+        ).delete(synchronize_session=False)
+        session.commit()
+
+    return frame_ids
+
+
 def require_reviewer_or_admin(user: User) -> None:
     if user.role not in (UserRole.REVIEWER, UserRole.ADMIN):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Reviewer or admin role required")

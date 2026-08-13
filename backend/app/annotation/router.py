@@ -8,10 +8,12 @@ from app.annotation.schemas import (
     AnnotationStatusUpdate,
     BulkClassifyRequest,
     BulkClassifyResult,
+    BulkClearClassificationRequest,
     MaskPostprocessUpdate,
 )
 from app.annotation.service import (
     bulk_classify_frames,
+    bulk_clear_classification,
     create_classification_annotation,
     reapply_mask_postprocess,
     require_reviewer_or_admin,
@@ -73,6 +75,15 @@ def bulk_classify(
     session: Session = Depends(get_session),
 ) -> BulkClassifyResult:
     frame_ids = bulk_classify_frames(session, payload.frame_ids, payload.label_id, current_user)
+    return BulkClassifyResult(frame_ids=frame_ids)
+
+
+@router.post("/frames/bulk-clear-classification", response_model=BulkClassifyResult)
+def bulk_clear_classification_endpoint(
+    payload: BulkClearClassificationRequest,
+    session: Session = Depends(get_session),
+) -> BulkClassifyResult:
+    frame_ids = bulk_clear_classification(session, payload.frame_ids, payload.category_id)
     return BulkClassifyResult(frame_ids=frame_ids)
 
 

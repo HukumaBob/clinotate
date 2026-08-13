@@ -541,3 +541,51 @@ def test_bulk_classify_404s_for_unknown_label():
     )
 
     assert response.status_code == 404
+
+
+def test_bulk_clear_classification_removes_label_in_that_category_only():
+    token = _register_and_login("bulkclear1@example.com")
+    frame_id = _create_frame(token)
+    landmark_id = _create_label_in_category(token, "bulk-clear-landmark", "antrum")
+    quality_id = _create_label_in_category(token, "bulk-clear-quality", "low_quality")
+    landmark_label = client.get("/taxonomy/labels", headers=_headers(token)).json()
+    landmark_category_id = next(l for l in landmark_label if l["id"] == landmark_id)["category_id"]
+
+    client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": landmark_id},
+        headers=_headers(token),
+    )
+    client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": quality_id},
+        headers=_headers(token),
+    )
+
+    response = client.post(
+        "/annotation/frames/bulk-clear-classification",
+        json={"frame_ids": [frame_id], "category_id": landmark_category_id},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 200
+    annotations = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token)).json()
+    label_ids = {a["label_id"] for a in annotations}
+    assert label_ids == {quality_id}
+
+
+def test_bulk_clear_classification_is_a_no_op_when_nothing_to_clear():
+    token = _register_and_login("bulkclear2@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_label_in_category(token, "bulk-clear-empty", "some_label")
+    labels = client.get("/taxonomy/labels", headers=_headers(token)).json()
+    category_id = next(l for l in labels if l["id"] == label_id)["category_id"]
+
+    response = client.post(
+        "/annotation/frames/bulk-clear-classification",
+        json={"frame_ids": [frame_id], "category_id": category_id},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["frame_ids"] == [frame_id]
