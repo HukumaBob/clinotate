@@ -3510,6 +3510,10 @@
           "image_url": {
             "type": "string",
             "title": "Image Url"
+          },
+          "no_findings_reviewed": {
+            "type": "boolean",
+            "title": "No Findings Reviewed"
           }
         },
         "type": "object",
@@ -3520,7 +3524,8 @@
           "frame_index",
           "width",
           "height",
-          "image_url"
+          "image_url",
+          "no_findings_reviewed"
         ],
         "title": "FrameRead"
       },

@@ -31,6 +31,7 @@ describe("useFrame", () => {
       width: 256,
       height: 256,
       image_url: "http://minio.local/bucket/frames/7/0.png?signature=abc",
+      no_findings_reviewed: false,
     };
     vi.mocked(apiClient.GET).mockResolvedValue({ data: frame, error: undefined } as never);
 
