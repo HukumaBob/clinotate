@@ -5,6 +5,8 @@ import type { components } from "../shared/api/generated/schema";
 
 type ProcedureCreate = components["schemas"]["ProcedureCreate"];
 type ProcedureUpdate = components["schemas"]["ProcedureUpdate"];
+type EvaluationTypeCreate = components["schemas"]["EvaluationTypeCreate"];
+type EvaluationTypeUpdate = components["schemas"]["EvaluationTypeUpdate"];
 type CategoryCreate = components["schemas"]["CategoryCreate"];
 type CategoryUpdate = components["schemas"]["CategoryUpdate"];
 type LabelCreate = components["schemas"]["LabelCreate"];
@@ -70,6 +72,55 @@ export function useEvaluationTypes() {
       const result = await apiClient.GET("/taxonomy/evaluation-types");
       return result.data ?? [];
     },
+  });
+}
+
+function invalidateEvaluationTypes(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ["taxonomy", "evaluation-types"] });
+  queryClient.invalidateQueries({ queryKey: ["taxonomy", "tree"] });
+}
+
+export function useCreateEvaluationType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: EvaluationTypeCreate) => {
+      const result = await apiClient.POST("/taxonomy/evaluation-types", { body: payload });
+      return result;
+    },
+    onSuccess: () => invalidateEvaluationTypes(queryClient),
+  });
+}
+
+export function useUpdateEvaluationType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      evaluationTypeId,
+      payload,
+    }: {
+      evaluationTypeId: number;
+      payload: EvaluationTypeUpdate;
+    }) => {
+      const result = await apiClient.PATCH("/taxonomy/evaluation-types/{evaluation_type_id}", {
+        params: { path: { evaluation_type_id: evaluationTypeId } },
+        body: payload,
+      });
+      return result;
+    },
+    onSuccess: () => invalidateEvaluationTypes(queryClient),
+  });
+}
+
+export function useDeleteEvaluationType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (evaluationTypeId: number) => {
+      const result = await apiClient.DELETE("/taxonomy/evaluation-types/{evaluation_type_id}", {
+        params: { path: { evaluation_type_id: evaluationTypeId } },
+      });
+      return result;
+    },
+    onSuccess: () => invalidateEvaluationTypes(queryClient),
   });
 }
 

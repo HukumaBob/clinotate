@@ -114,6 +114,19 @@ describe("TagsPage", () => {
     expect(await screen.findByDisplayValue("lesion")).toBeInTheDocument();
   });
 
+  it("toggles the classifications panel when 'Manage classifications' is clicked", async () => {
+    mockAll();
+
+    render(<TagsPage />, { wrapper });
+
+    await screen.findByText("0-Ip");
+    expect(screen.queryByText("Classifications")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /manage classifications/i }));
+
+    expect(await screen.findByText("Classifications")).toBeInTheDocument();
+  });
+
   it("filters the table by typing in the search box", async () => {
     mockAll();
 

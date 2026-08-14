@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useEvaluationTypes, useProcedures } from "../../entities/useTaxonomy";
 import type { components } from "../../shared/api/generated/schema";
 import { CategoryForm } from "./CategoryForm";
+import { ClassificationsPanel } from "./ClassificationsPanel";
 import { ProceduresPanel } from "./ProceduresPanel";
 import { TagForm } from "./TagForm";
 import { TagsTable } from "./TagsTable";
@@ -20,6 +21,7 @@ export function TagsPage() {
   const [formState, setFormState] = useState<"closed" | "new" | LabelRead>("closed");
   const [categoryFormState, setCategoryFormState] = useState<"closed" | "new" | CategoryRead>("closed");
   const [showProcedures, setShowProcedures] = useState(false);
+  const [showClassifications, setShowClassifications] = useState(false);
 
   const procedures = proceduresQuery.data ?? [];
   const evaluationTypes = evaluationTypesQuery.data ?? [];
@@ -35,6 +37,13 @@ export function TagsPage() {
             onClick={() => setShowProcedures((value) => !value)}
           >
             {showProcedures ? "Hide procedures" : "Manage procedures"}
+          </button>
+          <button
+            type="button"
+            className="rounded border border-gray-700 px-3 py-1.5 text-sm text-gray-100 hover:bg-gray-800"
+            onClick={() => setShowClassifications((value) => !value)}
+          >
+            {showClassifications ? "Hide classifications" : "Manage classifications"}
           </button>
           <button
             type="button"
@@ -60,6 +69,7 @@ export function TagsPage() {
       </div>
 
       {showProcedures && <ProceduresPanel />}
+      {showClassifications && <ClassificationsPanel />}
 
       <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3 text-sm">
         <label className="flex items-center gap-2">

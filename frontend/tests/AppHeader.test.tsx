@@ -38,7 +38,7 @@ describe("AppHeader", () => {
     renderHeader();
 
     const navItems = screen.getAllByTestId("app-header-nav-item").map((el) => el.textContent);
-    expect(navItems).toEqual(["Media", "Sequences", "Tags", "Dataset", "Train", "Results"]);
+    expect(navItems).toEqual(["Tags", "Media", "Sequences", "Dataset", "Train", "Results"]);
   });
 
   it("renders Media as a real link to /media", () => {

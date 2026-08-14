@@ -18,12 +18,17 @@ session (see "Deviations from the old platform" at the end of each section).
 
 ## Top-level navigation
 
-Six sections, top nav bar, same order the old platform converged on (users
-are already used to this progression from working with it):
+Six sections, top nav bar:
 
 ```
-Media → Sequences → Tags → Dataset → Train → Results
+Tags → Media → Sequences → Dataset → Train → Results
 ```
+
+The original draft of this spec put these in the old platform's order
+(`Media → Sequences → Tags → ...`); `Tags` was moved to the front once the
+Tags screen shipped, since taxonomy setup (procedures, categories, labels)
+is a prerequisite for every other screen's dropdowns — annotators expect
+to configure it first, not stumble on it mid-list.
 
 Flat structure, no nested menus. Each section is its own top-level route.
 Dark theme only (per CLAUDE.md).

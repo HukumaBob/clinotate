@@ -3,9 +3,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../features/auth/useAuth";
 
 const NAV_ITEMS = [
+  { label: "Tags", path: "/tags" },
   { label: "Media", path: "/media" },
   { label: "Sequences", path: null },
-  { label: "Tags", path: "/tags" },
   { label: "Dataset", path: null },
   { label: "Train", path: null },
   { label: "Results", path: null },
