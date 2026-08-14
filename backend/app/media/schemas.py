@@ -161,6 +161,7 @@ class FrameRead(BaseModel):
     width: int
     height: int
     image_url: str
+    no_findings_reviewed: bool
 
 
 class FrameBulkDelete(BaseModel):

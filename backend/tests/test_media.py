@@ -2118,3 +2118,26 @@ def test_list_sequences_404_is_not_returned_for_empty_result():
     assert response.status_code == 200
     assert response.json()["items"] == []
     assert response.json()["total"] == 0
+
+
+def test_frame_defaults_to_not_reviewed_no_findings():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "no-findings-default-procedure"}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO, "rb") as f:
+        upload = client.post(
+            "/media/videos",
+            files={"file": ("tiny.mp4", f, "video/mp4")},
+            data={"title": "no-findings-default", "procedure_id": str(procedure_id)},
+            headers=headers,
+        )
+    video_id = upload.json()["id"]
+    sequence = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "no-findings-default-seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()
+    frames = client.get(f"/media/sequences/{sequence['id']}/frames", headers=headers).json()
+
+    assert frames[0]["no_findings_reviewed"] is False

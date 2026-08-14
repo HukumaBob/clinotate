@@ -583,6 +583,7 @@ def _frame_read(frame: Frame, storage: StorageService) -> FrameRead:
         width=frame.width,
         height=frame.height,
         image_url=storage.url_for(frame.storage_key),
+        no_findings_reviewed=frame.no_findings_reviewed,
     )
 
 
