@@ -25,7 +25,12 @@ from app.media.schemas import (
     RankQualityRequest,
     SequenceCreate,
     SequenceCreateStandalone,
+    SequenceListItem,
+    SequenceListPage,
+    SequencePreviewAnnotation,
+    SequencePreviewFrame,
     SequenceRead,
+    SequencesStats,
     SequenceStats,
     SequenceStatsLabel,
     SequenceUpdate,
@@ -293,6 +298,163 @@ def create_standalone_sequence(
     session.commit()
     session.refresh(sequence)
     return _sequence_read(sequence, session)
+
+
+def _sequences_base_query(
+    session: Session,
+    procedure_id: int | None,
+    video_id: int | None,
+    search: str | None,
+):
+    query = session.query(Sequence)
+    if procedure_id is not None:
+        query = query.filter(Sequence.procedure_id == procedure_id)
+    if video_id is not None:
+        query = query.filter(Sequence.video_id == video_id)
+    if search:
+        query = query.filter(Sequence.name.ilike(f"%{search}%"))
+    return query
+
+
+def _labeled_frame_ids_subquery(session: Session, sequence_ids: list[int]) -> set[int]:
+    if not sequence_ids:
+        return set()
+    rows = (
+        session.query(Frame.id)
+        .join(Annotation, Annotation.frame_id == Frame.id)
+        .filter(Frame.sequence_id.in_(sequence_ids))
+        .distinct()
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
+@router.get("/sequences/stats", response_model=SequencesStats)
+def get_sequences_stats(
+    procedure_id: int | None = None,
+    video_id: int | None = None,
+    search: str | None = None,
+    session: Session = Depends(get_session),
+) -> SequencesStats:
+    sequences = _sequences_base_query(session, procedure_id, video_id, search).all()
+    sequence_ids = [s.id for s in sequences]
+
+    total_frames = (
+        session.query(func.count(Frame.id)).filter(Frame.sequence_id.in_(sequence_ids)).scalar()
+        if sequence_ids
+        else 0
+    )
+    labeled_frame_ids_by_sequence: dict[int, int] = {}
+    if sequence_ids:
+        rows = (
+            session.query(Frame.sequence_id, func.count(func.distinct(Frame.id)))
+            .join(Annotation, Annotation.frame_id == Frame.id)
+            .filter(Frame.sequence_id.in_(sequence_ids))
+            .group_by(Frame.sequence_id)
+            .all()
+        )
+        labeled_frame_ids_by_sequence = dict(rows)
+
+    labeled_sequences = sum(1 for sid in sequence_ids if labeled_frame_ids_by_sequence.get(sid, 0) > 0)
+
+    return SequencesStats(
+        total_sequences=len(sequence_ids),
+        total_frames=total_frames or 0,
+        labeled_sequences=labeled_sequences,
+        unlabeled_sequences=len(sequence_ids) - labeled_sequences,
+    )
+
+
+@router.get("/sequences", response_model=SequenceListPage)
+def list_sequences(
+    procedure_id: int | None = None,
+    video_id: int | None = None,
+    labeled: Literal["all", "labeled", "unlabeled"] = "all",
+    search: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> SequenceListPage:
+    sequences = (
+        _sequences_base_query(session, procedure_id, video_id, search).order_by(Sequence.created_at.desc()).all()
+    )
+    sequence_ids = [s.id for s in sequences]
+
+    frame_counts_by_sequence: dict[int, int] = {}
+    labeled_counts_by_sequence: dict[int, int] = {}
+    if sequence_ids:
+        frame_count_rows = (
+            session.query(Frame.sequence_id, func.count(Frame.id))
+            .filter(Frame.sequence_id.in_(sequence_ids))
+            .group_by(Frame.sequence_id)
+            .all()
+        )
+        frame_counts_by_sequence = dict(frame_count_rows)
+
+        labeled_count_rows = (
+            session.query(Frame.sequence_id, func.count(func.distinct(Frame.id)))
+            .join(Annotation, Annotation.frame_id == Frame.id)
+            .filter(Frame.sequence_id.in_(sequence_ids))
+            .group_by(Frame.sequence_id)
+            .all()
+        )
+        labeled_counts_by_sequence = dict(labeled_count_rows)
+
+    if labeled == "labeled":
+        sequences = [s for s in sequences if labeled_counts_by_sequence.get(s.id, 0) > 0]
+    elif labeled == "unlabeled":
+        sequences = [s for s in sequences if labeled_counts_by_sequence.get(s.id, 0) == 0]
+
+    total = len(sequences)
+    start = (page - 1) * page_size
+    page_sequences = sequences[start : start + page_size]
+
+    items: list[SequenceListItem] = []
+    for sequence in page_sequences:
+        preview_frames_orm = (
+            session.query(Frame)
+            .filter(Frame.sequence_id == sequence.id)
+            .order_by(Frame.frame_index.asc())
+            .limit(4)
+            .all()
+        )
+        preview_frame_ids = [f.id for f in preview_frames_orm]
+        annotations_by_frame: dict[int, list[Annotation]] = {fid: [] for fid in preview_frame_ids}
+        if preview_frame_ids:
+            for annotation in (
+                session.query(Annotation).filter(Annotation.frame_id.in_(preview_frame_ids)).all()
+            ):
+                annotations_by_frame[annotation.frame_id].append(annotation)
+
+        preview_frames = [
+            SequencePreviewFrame(
+                frame_id=frame.id,
+                image_url=storage.url_for(frame.storage_key),
+                annotations=[
+                    SequencePreviewAnnotation(
+                        label_id=annotation.label_id,
+                        mask_url=storage.url_for(annotation.storage_key) if annotation.storage_key else None,
+                    )
+                    for annotation in annotations_by_frame[frame.id]
+                ],
+            )
+            for frame in preview_frames_orm
+        ]
+
+        items.append(
+            SequenceListItem(
+                id=sequence.id,
+                name=sequence.name,
+                video_id=sequence.video_id,
+                procedure_id=sequence.procedure_id,
+                frame_count=frame_counts_by_sequence.get(sequence.id, 0),
+                labeled_frame_count=labeled_counts_by_sequence.get(sequence.id, 0),
+                preview_frames=preview_frames,
+            )
+        )
+
+    return SequenceListPage(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/sequences/suggest-name", response_model=SuggestSequenceNameResponse)

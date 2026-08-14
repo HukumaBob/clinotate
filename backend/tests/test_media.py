@@ -1935,3 +1935,186 @@ def test_find_similar_409_when_already_pending():
         f"/media/sequences/{sequence_id}/find-similar", json={"percent": 85}, headers=headers
     )
     assert second.status_code == 409
+
+
+def _create_labeled_photo_sequence(headers: dict[str, str], name: str, procedure_id: int) -> tuple[int, int]:
+    """Create a 1-frame photo sequence and return (sequence_id, frame_id)."""
+    fixture = Path(__file__).parent / "fixtures" / "tiny_frame.png"
+    with open(fixture, "rb") as f:
+        image_bytes = f.read()
+    sequence_id = client.post(
+        "/media/sequences/photos",
+        data={"name": name, "procedure_id": str(procedure_id)},
+        files=[("files", ("p.png", image_bytes, "image/png"))],
+        headers=headers,
+    ).json()["id"]
+    frame_id = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()[0]["id"]
+    return sequence_id, frame_id
+
+
+def _make_label(headers: dict[str, str], procedure_id: int, name: str) -> int:
+    categories = client.get(f"/taxonomy/categories?procedure_id={procedure_id}", headers=headers).json()
+    category = next((c for c in categories if c["name"] == f"{name}-category"), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": f"{name}-category", "procedure_id": procedure_id},
+            headers=headers,
+        ).json()
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next((e for e in evaluation_types if e["name"] == f"{name}-eval-type"), None)
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types", json={"name": f"{name}-eval-type"}, headers=headers
+        ).json()
+    return client.post(
+        "/taxonomy/labels",
+        json={"name": name, "category_id": category["id"], "evaluation_type_id": evaluation_type["id"]},
+        headers=headers,
+    ).json()["id"]
+
+
+def test_list_sequences_returns_paginated_page():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "list-sequences-procedure"}, headers=headers
+    ).json()["id"]
+    _create_labeled_photo_sequence(headers, "list-sequences-seq-a", procedure_id)
+    _create_labeled_photo_sequence(headers, "list-sequences-seq-b", procedure_id)
+
+    response = client.get(
+        "/media/sequences", params={"procedure_id": procedure_id, "page": 1, "page_size": 1}, headers=headers
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["page"] == 1
+    assert body["page_size"] == 1
+    assert body["total"] == 2
+    assert len(body["items"]) == 1
+
+
+def test_list_sequences_reports_labeled_frame_count_for_mask_annotation():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "list-sequences-mask-procedure"}, headers=headers
+    ).json()["id"]
+    sequence_id, frame_id = _create_labeled_photo_sequence(
+        headers, "list-sequences-mask-seq", procedure_id
+    )
+    label_id = _make_label(headers, procedure_id, "list-sequences-mask-label")
+
+    client.post(f"/annotation/frames/{frame_id}/annotations", json={"label_id": label_id}, headers=headers)
+
+    response = client.get("/media/sequences", params={"procedure_id": procedure_id}, headers=headers)
+    item = next(i for i in response.json()["items"] if i["id"] == sequence_id)
+    assert item["frame_count"] == 1
+    assert item["labeled_frame_count"] == 1
+
+
+def test_list_sequences_reports_labeled_frame_count_for_classification_only():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "list-sequences-classify-procedure"}, headers=headers
+    ).json()["id"]
+    sequence_id, frame_id = _create_labeled_photo_sequence(
+        headers, "list-sequences-classify-seq", procedure_id
+    )
+    label_id = _make_label(headers, procedure_id, "list-sequences-classify-label")
+
+    client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": label_id},
+        headers=headers,
+    )
+
+    response = client.get("/media/sequences", params={"procedure_id": procedure_id}, headers=headers)
+    item = next(i for i in response.json()["items"] if i["id"] == sequence_id)
+    assert item["labeled_frame_count"] == 1
+
+
+def test_list_sequences_filters_by_labeled_status():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "list-sequences-filter-procedure"}, headers=headers
+    ).json()["id"]
+    labeled_id, frame_id = _create_labeled_photo_sequence(
+        headers, "list-sequences-filter-labeled", procedure_id
+    )
+    unlabeled_id, _ = _create_labeled_photo_sequence(
+        headers, "list-sequences-filter-unlabeled", procedure_id
+    )
+    label_id = _make_label(headers, procedure_id, "list-sequences-filter-label")
+    client.post(f"/annotation/frames/{frame_id}/annotations", json={"label_id": label_id}, headers=headers)
+
+    labeled_only = client.get(
+        "/media/sequences",
+        params={"procedure_id": procedure_id, "labeled": "labeled"},
+        headers=headers,
+    ).json()["items"]
+    assert {i["id"] for i in labeled_only} == {labeled_id}
+
+    unlabeled_only = client.get(
+        "/media/sequences",
+        params={"procedure_id": procedure_id, "labeled": "unlabeled"},
+        headers=headers,
+    ).json()["items"]
+    assert {i["id"] for i in unlabeled_only} == {unlabeled_id}
+
+
+def test_list_sequences_includes_preview_frames_with_mask_annotations():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "list-sequences-preview-procedure"}, headers=headers
+    ).json()["id"]
+    sequence_id, frame_id = _create_labeled_photo_sequence(
+        headers, "list-sequences-preview-seq", procedure_id
+    )
+    label_id = _make_label(headers, procedure_id, "list-sequences-preview-label")
+    client.post(f"/annotation/frames/{frame_id}/annotations", json={"label_id": label_id}, headers=headers)
+
+    response = client.get("/media/sequences", params={"procedure_id": procedure_id}, headers=headers)
+    item = next(i for i in response.json()["items"] if i["id"] == sequence_id)
+
+    assert len(item["preview_frames"]) == 1
+    preview_frame = item["preview_frames"][0]
+    assert preview_frame["frame_id"] == frame_id
+    assert preview_frame["image_url"]
+    assert len(preview_frame["annotations"]) == 1
+    assert preview_frame["annotations"][0]["label_id"] == label_id
+    # A plain create-annotation call has no SAM2-produced mask yet (that's
+    # written by the ml-worker job), so mask_url is expected to be None here --
+    # this test only proves the field is wired through, not that it's populated.
+    assert "mask_url" in preview_frame["annotations"][0]
+
+
+def test_sequences_stats_aggregates_across_sequences():
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "sequences-stats-procedure"}, headers=headers
+    ).json()["id"]
+    labeled_id, frame_id = _create_labeled_photo_sequence(
+        headers, "sequences-stats-labeled", procedure_id
+    )
+    _create_labeled_photo_sequence(headers, "sequences-stats-unlabeled", procedure_id)
+    label_id = _make_label(headers, procedure_id, "sequences-stats-label")
+    client.post(f"/annotation/frames/{frame_id}/annotations", json={"label_id": label_id}, headers=headers)
+
+    response = client.get("/media/sequences/stats", params={"procedure_id": procedure_id}, headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_sequences"] == 2
+    assert body["total_frames"] == 2
+    assert body["labeled_sequences"] == 1
+    assert body["unlabeled_sequences"] == 1
+
+
+def test_list_sequences_404_is_not_returned_for_empty_result():
+    headers = _auth_headers()
+    response = client.get(
+        "/media/sequences", params={"search": "no-such-sequence-name-exists-anywhere"}, headers=headers
+    )
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["total"] == 0

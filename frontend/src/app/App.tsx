@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { SequenceGridPage } from "../features/annotation/SequenceGridPage";
+import { SequencesPage } from "../features/annotation/SequencesPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
 import { MediaPage } from "../features/media/MediaPage";
@@ -28,6 +29,7 @@ export function App() {
         >
           <Route path="/media" element={<MediaPage />} />
           <Route path="/tags" element={<TagsPage />} />
+          <Route path="/sequences" element={<SequencesPage />} />
           <Route path="/sequences/:sequenceId" element={<SequenceGridPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

@@ -55,10 +55,17 @@ describe("AppHeader", () => {
     expect(tagsLink).toHaveAttribute("href", "/tags");
   });
 
-  it("does not render the remaining four items as links", () => {
+  it("renders Sequences as a real link to /sequences", () => {
     renderHeader();
 
-    for (const label of ["Sequences", "Dataset", "Train", "Results"]) {
+    const sequencesLink = screen.getByRole("link", { name: "Sequences" });
+    expect(sequencesLink).toHaveAttribute("href", "/sequences");
+  });
+
+  it("does not render the remaining three items as links", () => {
+    renderHeader();
+
+    for (const label of ["Dataset", "Train", "Results"]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
   });

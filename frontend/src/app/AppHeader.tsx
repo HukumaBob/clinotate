@@ -5,7 +5,7 @@ import { useAuth } from "../features/auth/useAuth";
 const NAV_ITEMS = [
   { label: "Tags", path: "/tags" },
   { label: "Media", path: "/media" },
-  { label: "Sequences", path: null },
+  { label: "Sequences", path: "/sequences" },
   { label: "Dataset", path: null },
   { label: "Train", path: null },
   { label: "Results", path: null },

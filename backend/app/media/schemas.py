@@ -98,6 +98,41 @@ class SuggestSequenceNameResponse(BaseModel):
     name: str
 
 
+class SequencePreviewAnnotation(BaseModel):
+    label_id: int
+    mask_url: str | None
+
+
+class SequencePreviewFrame(BaseModel):
+    frame_id: int
+    image_url: str
+    annotations: list[SequencePreviewAnnotation]
+
+
+class SequenceListItem(BaseModel):
+    id: int
+    name: str
+    video_id: int | None
+    procedure_id: int | None
+    frame_count: int
+    labeled_frame_count: int
+    preview_frames: list[SequencePreviewFrame]
+
+
+class SequenceListPage(BaseModel):
+    items: list[SequenceListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class SequencesStats(BaseModel):
+    total_sequences: int
+    total_frames: int
+    labeled_sequences: int
+    unlabeled_sequences: int
+
+
 class MediaLibraryItem(BaseModel):
     id: int
     kind: Literal["video", "photo"]

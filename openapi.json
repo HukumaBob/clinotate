@@ -1408,15 +1408,20 @@
         ],
         "summary": "Create Standalone Sequence",
         "operationId": "create_standalone_sequence_media_sequences_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SequenceCreateStandalone"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -1439,12 +1444,212 @@
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "List Sequences",
+        "operationId": "list_sequences_media_sequences_get",
         "security": [
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "procedure_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Procedure Id"
+            }
+          },
+          {
+            "name": "video_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "labeled",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "labeled",
+                "unlabeled"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Labeled"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceListPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/sequences/stats": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Get Sequences Stats",
+        "operationId": "get_sequences_stats_media_sequences_stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procedure_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Procedure Id"
+            }
+          },
+          {
+            "name": "video_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequencesStats"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/media/sequences/suggest-name": {
@@ -4029,6 +4234,148 @@
         ],
         "title": "SequenceCreateStandalone"
       },
+      "SequenceListItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "procedure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Id"
+          },
+          "frame_count": {
+            "type": "integer",
+            "title": "Frame Count"
+          },
+          "labeled_frame_count": {
+            "type": "integer",
+            "title": "Labeled Frame Count"
+          },
+          "preview_frames": {
+            "items": {
+              "$ref": "#/components/schemas/SequencePreviewFrame"
+            },
+            "type": "array",
+            "title": "Preview Frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "video_id",
+          "procedure_id",
+          "frame_count",
+          "labeled_frame_count",
+          "preview_frames"
+        ],
+        "title": "SequenceListItem"
+      },
+      "SequenceListPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SequenceListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "SequenceListPage"
+      },
+      "SequencePreviewAnnotation": {
+        "properties": {
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "mask_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label_id",
+          "mask_url"
+        ],
+        "title": "SequencePreviewAnnotation"
+      },
+      "SequencePreviewFrame": {
+        "properties": {
+          "frame_id": {
+            "type": "integer",
+            "title": "Frame Id"
+          },
+          "image_url": {
+            "type": "string",
+            "title": "Image Url"
+          },
+          "annotations": {
+            "items": {
+              "$ref": "#/components/schemas/SequencePreviewAnnotation"
+            },
+            "type": "array",
+            "title": "Annotations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_id",
+          "image_url",
+          "annotations"
+        ],
+        "title": "SequencePreviewFrame"
+      },
       "SequenceRead": {
         "properties": {
           "id": {
@@ -4232,6 +4579,34 @@
         },
         "type": "object",
         "title": "SequenceUpdate"
+      },
+      "SequencesStats": {
+        "properties": {
+          "total_sequences": {
+            "type": "integer",
+            "title": "Total Sequences"
+          },
+          "total_frames": {
+            "type": "integer",
+            "title": "Total Frames"
+          },
+          "labeled_sequences": {
+            "type": "integer",
+            "title": "Labeled Sequences"
+          },
+          "unlabeled_sequences": {
+            "type": "integer",
+            "title": "Unlabeled Sequences"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_sequences",
+          "total_frames",
+          "labeled_sequences",
+          "unlabeled_sequences"
+        ],
+        "title": "SequencesStats"
       },
       "SettingsRead": {
         "properties": {
