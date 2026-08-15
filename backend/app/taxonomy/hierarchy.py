@@ -73,6 +73,29 @@ def validate_parent_assignment(
         )
 
 
+def validate_label_edges(session: Session, label: Label) -> None:
+    """Re-validate every hierarchy edge touching ``label`` against its current,
+    already-persisted state.
+
+    Called after category_id/evaluation_type_id changes have been applied
+    (via flush, not yet committed), since those fields feed the same
+    procedure/scope checks `validate_parent_assignment` performs for a
+    parent_label_id change -- a category or scope move can silently break an
+    edge nobody touched directly. Checks both directions:
+
+    1. This label's own parent edge, if it has one.
+    2. Every existing child's edge pointing at this label, since moving a
+       *parent* out from under its children is exactly as invalid as moving
+       a child out from under its parent, just discovered from the other
+       side of the edge.
+    """
+    validate_parent_assignment(session, label, label.parent_label_id)
+
+    children = session.query(Label).filter(Label.parent_label_id == label.id).all()
+    for child in children:
+        validate_parent_assignment(session, child, child.parent_label_id)
+
+
 @dataclass(frozen=True)
 class LabelNode:
     id: int

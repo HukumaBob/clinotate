@@ -852,3 +852,79 @@ def test_bulk_clear_no_findings_unsets_flag():
     assert frame.no_findings_reviewed_by_id is None
     assert frame.no_findings_reviewed_at is None
     session.close()
+
+
+def _create_abstract_label(token: str, category_name: str, label_name: str) -> int:
+    headers = _headers(token)
+
+    procedures = client.get("/taxonomy/procedures", headers=headers).json()
+    procedure = next((p for p in procedures if p["name"] == "annotation-test-procedure"), None)
+    if procedure is None:
+        procedure = client.post(
+            "/taxonomy/procedures", json={"name": "annotation-test-procedure"}, headers=headers
+        ).json()
+
+    categories = client.get(
+        f"/taxonomy/categories?procedure_id={procedure['id']}", headers=headers
+    ).json()
+    category = next((c for c in categories if c["name"] == category_name), None)
+    if category is None:
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": category_name, "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+
+    evaluation_types = client.get("/taxonomy/evaluation-types", headers=headers).json()
+    evaluation_type = next(
+        (e for e in evaluation_types if e["name"] == "annotation-test-evaluation-type"), None
+    )
+    if evaluation_type is None:
+        evaluation_type = client.post(
+            "/taxonomy/evaluation-types",
+            json={"name": "annotation-test-evaluation-type", "annotation_scope": "region"},
+            headers=headers,
+        ).json()
+
+    return client.post(
+        "/taxonomy/labels",
+        json={
+            "name": label_name,
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+            "is_abstract": True,
+        },
+        headers=headers,
+    ).json()["id"]
+
+
+def test_create_annotation_with_abstract_label_returns_422():
+    """Minor finding 3: an abstract (grouping-only) label must never be
+    directly annotated -- that's exactly the orphan the design exists to
+    prevent.
+    """
+    token = _register_and_login("abstract-annot1@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_abstract_label(token, "abstract-label-category", "abstract-group")
+
+    response = client.post(
+        f"/annotation/frames/{frame_id}/annotations",
+        json={"label_id": label_id},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 422
+
+
+def test_bulk_classify_with_abstract_label_returns_422():
+    token = _register_and_login("abstract-annot2@example.com")
+    frame_id = _create_frame(token)
+    label_id = _create_abstract_label(token, "abstract-label-bulk-category", "abstract-group-bulk")
+
+    response = client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": label_id},
+        headers=_headers(token),
+    )
+
+    assert response.status_code == 422

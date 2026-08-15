@@ -59,8 +59,15 @@ export function TagForm({
   const labelsInSelectedCategory = (treeQuery.data ?? [])
     .find((node) => String(node.category.id) === categoryId)
     ?.evaluation_types.flatMap((evaluationType) => evaluationType.labels) ?? [];
+  // A category can legitimately hold labels from more than one evaluation
+  // type (e.g. "Quality" mixes geometric and frame_classification labels).
+  // The backend rejects a parent whose annotation_scope differs from the
+  // child's, so only offer parents that share the currently-selected
+  // evaluation type -- otherwise the dropdown offers a choice the backend
+  // will always 422 on.
   const parentCandidates = labelsInSelectedCategory.filter(
-    (candidate) => candidate.id !== editingLabel?.id
+    (candidate) =>
+      candidate.id !== editingLabel?.id && String(candidate.evaluation_type_id) === evaluationTypeId
   );
 
   useEffect(() => {

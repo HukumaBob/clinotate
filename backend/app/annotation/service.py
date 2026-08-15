@@ -22,6 +22,11 @@ def create_classification_annotation(
     label = session.get(Label, label_id)
     if label is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
+    if label.is_abstract:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Cannot annotate with an abstract (grouping-only) label",
+        )
 
     annotation = Annotation(
         frame_id=frame_id,
@@ -71,6 +76,11 @@ def bulk_classify_frames(
     label = session.get(Label, label_id)
     if label is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
+    if label.is_abstract:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Cannot annotate with an abstract (grouping-only) label",
+        )
 
     _require_frames_exist(session, frame_ids)
 

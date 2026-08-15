@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
 from app.db import get_session
-from app.taxonomy.hierarchy import HierarchyError, validate_parent_assignment
+from app.taxonomy.hierarchy import HierarchyError, validate_label_edges, validate_parent_assignment
 from app.taxonomy.models import Category, EvaluationType, Label, Procedure
 from app.taxonomy.schemas import (
     CategoryCreate,
@@ -200,15 +200,27 @@ def update_label(label_id: int, payload: LabelUpdate, session: Session = Depends
     if label is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
     fields = payload.model_dump(exclude_unset=True)
-    if "parent_label_id" in fields:
-        try:
-            validate_parent_assignment(session, label, fields["parent_label_id"])
-        except HierarchyError as error:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error.message
-            ) from None
+
+    # Apply first, validate against the post-mutation state, roll back on
+    # failure. Validating before the setattr loop (the old approach) reads
+    # stale category_id/evaluation_type_id off `label` -- a combined PATCH
+    # that changes one of those fields *and* parent_label_id in the same
+    # request would validate the new parent against the old, still-in-memory
+    # category/scope and then persist both, smuggling in an edge the
+    # validator would otherwise reject.
     for field, value in fields.items():
         setattr(label, field, value)
+    session.flush()
+
+    try:
+        if "parent_label_id" in fields or "category_id" in fields or "evaluation_type_id" in fields:
+            validate_label_edges(session, label)
+    except HierarchyError as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error.message
+        ) from None
+
     session.commit()
     session.refresh(label)
     return label

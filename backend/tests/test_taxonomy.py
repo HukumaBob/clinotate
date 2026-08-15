@@ -577,3 +577,207 @@ def test_self_parent_returns_422():
         headers=headers,
     )
     assert response.status_code == 422
+
+
+def test_combined_category_and_parent_patch_cannot_smuggle_a_cross_procedure_edge():
+    """Important finding 1: validate_parent_assignment must not read stale fields.
+
+    A single PATCH that changes category_id (moving the child to another
+    procedure) AND sets parent_label_id in the same request used to be
+    validated against the label's *pre-mutation* category_id, so the parent
+    (which is legitimately in the child's old procedure) passed validation --
+    then both fields were written, leaving a cross-procedure edge on disk.
+    """
+    headers = _auth_headers(_register_and_login("tax-hier5@example.com"))
+
+    procedure_a = client.post(
+        "/taxonomy/procedures", json={"name": "tax-hier5-proc-a"}, headers=headers
+    ).json()
+    procedure_b = client.post(
+        "/taxonomy/procedures", json={"name": "tax-hier5-proc-b"}, headers=headers
+    ).json()
+    category_a = client.post(
+        "/taxonomy/categories",
+        json={"name": "tax-hier5-cat-a", "procedure_id": procedure_a["id"]},
+        headers=headers,
+    ).json()
+    category_b = client.post(
+        "/taxonomy/categories",
+        json={"name": "tax-hier5-cat-b", "procedure_id": procedure_b["id"]},
+        headers=headers,
+    ).json()
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-hier5-et", "annotation_scope": "region"},
+        headers=headers,
+    ).json()
+
+    parent = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "tax-hier5-parent",
+            "category_id": category_a["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()
+    child = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "tax-hier5-child",
+            "category_id": category_a["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()
+
+    # child moves to category_b (procedure B) AND gets parent (still in procedure A)
+    # in the same request.
+    response = client.patch(
+        f"/taxonomy/labels/{child['id']}",
+        json={"category_id": category_b["id"], "parent_label_id": parent["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+    unchanged = client.get(f"/taxonomy/labels?category_id={category_a['id']}", headers=headers).json()
+    unchanged_child = next(label for label in unchanged if label["id"] == child["id"])
+    assert unchanged_child["category_id"] == category_a["id"]
+    assert unchanged_child["parent_label_id"] is None
+
+
+def test_changing_category_alone_is_rejected_when_it_would_orphan_the_existing_parent_edge():
+    """Important finding 2: category/evaluation_type changes must re-validate
+    existing edges, not just when parent_label_id itself is in the payload.
+
+    Reproduces the live exploit: PATCH {"category_id": <other procedure>} on a
+    label that already has a parent must now fail with 422 and leave the row
+    unchanged, instead of silently persisting a cross-procedure edge.
+    """
+    headers = _auth_headers(_register_and_login("tax-hier6@example.com"))
+
+    procedure_a = client.post(
+        "/taxonomy/procedures", json={"name": "tax-hier6-proc-a"}, headers=headers
+    ).json()
+    procedure_b = client.post(
+        "/taxonomy/procedures", json={"name": "tax-hier6-proc-b"}, headers=headers
+    ).json()
+    category_a = client.post(
+        "/taxonomy/categories",
+        json={"name": "tax-hier6-cat-a", "procedure_id": procedure_a["id"]},
+        headers=headers,
+    ).json()
+    category_b = client.post(
+        "/taxonomy/categories",
+        json={"name": "tax-hier6-cat-b", "procedure_id": procedure_b["id"]},
+        headers=headers,
+    ).json()
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-hier6-et", "annotation_scope": "region"},
+        headers=headers,
+    ).json()
+
+    parent = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "tax-hier6-parent",
+            "category_id": category_a["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()
+    child = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "tax-hier6-child",
+            "category_id": category_a["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()
+    give_parent = client.patch(
+        f"/taxonomy/labels/{child['id']}",
+        json={"parent_label_id": parent["id"]},
+        headers=headers,
+    )
+    assert give_parent.status_code == 200
+
+    response = client.patch(
+        f"/taxonomy/labels/{child['id']}",
+        json={"category_id": category_b["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+    unchanged = client.get(f"/taxonomy/labels?category_id={category_a['id']}", headers=headers).json()
+    unchanged_child = next(label for label in unchanged if label["id"] == child["id"])
+    assert unchanged_child["category_id"] == category_a["id"]
+    assert unchanged_child["parent_label_id"] == parent["id"]
+
+
+def test_changing_a_parents_evaluation_type_is_rejected_when_it_would_strand_children():
+    """Important finding 2, parent side: changing a PARENT's evaluation_type_id
+    must re-check every child edge pointing at it, not just its own edge.
+    """
+    headers = _auth_headers(_register_and_login("tax-hier7@example.com"))
+
+    procedure = client.post(
+        "/taxonomy/procedures", json={"name": "tax-hier7-proc"}, headers=headers
+    ).json()
+    category = client.post(
+        "/taxonomy/categories",
+        json={"name": "tax-hier7-cat", "procedure_id": procedure["id"]},
+        headers=headers,
+    ).json()
+    evaluation_type_region = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-hier7-et-region", "annotation_scope": "region"},
+        headers=headers,
+    ).json()
+    evaluation_type_frame = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-hier7-et-frame", "annotation_scope": "frame"},
+        headers=headers,
+    ).json()
+
+    parent = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "tax-hier7-parent",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type_region["id"],
+        },
+        headers=headers,
+    ).json()
+    child = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "tax-hier7-child",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type_region["id"],
+        },
+        headers=headers,
+    ).json()
+    give_parent = client.patch(
+        f"/taxonomy/labels/{child['id']}",
+        json={"parent_label_id": parent["id"]},
+        headers=headers,
+    )
+    assert give_parent.status_code == 200
+
+    response = client.patch(
+        f"/taxonomy/labels/{parent['id']}",
+        json={"evaluation_type_id": evaluation_type_frame["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+    unchanged = client.get(
+        f"/taxonomy/labels?evaluation_type_id={evaluation_type_region['id']}", headers=headers
+    ).json()
+    unchanged_parent = next(label for label in unchanged if label["id"] == parent["id"])
+    assert unchanged_parent["evaluation_type_id"] == evaluation_type_region["id"]

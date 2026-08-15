@@ -264,4 +264,91 @@ describe("TagForm", () => {
     expect(screen.queryByRole("option", { name: "sessile_polyp_0_Is" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "cross-procedure-label" })).not.toBeInTheDocument();
   });
+
+  it("does not offer a parent label from a different evaluation type in the same category", async () => {
+    // The "lesion" category here holds labels from two evaluation types (100
+    // "geometric" and 200 "frame_classification") -- mirroring how the real
+    // "Quality" category legitimately mixes geometric and frame_classification
+    // labels. The backend rejects a parent whose annotation_scope differs from
+    // the child's, so the dropdown must never offer one.
+    vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+      if (path === "/taxonomy/procedures") {
+        return { data: [{ id: 10, name: "colono" }], error: undefined } as never;
+      }
+      if (path === "/taxonomy/tree") {
+        return {
+          data: [
+            {
+              category: { id: 1, name: "lesion", procedure_id: 10 },
+              evaluation_types: [
+                {
+                  evaluation_type: { id: 100, name: "geometric" },
+                  labels: [
+                    {
+                      id: 50,
+                      name: "0-Is",
+                      color: "#EF4444",
+                      category_id: 1,
+                      evaluation_type_id: 100,
+                      taxonomy_version: 1,
+                      parent_label_id: null,
+                      is_abstract: false,
+                    },
+                  ],
+                },
+                {
+                  evaluation_type: { id: 200, name: "frame_classification" },
+                  labels: [
+                    {
+                      id: 70,
+                      name: "other-scope-label",
+                      color: "#00FF00",
+                      category_id: 1,
+                      evaluation_type_id: 200,
+                      taxonomy_version: 1,
+                      parent_label_id: null,
+                      is_abstract: false,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          error: undefined,
+        } as never;
+      }
+      if (path === "/taxonomy/evaluation-types") {
+        return {
+          data: [
+            { id: 100, name: "geometric" },
+            { id: 200, name: "frame_classification" },
+          ],
+          error: undefined,
+        } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+
+    render(
+      <TagForm
+        defaultProcedureId={null}
+        editingLabel={{
+          id: 51,
+          name: "sessile_polyp_0_Is",
+          color: "#00FF00",
+          category_id: 1,
+          evaluation_type_id: 100,
+          taxonomy_version: 1,
+          parent_label_id: null,
+          is_abstract: false,
+        }}
+        onDone={vi.fn()}
+      />,
+      { wrapper }
+    );
+
+    await screen.findByRole("option", { name: "0-Is" });
+
+    expect(screen.queryByRole("option", { name: "other-scope-label" })).not.toBeInTheDocument();
+  });
 });
