@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.datasets.models import SplitName, TaskType
 
@@ -42,6 +42,19 @@ class DatasetCreate(BaseModel):
     grouping_overrides: GroupingOverrides = Field(default_factory=GroupingOverrides)
     excluded_label_ids: list[int] = Field(default_factory=list)
     threshold: int = 10
+
+    @field_validator("split_config")
+    @classmethod
+    def _validate_split_config(cls, value: dict) -> dict:
+        train = value.get("train", 0)
+        val = value.get("val", 0)
+        if not isinstance(train, (int, float)) or not isinstance(val, (int, float)):
+            raise ValueError("split_config train/val must be numbers")
+        if train < 0 or val < 0:
+            raise ValueError("split_config train/val must each be >= 0")
+        if train + val > 100:
+            raise ValueError("split_config train + val must be <= 100")
+        return value
 
 
 class DatasetItemRead(BaseModel):

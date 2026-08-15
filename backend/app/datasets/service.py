@@ -230,7 +230,9 @@ def compute_balance(
 
 
 def assign_splits(
-    sequence_ids: list[int], split_config: dict
+    sequence_ids: list[int],
+    split_config: dict,
+    frame_counts_by_sequence: dict[int, int] | None = None,
 ) -> dict[int, SplitName]:
     """Assign whole sequences to splits; frames inherit their sequence's split.
 
@@ -238,33 +240,76 @@ def assign_splits(
     near-duplicates, so the same image would sit on both sides of the split and
     inflate validation metrics into meaninglessness.
 
-    With few sequences the realized fractions cannot match the requested ones
-    (7 sequences at 70/20/10 lands on 71/14/14). Fill train first, then val,
-    then test, and let the caller report realized counts.
+    Sequences are processed in DESCENDING contributed-frame-count order
+    (frames this dataset's composition actually draws from that sequence,
+    not the sequence's raw frame total), largest first. Assignment is a
+    largest-remainder-style deal: each sequence goes to whichever split is
+    currently furthest below its target share (target_pct * total, adjusted
+    for a guaranteed minimum -- see below). Dealing largest-first into
+    "most under target" rather than block-filling train, then val, then
+    test means the few sequences that actually carry content get spread
+    across all three splits instead of all landing in train just because
+    train's quota happens to be large enough to swallow every one of them.
+
+    With few sequences the realized fractions cannot match the requested
+    ones (7 sequences at 70/20/10 lands on 71/14/14) -- expected, and the
+    caller reports realized counts rather than trying to force them even.
+
+    Whenever there are enough sequences to populate a split, that split is
+    guaranteed at least one: train always gets >=1; val gets >=1 once there
+    are 2+ sequences; test gets >=1 once there are 3+. Without this,
+    integer-truncation of small percentages (e.g. 6 sequences at 80/15
+    truncates val to zero) can silently produce an empty validation or test
+    split, which cannot validate anything.
     """
-    ordered = sorted(sequence_ids)
+    frame_counts_by_sequence = frame_counts_by_sequence or {}
+    ordered = sorted(
+        sequence_ids,
+        key=lambda sid: (-frame_counts_by_sequence.get(sid, 0), sid),
+    )
     total = len(ordered)
     if total == 0:
         return {}
 
     train_pct = split_config.get("train", 70) / 100
     val_pct = split_config.get("val", 20) / 100
+    test_pct = max(1 - train_pct - val_pct, 0.0)
+    targets = {"train": total * train_pct, "val": total * val_pct, "test": total * test_pct}
 
-    train_n = int(total * train_pct)
-    val_n = int(total * val_pct)
-    # Guarantee at least one training sequence whenever anything was selected.
-    if train_n == 0:
-        train_n = 1
-        val_n = min(val_n, max(total - train_n, 0))
+    # Minimums come first and are satisfied directly against the
+    # descending-content order, so the guarantee actually lands on
+    # content-bearing sequences when there are enough of them to go
+    # around, rather than being satisfiable by an empty sequence. train
+    # always gets >=1; val gets >=1 once there are 2+ sequences; test
+    # gets >=1 once there are 3+ -- these sum to at most `total` by
+    # construction (1+1+1 <= total whenever total >= 3), so they never
+    # compete with each other for the same sequence.
+    min_order = ["train", "val", "test"]
+    min_n = {
+        "train": 1 if total >= 1 else 0,
+        "val": 1 if total >= 2 else 0,
+        "test": 1 if total >= 3 else 0,
+    }
 
+    counts = {"train": 0, "val": 0, "test": 0}
     assignment: dict[int, SplitName] = {}
-    for index, sequence_id in enumerate(ordered):
-        if index < train_n:
-            assignment[sequence_id] = SplitName.TRAIN
-        elif index < train_n + val_n:
-            assignment[sequence_id] = SplitName.VAL
-        else:
-            assignment[sequence_id] = SplitName.TEST
+    remaining = list(ordered)
+
+    for name in min_order:
+        while counts[name] < min_n[name] and remaining:
+            sequence_id = remaining.pop(0)
+            counts[name] += 1
+            assignment[sequence_id] = SplitName(name)
+
+    # Deal the rest, largest-content-first, to whichever split is
+    # currently furthest below its (possibly fractional) target share --
+    # a largest-remainder-style apportionment that spreads any remaining
+    # content across all three splits instead of block-filling train.
+    for sequence_id in remaining:
+        chosen = max(counts, key=lambda name: targets[name] - counts[name])
+        counts[chosen] += 1
+        assignment[sequence_id] = SplitName(chosen)
+
     return assignment
 
 
@@ -286,9 +331,25 @@ def create_dataset(session: Session, payload, user) -> Dataset:
     )
     composition = collect_frames(session, payload.sequence_ids, payload.task_type, excluded)
 
+    frame_ids = [item.frame_id for item in composition]
+    sequence_by_frame = dict(
+        session.query(Frame.id, Frame.sequence_id).filter(Frame.id.in_(frame_ids)).all()
+    ) if frame_ids else {}
+
+    # taxonomy_version is pinned from the annotations this dataset actually
+    # includes -- never re-derived from the global Label table, which can
+    # carry newer/unrelated taxonomy versions (e.g. test/import debris) that
+    # have nothing to do with what this dataset's frames were labeled with.
+    # Falls back to 1 for an all-negatives or empty selection, where no
+    # annotation exists to pin a version from.
+    all_annotation_ids = [aid for item in composition for aid in item.annotation_ids]
     taxonomy_version = (
-        session.query(func.max(Label.taxonomy_version)).scalar() or 1
-    )
+        session.query(func.max(Annotation.taxonomy_version))
+        .filter(Annotation.id.in_(all_annotation_ids))
+        .scalar()
+        if all_annotation_ids
+        else None
+    ) or 1
 
     dataset = Dataset(
         name=payload.name,
@@ -314,12 +375,13 @@ def create_dataset(session: Session, payload, user) -> Dataset:
     session.add(dataset)
     session.flush()
 
-    frame_ids = [item.frame_id for item in composition]
-    sequence_by_frame = dict(
-        session.query(Frame.id, Frame.sequence_id).filter(Frame.id.in_(frame_ids)).all()
-    ) if frame_ids else {}
+    frame_counts_by_sequence: dict[int, int] = {}
+    for sequence_id in sequence_by_frame.values():
+        frame_counts_by_sequence[sequence_id] = frame_counts_by_sequence.get(sequence_id, 0) + 1
 
-    split_by_sequence = assign_splits(payload.sequence_ids, payload.split_config)
+    split_by_sequence = assign_splits(
+        payload.sequence_ids, payload.split_config, frame_counts_by_sequence
+    )
 
     for item in composition:
         sequence_id = sequence_by_frame.get(item.frame_id)
