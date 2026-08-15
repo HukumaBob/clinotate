@@ -44,6 +44,10 @@ export function TagForm({
     editingLabel ? String(editingLabel.evaluation_type_id) : ""
   );
   const [color, setColor] = useState(editingLabel?.color ?? COLOR_PRESETS[0]);
+  const [parentLabelId, setParentLabelId] = useState<string>(
+    editingLabel?.parent_label_id != null ? String(editingLabel.parent_label_id) : ""
+  );
+  const [isAbstract, setIsAbstract] = useState<boolean>(editingLabel?.is_abstract ?? false);
   const [error, setError] = useState<string | null>(null);
 
   const procedures = proceduresQuery.data ?? [];
@@ -51,6 +55,13 @@ export function TagForm({
   const categories = procedureId
     ? allCategories.filter((category) => String(category.procedure_id) === procedureId)
     : [];
+
+  const labelsInSelectedCategory = (treeQuery.data ?? [])
+    .find((node) => String(node.category.id) === categoryId)
+    ?.evaluation_types.flatMap((evaluationType) => evaluationType.labels) ?? [];
+  const parentCandidates = labelsInSelectedCategory.filter(
+    (candidate) => candidate.id !== editingLabel?.id
+  );
 
   useEffect(() => {
     if (editingCategory && !procedureId) {
@@ -81,7 +92,8 @@ export function TagForm({
       color,
       category_id: Number(categoryId),
       evaluation_type_id: Number(evaluationTypeId),
-      is_abstract: false,
+      parent_label_id: parentLabelId === "" ? null : Number(parentLabelId),
+      is_abstract: isAbstract,
     };
 
     const result = editingLabel
@@ -151,6 +163,29 @@ export function TagForm({
             </option>
           ))}
         </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span>Parent label</span>
+        <select
+          className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
+          value={parentLabelId}
+          onChange={(e) => setParentLabelId(e.target.value)}
+        >
+          <option value="">None</option>
+          {parentCandidates.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {candidate.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={isAbstract}
+          onChange={(e) => setIsAbstract(e.target.checked)}
+        />
+        <span>Abstract (grouping only, not annotatable)</span>
       </label>
       <div className="flex flex-col gap-1">
         <span>Color</span>
