@@ -201,6 +201,9 @@ export function SequenceGridPage() {
   const hasNoFindingsMarkedForAllSelected =
     selectedFrames.length > 0 && selectedFrames.every((frame) => frame.no_findings_reviewed);
 
+  const markNoFindingsResult = bulkMarkNoFindings.data;
+  const skippedCount = markNoFindingsResult?.skipped_frame_ids?.length ?? 0;
+
   return (
     <div className="min-h-full bg-gray-950 text-gray-100">
       <div className="sticky top-0 z-10 bg-gray-950">
@@ -228,6 +231,11 @@ export function SequenceGridPage() {
           hasNoFindingsMarkedForAllSelected={hasNoFindingsMarkedForAllSelected}
           onToggleNoFindings={handleToggleNoFindings}
         />
+        {skippedCount > 0 && (
+          <div className="border-t border-gray-800 bg-gray-950 px-4 py-2 text-sm text-amber-400">
+            {markNoFindingsResult?.marked_frame_ids.length} marked, {skippedCount} skipped (already annotated)
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-3 p-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {(framesQuery.data ?? []).map((frame) => (

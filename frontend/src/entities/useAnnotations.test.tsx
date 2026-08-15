@@ -79,7 +79,7 @@ describe("useBulkMarkNoFindings", () => {
 describe("useBulkClearNoFindings", () => {
   it("posts frame ids to the bulk-clear-no-findings endpoint", async () => {
     vi.mocked(apiClient.POST).mockResolvedValue({
-      data: { cleared_frame_ids: [1, 2], skipped_frame_ids: [] },
+      data: { frame_ids: [1, 2] },
     } as never);
 
     const { result } = renderHook(() => useBulkClearNoFindings(42), { wrapper });

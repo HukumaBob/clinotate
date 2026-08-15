@@ -517,4 +517,108 @@ describe("SequenceGridPage", () => {
       }),
     );
   });
+
+  it("shows a skipped-frame count after bulk-mark-no-findings reports skipped frames", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: {
+            id: 9,
+            name: "Seq",
+            video_id: null,
+            procedure_id: 7,
+            start_time: 0,
+            duration: 0,
+            annotation_count: 0,
+            crop_box: null,
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined } as never;
+      }
+      if (path.includes("/frames")) {
+        return {
+          data: [
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
+          ],
+          error: undefined,
+        } as never;
+      }
+      if (path === "/taxonomy/tree") {
+        return { data: [], error: undefined } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { marked_frame_ids: [1], skipped_frame_ids: [2] },
+      error: undefined,
+    } as never);
+
+    renderAtSequence("9");
+
+    fireEvent.click(screen.getByRole("button", { name: /select/i }));
+
+    const images = await screen.findAllByAltText(/Frame \d/);
+    images.forEach((img) => fireEvent.click(img.closest("button")!));
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark no findings" }));
+
+    expect(await screen.findByText("1 marked, 1 skipped (already annotated)")).toBeInTheDocument();
+  });
+
+  it("does not show a skipped-frame count when bulk-mark-no-findings reports no skipped frames", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: {
+            id: 9,
+            name: "Seq",
+            video_id: null,
+            procedure_id: 7,
+            start_time: 0,
+            duration: 0,
+            annotation_count: 0,
+            crop_box: null,
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined } as never;
+      }
+      if (path.includes("/frames")) {
+        return {
+          data: [
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
+          ],
+          error: undefined,
+        } as never;
+      }
+      if (path === "/taxonomy/tree") {
+        return { data: [], error: undefined } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { marked_frame_ids: [1, 2], skipped_frame_ids: [] },
+      error: undefined,
+    } as never);
+
+    renderAtSequence("9");
+
+    fireEvent.click(screen.getByRole("button", { name: /select/i }));
+
+    const images = await screen.findAllByAltText(/Frame \d/);
+    images.forEach((img) => fireEvent.click(img.closest("button")!));
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark no findings" }));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByText(/skipped \(already annotated\)/)).not.toBeInTheDocument();
+  });
 });

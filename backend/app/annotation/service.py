@@ -166,8 +166,8 @@ def bulk_mark_no_findings(
 def bulk_clear_no_findings(session: Session, frame_ids: list[int]) -> list[int]:
     _require_frames_exist(session, frame_ids)
 
-    for frame_id in frame_ids:
-        frame = session.get(Frame, frame_id)
+    frames = session.query(Frame).filter(Frame.id.in_(frame_ids)).all()
+    for frame in frames:
         frame.no_findings_reviewed = False
         frame.no_findings_reviewed_by_id = None
         frame.no_findings_reviewed_at = None
