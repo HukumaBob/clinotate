@@ -59,4 +59,18 @@ describe("BalancePanel", () => {
     const severity = screen.getByTestId("severity-reference");
     expect(severity).toHaveTextContent("severe_imbalance");
   });
+
+  it("labels the checkbox to match its checked polarity (checked = included)", () => {
+    renderPanel();
+    const checkbox = screen.getByTestId("exclude-1") as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    expect(screen.getByLabelText("Include polyp")).toBe(checkbox);
+  });
+
+  it("renders no collapse toggle for a row not in collapsibleLabelIds", () => {
+    renderPanel({ collapsibleLabelIds: new Set([1]) });
+    expect(screen.getByTestId("collapse-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("collapse-2")).not.toBeInTheDocument();
+    expect(screen.getByText("ileum")).toBeInTheDocument();
+  });
 });

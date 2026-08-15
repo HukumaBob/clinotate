@@ -8,6 +8,11 @@ interface BalancePanelProps {
   excluded: Set<number>;
   onToggleCollapse: (labelId: number) => void;
   onToggleExclude: (labelId: number) => void;
+  /** Label ids whose row may be collapsed (i.e. has children in the taxonomy
+   * tree). Defaults to "every row is collapsible" so existing callers that
+   * don't pass it keep the old behavior. The report itself (ClassCountRead)
+   * carries no parent/child signal, so this must come from the caller. */
+  collapsibleLabelIds?: Set<number>;
 }
 
 export function BalancePanel({
@@ -16,6 +21,7 @@ export function BalancePanel({
   excluded,
   onToggleCollapse,
   onToggleExclude,
+  collapsibleLabelIds,
 }: BalancePanelProps) {
   const maxInstances = Math.max(1, ...report.classes.map((c) => c.instances));
 
@@ -50,19 +56,23 @@ export function BalancePanel({
             <input
               type="checkbox"
               data-testid={`exclude-${entry.label_id}`}
-              aria-label={`Exclude ${entry.name}`}
+              aria-label={`Include ${entry.name}`}
               checked={!excluded.has(entry.label_id)}
               onChange={() => onToggleExclude(entry.label_id)}
             />
-            <button
-              type="button"
-              data-testid={`collapse-${entry.label_id}`}
-              aria-label={`Toggle grouping for ${entry.name}`}
-              className="w-32 truncate text-left text-gray-100 hover:text-blue-400"
-              onClick={() => onToggleCollapse(entry.label_id)}
-            >
-              {collapsed.has(entry.label_id) ? "▸" : "▾"} {entry.name}
-            </button>
+            {collapsibleLabelIds === undefined || collapsibleLabelIds.has(entry.label_id) ? (
+              <button
+                type="button"
+                data-testid={`collapse-${entry.label_id}`}
+                aria-label={`Toggle grouping for ${entry.name}`}
+                className="w-32 truncate text-left text-gray-100 hover:text-blue-400"
+                onClick={() => onToggleCollapse(entry.label_id)}
+              >
+                {collapsed.has(entry.label_id) ? "▸" : "▾"} {entry.name}
+              </button>
+            ) : (
+              <span className="w-32 truncate text-left text-gray-100">{entry.name}</span>
+            )}
             <div className="h-3 flex-1 rounded bg-gray-800">
               <div
                 className="h-3 rounded bg-blue-600"
