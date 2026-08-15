@@ -63,6 +63,36 @@ decided during execution — it's the map between "what the plan said" and
 - **TDD:** every backend task and every frontend task with logic gets a
   failing test before the implementation.
 
+## Git workflow: work directly on `master`, no branches/worktrees by default
+
+This is a single-developer project (one person, no team to isolate work
+from). Branches and git worktrees exist to protect against concurrent work
+colliding — that risk doesn't apply here, and every worktree used so far
+has instead caused real sessions to go missing after a reboot (the agent
+starts work in `.claude/worktrees/<name>`, the host reboots or the
+terminal closes, and the next session looks at the primary directory,
+finds nothing, and reports the work as lost even though it was sitting
+committed in a worktree branch the whole time).
+
+- **Default:** commit directly to `master` in the primary working
+  directory. Do not create a feature branch, do not create a git worktree,
+  do not ask "should I merge this?" — there is nothing to merge, it's
+  already on `master`.
+- **Do not invoke** `superpowers:using-git-worktrees`,
+  `superpowers:finishing-a-development-branch`, or any workflow that
+  creates a branch/worktree, unless the user explicitly asks for a branch
+  or a worktree by name in that conversation.
+- **Rare exception:** an explicit, throwaway experiment the user wants
+  fully isolated and easy to discard (e.g. "try X in a scratch branch,
+  I might not keep it"). Even then, ask before creating it, and prefer
+  deleting/merging it back to `master` the same session rather than
+  leaving it to survive a reboot unmerged.
+- If you find an old worktree or branch left over from before this rule
+  existed, treat it like any in-progress work you didn't expect: don't
+  delete it silently, but do fold it back into `master` (or ask) rather
+  than leaving it stranded — see the recovery approach logged in
+  ROADMAP.md around the EvaluationType annotation-scope work.
+
 ## Running the stack
 
 ```bash
