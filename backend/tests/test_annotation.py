@@ -745,3 +745,106 @@ def test_bulk_clear_classification_scopes_by_evaluation_type_not_just_category()
     annotations = client.get(f"/annotation/frames/{frame_id}/annotations", headers=_headers(token)).json()
     label_ids = {a["label_id"] for a in annotations}
     assert label_ids == {morphological_id}
+
+
+def test_bulk_mark_no_findings_sets_flag_on_unannotated_frames():
+    token = _register_and_login("marknf1@example.com")
+    headers = _headers(token)
+    frame_id_1 = _create_frame(token)
+    frame_id_2 = _create_frame(token)
+
+    response = client.post(
+        "/annotation/frames/bulk-mark-no-findings",
+        json={"frame_ids": [frame_id_1, frame_id_2]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body["marked_frame_ids"]) == {frame_id_1, frame_id_2}
+    assert body["skipped_frame_ids"] == []
+
+    from app.db import SessionLocal
+    from app.media.models import Frame
+
+    session = SessionLocal()
+    for frame_id in (frame_id_1, frame_id_2):
+        frame = session.get(Frame, frame_id)
+        assert frame.no_findings_reviewed is True
+        assert frame.no_findings_reviewed_by_id is not None
+        assert frame.no_findings_reviewed_at is not None
+    session.close()
+
+
+def test_bulk_mark_no_findings_skips_frames_with_existing_annotations():
+    token = _register_and_login("marknf2@example.com")
+    headers = _headers(token)
+    frame_id = _create_frame(token)
+    label_id = _create_label_in_category(token, "marknf-skip-landmark", "antrum")
+    client.post(
+        f"/annotation/frames/{frame_id}/annotations",
+        json={"label_id": label_id},
+        headers=headers,
+    )
+
+    response = client.post(
+        "/annotation/frames/bulk-mark-no-findings",
+        json={"frame_ids": [frame_id]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["marked_frame_ids"] == []
+    assert body["skipped_frame_ids"] == [frame_id]
+
+    from app.db import SessionLocal
+    from app.media.models import Frame
+
+    session = SessionLocal()
+    frame = session.get(Frame, frame_id)
+    assert frame.no_findings_reviewed is False
+    session.close()
+
+
+def test_bulk_mark_no_findings_404s_for_unknown_frame_id():
+    token = _register_and_login("marknf3@example.com")
+    headers = _headers(token)
+
+    response = client.post(
+        "/annotation/frames/bulk-mark-no-findings",
+        json={"frame_ids": [999999999]},
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+
+
+def test_bulk_clear_no_findings_unsets_flag():
+    token = _register_and_login("clearnf1@example.com")
+    headers = _headers(token)
+    frame_id = _create_frame(token)
+    client.post(
+        "/annotation/frames/bulk-mark-no-findings",
+        json={"frame_ids": [frame_id]},
+        headers=headers,
+    )
+
+    response = client.post(
+        "/annotation/frames/bulk-clear-no-findings",
+        json={"frame_ids": [frame_id]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["frame_ids"] == [frame_id]
+
+    from app.db import SessionLocal
+    from app.media.models import Frame
+
+    session = SessionLocal()
+    frame = session.get(Frame, frame_id)
+    assert frame.no_findings_reviewed is False
+    assert frame.no_findings_reviewed_by_id is None
+    assert frame.no_findings_reviewed_at is None
+    session.close()

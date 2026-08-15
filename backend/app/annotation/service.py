@@ -1,4 +1,5 @@
 import io
+from datetime import datetime, timezone
 
 import numpy as np
 from fastapi import HTTPException, status
@@ -128,6 +129,47 @@ def bulk_clear_classification(
         ).delete(synchronize_session=False)
         session.commit()
 
+    return frame_ids
+
+
+def bulk_mark_no_findings(
+    session: Session, frame_ids: list[int], reviewed_by: User
+) -> tuple[list[int], list[int]]:
+    _require_frames_exist(session, frame_ids)
+
+    marked: list[int] = []
+    skipped: list[int] = []
+    now = datetime.now(timezone.utc)
+
+    for frame_id in frame_ids:
+        has_annotation = (
+            session.query(Annotation).filter(Annotation.frame_id == frame_id).first()
+            is not None
+        )
+        if has_annotation:
+            skipped.append(frame_id)
+            continue
+
+        frame = session.get(Frame, frame_id)
+        frame.no_findings_reviewed = True
+        frame.no_findings_reviewed_by_id = reviewed_by.id
+        frame.no_findings_reviewed_at = now
+        marked.append(frame_id)
+
+    session.commit()
+    return marked, skipped
+
+
+def bulk_clear_no_findings(session: Session, frame_ids: list[int]) -> list[int]:
+    _require_frames_exist(session, frame_ids)
+
+    for frame_id in frame_ids:
+        frame = session.get(Frame, frame_id)
+        frame.no_findings_reviewed = False
+        frame.no_findings_reviewed_by_id = None
+        frame.no_findings_reviewed_at = None
+
+    session.commit()
     return frame_ids
 
 

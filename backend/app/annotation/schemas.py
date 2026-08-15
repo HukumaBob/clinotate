@@ -30,6 +30,23 @@ class BulkClearClassificationRequest(BaseModel):
     evaluation_type_id: int
 
 
+class BulkMarkNoFindingsRequest(BaseModel):
+    frame_ids: list[int]
+
+
+class BulkMarkNoFindingsResult(BaseModel):
+    marked_frame_ids: list[int]
+    skipped_frame_ids: list[int]
+
+
+class BulkClearNoFindingsRequest(BaseModel):
+    frame_ids: list[int]
+
+
+class BulkClearNoFindingsResult(BaseModel):
+    frame_ids: list[int]
+
+
 class AnnotationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

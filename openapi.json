@@ -2505,6 +2505,98 @@
         ]
       }
     },
+    "/annotation/frames/bulk-mark-no-findings": {
+      "post": {
+        "tags": [
+          "annotation"
+        ],
+        "summary": "Bulk Mark No Findings Endpoint",
+        "operationId": "bulk_mark_no_findings_endpoint_annotation_frames_bulk_mark_no_findings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkMarkNoFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkMarkNoFindingsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/annotation/frames/bulk-clear-no-findings": {
+      "post": {
+        "tags": [
+          "annotation"
+        ],
+        "summary": "Bulk Clear No Findings Endpoint",
+        "operationId": "bulk_clear_no_findings_endpoint_annotation_frames_bulk_clear_no_findings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkClearNoFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkClearNoFindingsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/annotation/annotations/{annotation_id}/status": {
       "patch": {
         "tags": [
@@ -3295,6 +3387,78 @@
           "evaluation_type_id"
         ],
         "title": "BulkClearClassificationRequest"
+      },
+      "BulkClearNoFindingsRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Frame Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids"
+        ],
+        "title": "BulkClearNoFindingsRequest"
+      },
+      "BulkClearNoFindingsResult": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Frame Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids"
+        ],
+        "title": "BulkClearNoFindingsResult"
+      },
+      "BulkMarkNoFindingsRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Frame Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids"
+        ],
+        "title": "BulkMarkNoFindingsRequest"
+      },
+      "BulkMarkNoFindingsResult": {
+        "properties": {
+          "marked_frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Marked Frame Ids"
+          },
+          "skipped_frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Skipped Frame Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "marked_frame_ids",
+          "skipped_frame_ids"
+        ],
+        "title": "BulkMarkNoFindingsResult"
       },
       "CategoryCreate": {
         "properties": {

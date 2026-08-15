@@ -9,11 +9,17 @@ from app.annotation.schemas import (
     BulkClassifyRequest,
     BulkClassifyResult,
     BulkClearClassificationRequest,
+    BulkClearNoFindingsRequest,
+    BulkClearNoFindingsResult,
+    BulkMarkNoFindingsRequest,
+    BulkMarkNoFindingsResult,
     MaskPostprocessUpdate,
 )
 from app.annotation.service import (
     bulk_classify_frames,
     bulk_clear_classification,
+    bulk_clear_no_findings,
+    bulk_mark_no_findings,
     create_classification_annotation,
     reapply_mask_postprocess,
     require_reviewer_or_admin,
@@ -87,6 +93,25 @@ def bulk_clear_classification_endpoint(
         session, payload.frame_ids, payload.category_id, payload.evaluation_type_id
     )
     return BulkClassifyResult(frame_ids=frame_ids)
+
+
+@router.post("/frames/bulk-mark-no-findings", response_model=BulkMarkNoFindingsResult)
+def bulk_mark_no_findings_endpoint(
+    payload: BulkMarkNoFindingsRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> BulkMarkNoFindingsResult:
+    marked, skipped = bulk_mark_no_findings(session, payload.frame_ids, current_user)
+    return BulkMarkNoFindingsResult(marked_frame_ids=marked, skipped_frame_ids=skipped)
+
+
+@router.post("/frames/bulk-clear-no-findings", response_model=BulkClearNoFindingsResult)
+def bulk_clear_no_findings_endpoint(
+    payload: BulkClearNoFindingsRequest,
+    session: Session = Depends(get_session),
+) -> BulkClearNoFindingsResult:
+    frame_ids = bulk_clear_no_findings(session, payload.frame_ids)
+    return BulkClearNoFindingsResult(frame_ids=frame_ids)
 
 
 @router.patch("/annotations/{annotation_id}/status", response_model=AnnotationRead)
