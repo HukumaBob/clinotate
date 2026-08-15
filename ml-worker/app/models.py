@@ -57,7 +57,7 @@ class Frame(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     no_findings_reviewed: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Plain int, not a ForeignKey: same reasoning as Label.category_id above
+    # Plain int, not a ForeignKey: same reasoning as Label.category_id below
     # -- ml-worker has no duplicate `users` table mapping, and declaring an
     # unresolvable FK breaks any real ORM write to this column (verified via
     # NoReferencedTableError on session.commit()). The real FK constraint
