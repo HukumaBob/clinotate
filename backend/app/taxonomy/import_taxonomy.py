@@ -2,7 +2,7 @@ from collections import deque
 
 from sqlalchemy.orm import Session
 
-from app.taxonomy.models import Category, EvaluationType, Label, Procedure
+from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label, Procedure
 
 
 def _resolve_category_key(tag_key: str, parent_keys_by_child_key: dict[str, list[str]]) -> str | None:
@@ -45,6 +45,10 @@ def import_taxonomy(session: Session, data: dict) -> None:
             session.add(procedure)
             session.flush()
         procedure_by_name[name] = procedure
+
+    scope_by_evaluation_type_name: dict[str, AnnotationScope] = {
+        entry["name"]: AnnotationScope(entry["scope"]) for entry in data["evaluation_types"]
+    }
 
     label_entries_by_key = {entry["key"]: entry for entry in data["labels"]}
 
@@ -89,7 +93,15 @@ def import_taxonomy(session: Session, data: dict) -> None:
                 session.query(EvaluationType).filter_by(name=evaluation_type_name).one_or_none()
             )
             if evaluation_type is None:
-                evaluation_type = EvaluationType(name=evaluation_type_name)
+                if evaluation_type_name not in scope_by_evaluation_type_name:
+                    raise ValueError(
+                        f"label_type '{evaluation_type_name}' has no corresponding entry in "
+                        f"evaluation_types -- add its scope before importing"
+                    )
+                evaluation_type = EvaluationType(
+                    name=evaluation_type_name,
+                    annotation_scope=scope_by_evaluation_type_name[evaluation_type_name],
+                )
                 session.add(evaluation_type)
                 session.flush()
             evaluation_type_by_name[evaluation_type_name] = evaluation_type

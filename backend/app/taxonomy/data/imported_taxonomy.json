@@ -3,6 +3,10 @@
     "egds",
     "colono"
   ],
+  "evaluation_types": [
+    {"name": "geometric", "scope": "region"},
+    {"name": "morphological", "scope": "region"}
+  ],
   "labels": [
     {
       "key": "category::anatomy::egds",

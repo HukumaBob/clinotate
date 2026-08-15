@@ -1,11 +1,12 @@
 import app.main  # noqa: F401 -- registers every model on Base.metadata for test_engine's create_all/drop_all
 from app.taxonomy.import_taxonomy import import_taxonomy
-from app.taxonomy.models import Category, EvaluationType, Label, Procedure
+from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label, Procedure
 
 
 def _sample_data() -> dict:
     return {
         "procedures": ["egds"],
+        "evaluation_types": [{"name": "geometric", "scope": "region"}],
         "labels": [
             {
                 "key": "category::anatomy::egds",
@@ -24,6 +25,44 @@ def _sample_data() -> dict:
         ],
         "relations": [{"parent_key": "category::anatomy::egds", "child_key": "pharynx::egds"}],
     }
+
+
+def test_sets_annotation_scope_from_evaluation_types_array(db_session):
+    import_taxonomy(db_session, _sample_data())
+
+    evaluation_type = db_session.query(EvaluationType).filter_by(name="geometric").one()
+    assert evaluation_type.annotation_scope == AnnotationScope.REGION
+
+
+def test_raises_clear_error_when_label_type_has_no_evaluation_types_entry(db_session):
+    data = {
+        "procedures": ["egds"],
+        "evaluation_types": [],
+        "labels": [
+            {
+                "key": "category::anatomy::egds",
+                "name": "Anatomy",
+                "procedure": "egds",
+                "color": "#FFFFFF",
+                "label_type": "geometric",
+            },
+            {
+                "key": "pharynx::egds",
+                "name": "pharynx",
+                "procedure": "egds",
+                "color": "#2E81DA",
+                "label_type": "geometric",
+            },
+        ],
+        "relations": [{"parent_key": "category::anatomy::egds", "child_key": "pharynx::egds"}],
+    }
+
+    try:
+        import_taxonomy(db_session, data)
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "geometric" in str(exc)
+        assert "evaluation_types" in str(exc)
 
 
 def test_creates_procedure_category_evaluation_type_and_label(db_session):
@@ -72,6 +111,7 @@ def test_resolves_category_transitively_through_intermediate_tag_parent(db_sessi
     # resolver must walk up the chain rather than only checking one hop.
     data = {
         "procedures": ["egds"],
+        "evaluation_types": [{"name": "geometric", "scope": "region"}],
         "labels": [
             {
                 "key": "category::anatomy::egds",
@@ -113,6 +153,7 @@ def test_resolves_multi_parent_tag_to_first_path_in_relations_order(db_session):
     # rule, the category reached via the FIRST relation in list order wins.
     data = {
         "procedures": ["egds"],
+        "evaluation_types": [{"name": "geometric", "scope": "region"}],
         "labels": [
             {
                 "key": "category::anatomy::egds",
@@ -155,6 +196,7 @@ def test_skips_tag_with_self_loop_relation_and_no_other_parent(db_session):
     # skipped, not crash or infinite-loop.
     data = {
         "procedures": ["colono"],
+        "evaluation_types": [{"name": "geometric", "scope": "region"}],
         "labels": [
             {
                 "key": "category::quality::colono",
