@@ -25,6 +25,8 @@ interface SequenceGridToolbarProps {
   frameClassificationEvaluationTypeName?: string;
   onAssignClassification?: (labelId: number) => void;
   onClearClassification?: (categoryId: number, evaluationTypeId: number) => void;
+  hasNoFindingsMarkedForAllSelected?: boolean;
+  onToggleNoFindings?: () => void;
 }
 
 export function SequenceGridToolbar({
@@ -48,6 +50,8 @@ export function SequenceGridToolbar({
   frameClassificationEvaluationTypeName = "Frame classification",
   onAssignClassification = () => {},
   onClearClassification = () => {},
+  hasNoFindingsMarkedForAllSelected = false,
+  onToggleNoFindings = () => {},
 }: SequenceGridToolbarProps) {
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
@@ -175,6 +179,15 @@ export function SequenceGridToolbar({
               className="rounded px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-40"
             >
               Clear
+            </button>
+            <button
+              type="button"
+              aria-label={hasNoFindingsMarkedForAllSelected ? "Unmark no findings" : "Mark no findings"}
+              onClick={onToggleNoFindings}
+              disabled={selectedCount === 0}
+              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+            >
+              {hasNoFindingsMarkedForAllSelected ? "Unmark no findings" : "Mark no findings"}
             </button>
             <input
               type="number"

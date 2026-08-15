@@ -600,4 +600,40 @@ describe("SequenceGridToolbar classification controls", () => {
     expect(screen.getByRole("button", { name: "Assign" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
   });
+
+  it("calls onToggleNoFindings when Mark no findings is clicked", () => {
+    const onToggleNoFindings = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode={true}
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        onToggleNoFindings={onToggleNoFindings}
+        hasNoFindingsMarkedForAllSelected={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark no findings" }));
+
+    expect(onToggleNoFindings).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Unmark when every selected frame is already marked no findings", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode={true}
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        hasNoFindingsMarkedForAllSelected={true}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Unmark no findings" })).toBeInTheDocument();
+  });
 });
