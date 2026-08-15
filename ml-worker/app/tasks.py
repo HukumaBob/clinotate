@@ -219,6 +219,11 @@ def run_sam3_predict(job_id: int, adapter: Sam3Adapter | None = None) -> None:
         )
         session.add(annotation)
 
+        if frame.no_findings_reviewed:
+            frame.no_findings_reviewed = False
+            frame.no_findings_reviewed_by_id = None
+            frame.no_findings_reviewed_at = None
+
         job.status = JobStatus.SUCCEEDED
         job.progress = 100
         job.result_ref = mask_key
@@ -275,6 +280,11 @@ def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
                 job_id=job_id,
             )
             session.add(annotation)
+
+            if frame.no_findings_reviewed:
+                frame.no_findings_reviewed = False
+                frame.no_findings_reviewed_by_id = None
+                frame.no_findings_reviewed_at = None
 
             job.progress = int(((index + 1) / len(frames)) * 100)
             _record_vram_usage(job)
@@ -346,6 +356,11 @@ def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
             job_id=job_id,
         )
         session.add(annotation)
+
+        if frame.no_findings_reviewed:
+            frame.no_findings_reviewed = False
+            frame.no_findings_reviewed_by_id = None
+            frame.no_findings_reviewed_at = None
 
         job.status = JobStatus.SUCCEEDED
         job.progress = 100
@@ -453,6 +468,11 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
                 job_id=job_id,
             )
             session.add(annotation)
+
+            if frame.no_findings_reviewed:
+                frame.no_findings_reviewed = False
+                frame.no_findings_reviewed_by_id = None
+                frame.no_findings_reviewed_at = None
 
             job.progress = int(((index + 1) / len(tracked_frames)) * 100)
             _record_vram_usage(job)
