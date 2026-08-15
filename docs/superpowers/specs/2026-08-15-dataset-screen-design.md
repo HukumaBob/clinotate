@@ -199,6 +199,21 @@ names (threshold configurable, default 10 — the same floor the reference's
 own `severity` uses via `min_count < 10`). Gini, ratio and severity appear
 below, as reference figures.
 
+### One deliberate divergence from the Django reference's severity ladder
+
+The reference checks `min_count < 10` only inside the `severe_imbalance`
+branch, which sits *after* the balanced/mild/moderate branches. That makes
+the clause unreachable whenever ratio and Gini already match an earlier,
+milder branch: `{a: 20, b: 9}` returns `mild_imbalance` there, despite a
+class with nine examples.
+
+This implementation gates the three milder branches on `min_count >= 10`
+instead, so that input returns `severe_imbalance`. The divergence is
+intentional: reporting "balanced" for a dataset whose smallest class cannot
+train is precisely the misleading signal this whole section exists to avoid.
+Verified against the reference implementation directly, so this is a
+correction, not drift.
+
 ## API
 
 ```
