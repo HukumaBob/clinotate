@@ -136,11 +136,17 @@ export function DatasetsPage() {
   }
 
   const splitExceeds100 = trainPercent + valPercent > 100;
+  const noSequencesSelected = selectedSequenceIds.size === 0;
   const canSave =
     name.trim().length > 0 &&
     !splitExceeds100 &&
     !createDataset.isPending &&
-    selectedSequenceIds.size > 0;
+    !noSequencesSelected;
+
+  const describedByIds = [
+    splitExceeds100 ? "split-exceeds-100-message" : null,
+    noSequencesSelected ? "no-sequences-selected-message" : null,
+  ].filter((id): id is string => id !== null);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-gray-950 p-8 text-gray-100">
@@ -259,18 +265,21 @@ export function DatasetsPage() {
                 type="button"
                 className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
                 disabled={!canSave}
+                aria-describedby={describedByIds.length > 0 ? describedByIds.join(" ") : undefined}
                 onClick={handleSave}
               >
                 Save dataset
               </button>
             </div>
             {splitExceeds100 && (
-              <p className="text-xs text-amber-400">
+              <p id="split-exceeds-100-message" role="alert" className="text-xs text-amber-400">
                 Train % and Val % must not exceed 100 combined.
               </p>
             )}
-            {selectedSequenceIds.size === 0 && (
-              <p className="text-xs text-gray-500">Select at least one sequence to save a dataset.</p>
+            {noSequencesSelected && (
+              <p id="no-sequences-selected-message" className="text-xs text-gray-500">
+                Select at least one sequence to save a dataset.
+              </p>
             )}
           </div>
 

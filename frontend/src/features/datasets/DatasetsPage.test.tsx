@@ -98,8 +98,12 @@ describe("DatasetsPage", () => {
     await userEvent.clear(valInput);
     await userEvent.type(valInput, "50");
 
-    expect(screen.getByRole("button", { name: /save dataset/i })).toBeDisabled();
-    expect(screen.getByText(/train.*val.*(must not exceed|<=|exceed).*100/i)).toBeInTheDocument();
+    const saveButton = screen.getByRole("button", { name: /save dataset/i });
+    expect(saveButton).toBeDisabled();
+    const message = screen.getByText(/train.*val.*(must not exceed|<=|exceed).*100/i);
+    expect(message).toBeInTheDocument();
+    expect(message).toHaveAttribute("role", "alert");
+    expect(saveButton.getAttribute("aria-describedby")?.split(" ")).toContain(message.id);
   });
 
   it("disables saving while a create mutation is pending", async () => {
