@@ -13,8 +13,26 @@ function buildTree(): TaxonomyTreeNode[] {
         {
           evaluation_type: { id: 10, name: "Morphology" },
           labels: [
-            { id: 100, name: "Sessile", color: "#ff0000", category_id: 1 },
-            { id: 101, name: "Pedunculated", color: "#00ff00", category_id: 1 },
+            {
+              id: 100,
+              name: "Sessile",
+              color: "#ff0000",
+              category_id: 1,
+              evaluation_type_id: 10,
+              taxonomy_version: 1,
+              parent_label_id: null,
+              is_abstract: false,
+            },
+            {
+              id: 101,
+              name: "Pedunculated",
+              color: "#00ff00",
+              category_id: 1,
+              evaluation_type_id: 10,
+              taxonomy_version: 1,
+              parent_label_id: null,
+              is_abstract: false,
+            },
           ],
         },
       ],
@@ -24,7 +42,18 @@ function buildTree(): TaxonomyTreeNode[] {
       evaluation_types: [
         {
           evaluation_type: { id: 20, name: "Severity" },
-          labels: [{ id: 200, name: "Active", color: "#0000ff", category_id: 2 }],
+          labels: [
+            {
+              id: 200,
+              name: "Active",
+              color: "#0000ff",
+              category_id: 2,
+              evaluation_type_id: 20,
+              taxonomy_version: 1,
+              parent_label_id: null,
+              is_abstract: false,
+            },
+          ],
         },
       ],
     },
@@ -37,7 +66,16 @@ describe("resolveLabelFromTree", () => {
     expect(result).toEqual({
       categoryId: 1,
       categoryName: "Polyp",
-      tag: { id: 100, name: "Sessile", color: "#ff0000", category_id: 1 },
+      tag: {
+        id: 100,
+        name: "Sessile",
+        color: "#ff0000",
+        category_id: 1,
+        evaluation_type_id: 10,
+        taxonomy_version: 1,
+        parent_label_id: null,
+        is_abstract: false,
+      },
       classification: 10,
     });
   });
@@ -47,7 +85,16 @@ describe("resolveLabelFromTree", () => {
     expect(result).toEqual({
       categoryId: 2,
       categoryName: "Bleeding",
-      tag: { id: 200, name: "Active", color: "#0000ff", category_id: 2 },
+      tag: {
+        id: 200,
+        name: "Active",
+        color: "#0000ff",
+        category_id: 2,
+        evaluation_type_id: 20,
+        taxonomy_version: 1,
+        parent_label_id: null,
+        is_abstract: false,
+      },
       classification: 20,
     });
   });

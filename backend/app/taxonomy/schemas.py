@@ -55,6 +55,8 @@ class LabelCreate(BaseModel):
     color: str = "#FFFFFF"
     category_id: int
     evaluation_type_id: int
+    parent_label_id: int | None = None
+    is_abstract: bool = False
 
 
 class LabelUpdate(BaseModel):
@@ -62,6 +64,8 @@ class LabelUpdate(BaseModel):
     color: str | None = None
     category_id: int | None = None
     evaluation_type_id: int | None = None
+    parent_label_id: int | None = None
+    is_abstract: bool | None = None
 
 
 class LabelRead(BaseModel):
@@ -72,6 +76,8 @@ class LabelRead(BaseModel):
     category_id: int
     evaluation_type_id: int
     taxonomy_version: int
+    parent_label_id: int | None
+    is_abstract: bool
 
 
 class TaxonomyTreeEvaluationTypeNode(BaseModel):

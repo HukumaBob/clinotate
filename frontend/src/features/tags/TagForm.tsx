@@ -81,6 +81,7 @@ export function TagForm({
       color,
       category_id: Number(categoryId),
       evaluation_type_id: Number(evaluationTypeId),
+      is_abstract: false,
     };
 
     const result = editingLabel

@@ -3884,6 +3884,22 @@
           "evaluation_type_id": {
             "type": "integer",
             "title": "Evaluation Type Id"
+          },
+          "parent_label_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Label Id"
+          },
+          "is_abstract": {
+            "type": "boolean",
+            "title": "Is Abstract",
+            "default": false
           }
         },
         "type": "object",
@@ -3919,6 +3935,21 @@
           "taxonomy_version": {
             "type": "integer",
             "title": "Taxonomy Version"
+          },
+          "parent_label_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Label Id"
+          },
+          "is_abstract": {
+            "type": "boolean",
+            "title": "Is Abstract"
           }
         },
         "type": "object",
@@ -3928,7 +3959,9 @@
           "color",
           "category_id",
           "evaluation_type_id",
-          "taxonomy_version"
+          "taxonomy_version",
+          "parent_label_id",
+          "is_abstract"
         ],
         "title": "LabelRead"
       },
@@ -3977,6 +4010,28 @@
               }
             ],
             "title": "Evaluation Type Id"
+          },
+          "parent_label_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Label Id"
+          },
+          "is_abstract": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Abstract"
           }
         },
         "type": "object",

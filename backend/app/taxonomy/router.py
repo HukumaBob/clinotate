@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
 from app.db import get_session
+from app.taxonomy.hierarchy import HierarchyError, validate_parent_assignment
 from app.taxonomy.models import Category, EvaluationType, Label, Procedure
 from app.taxonomy.schemas import (
     CategoryCreate,
@@ -166,6 +167,14 @@ def delete_evaluation_type(evaluation_type_id: int, session: Session = Depends(g
 def create_label(payload: LabelCreate, session: Session = Depends(get_session)) -> Label:
     label = Label(**payload.model_dump())
     session.add(label)
+    session.flush()
+    try:
+        validate_parent_assignment(session, label, label.parent_label_id)
+    except HierarchyError as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error.message
+        ) from None
     session.commit()
     session.refresh(label)
     return label
@@ -190,7 +199,15 @@ def update_label(label_id: int, payload: LabelUpdate, session: Session = Depends
     label = session.get(Label, label_id)
     if label is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    fields = payload.model_dump(exclude_unset=True)
+    if "parent_label_id" in fields:
+        try:
+            validate_parent_assignment(session, label, fields["parent_label_id"])
+        except HierarchyError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error.message
+            ) from None
+    for field, value in fields.items():
         setattr(label, field, value)
     session.commit()
     session.refresh(label)

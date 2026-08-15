@@ -431,3 +431,149 @@ def test_label_mask_counts_reflects_annotation_usage():
     assert response.status_code == 200
     body = response.json()
     assert body[str(label["id"])] == 1
+
+
+def test_label_read_exposes_hierarchy_fields():
+    headers = _auth_headers(_register_and_login("tax-hier1@example.com"))
+    procedure = client.post(
+        "/taxonomy/procedures", json={"name": "tax-hier1-proc"}, headers=headers
+    ).json()
+    category = client.post(
+        "/taxonomy/categories",
+        json={"name": "tax-hier1-cat", "procedure_id": procedure["id"]},
+        headers=headers,
+    ).json()
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-hier1-et", "annotation_scope": "region"},
+        headers=headers,
+    ).json()
+
+    label = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "tax-hier1-label",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()
+
+    assert label["parent_label_id"] is None
+    assert label["is_abstract"] is False
+
+
+def test_assigning_a_valid_parent_succeeds_and_marking_abstract_works():
+    headers = _auth_headers(_register_and_login("tax-hier2@example.com"))
+    procedure = client.post(
+        "/taxonomy/procedures", json={"name": "tax-hier2-proc"}, headers=headers
+    ).json()
+    category = client.post(
+        "/taxonomy/categories",
+        json={"name": "tax-hier2-cat", "procedure_id": procedure["id"]},
+        headers=headers,
+    ).json()
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-hier2-et", "annotation_scope": "region"},
+        headers=headers,
+    ).json()
+
+    def make_label(name):
+        return client.post(
+            "/taxonomy/labels",
+            json={
+                "name": name,
+                "category_id": category["id"],
+                "evaluation_type_id": evaluation_type["id"],
+            },
+            headers=headers,
+        ).json()
+
+    parent = make_label("tax-hier2-parent")
+    child = make_label("tax-hier2-child")
+
+    response = client.patch(
+        f"/taxonomy/labels/{child['id']}",
+        json={"parent_label_id": parent["id"]},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["parent_label_id"] == parent["id"]
+
+    abstract_response = client.patch(
+        f"/taxonomy/labels/{parent['id']}", json={"is_abstract": True}, headers=headers
+    )
+    assert abstract_response.status_code == 200
+    assert abstract_response.json()["is_abstract"] is True
+
+
+def test_assigning_a_cross_procedure_parent_returns_422():
+    headers = _auth_headers(_register_and_login("tax-hier3@example.com"))
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-hier3-et", "annotation_scope": "region"},
+        headers=headers,
+    ).json()
+
+    def make_label_in(procedure_name, category_name, label_name):
+        procedure = client.post(
+            "/taxonomy/procedures", json={"name": procedure_name}, headers=headers
+        ).json()
+        category = client.post(
+            "/taxonomy/categories",
+            json={"name": category_name, "procedure_id": procedure["id"]},
+            headers=headers,
+        ).json()
+        return client.post(
+            "/taxonomy/labels",
+            json={
+                "name": label_name,
+                "category_id": category["id"],
+                "evaluation_type_id": evaluation_type["id"],
+            },
+            headers=headers,
+        ).json()
+
+    child = make_label_in("tax-hier3-proc-a", "tax-hier3-cat-a", "tax-hier3-child")
+    parent = make_label_in("tax-hier3-proc-b", "tax-hier3-cat-b", "tax-hier3-parent")
+
+    response = client.patch(
+        f"/taxonomy/labels/{child['id']}",
+        json={"parent_label_id": parent["id"]},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_self_parent_returns_422():
+    headers = _auth_headers(_register_and_login("tax-hier4@example.com"))
+    procedure = client.post(
+        "/taxonomy/procedures", json={"name": "tax-hier4-proc"}, headers=headers
+    ).json()
+    category = client.post(
+        "/taxonomy/categories",
+        json={"name": "tax-hier4-cat", "procedure_id": procedure["id"]},
+        headers=headers,
+    ).json()
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-hier4-et", "annotation_scope": "region"},
+        headers=headers,
+    ).json()
+    label = client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "tax-hier4-label",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=headers,
+    ).json()
+
+    response = client.patch(
+        f"/taxonomy/labels/{label['id']}",
+        json={"parent_label_id": label["id"]},
+        headers=headers,
+    )
+    assert response.status_code == 422

@@ -25,7 +25,18 @@ const TAXONOMY_TREE: TaxonomyTreeNode[] = [
     evaluation_types: [
       {
         evaluation_type: { id: 10, name: "Morphology" },
-        labels: [{ id: 100, name: "Sessile", color: "#ff0000", category_id: 1 }],
+        labels: [
+          {
+            id: 100,
+            name: "Sessile",
+            color: "#ff0000",
+            category_id: 1,
+            evaluation_type_id: 10,
+            taxonomy_version: 1,
+            parent_label_id: null,
+            is_abstract: false,
+          },
+        ],
       },
     ],
   },

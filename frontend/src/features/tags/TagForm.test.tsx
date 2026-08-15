@@ -111,6 +111,8 @@ describe("TagForm", () => {
           category_id: 2,
           evaluation_type_id: 100,
           taxonomy_version: 1,
+          parent_label_id: null,
+          is_abstract: false,
         }}
         onDone={vi.fn()}
       />,

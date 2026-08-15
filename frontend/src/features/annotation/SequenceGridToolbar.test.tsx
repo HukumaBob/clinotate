@@ -450,8 +450,8 @@ const sampleTaxonomyTree = [
       {
         evaluation_type: { id: 9, name: "frame_classification", annotation_scope: "frame" },
         labels: [
-          { id: 101, name: "antrum", color: "#ff0000", category_id: 1, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
-          { id: 102, name: "ge_junction", color: "#00ff00", category_id: 1, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
+          { id: 101, name: "antrum", color: "#ff0000", category_id: 1, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z", parent_label_id: null, is_abstract: false },
+          { id: 102, name: "ge_junction", color: "#00ff00", category_id: 1, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z", parent_label_id: null, is_abstract: false },
         ],
       },
     ],
@@ -462,13 +462,13 @@ const sampleTaxonomyTree = [
       {
         evaluation_type: { id: 9, name: "frame_classification", annotation_scope: "frame" },
         labels: [
-          { id: 201, name: "low_quality", color: "#0000ff", category_id: 2, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
+          { id: 201, name: "low_quality", color: "#0000ff", category_id: 2, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z", parent_label_id: null, is_abstract: false },
         ],
       },
       {
         evaluation_type: { id: 10, name: "geometric", annotation_scope: "region" },
         labels: [
-          { id: 202, name: "foam", color: "#111111", category_id: 2, evaluation_type_id: 10, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
+          { id: 202, name: "foam", color: "#111111", category_id: 2, evaluation_type_id: 10, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z", parent_label_id: null, is_abstract: false },
         ],
       },
     ],
