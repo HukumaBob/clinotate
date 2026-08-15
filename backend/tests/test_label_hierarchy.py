@@ -62,3 +62,92 @@ def test_label_can_reference_a_parent_label():
     finally:
         session.rollback()
         session.close()
+
+
+import pytest
+
+from app.taxonomy.hierarchy import HierarchyError, validate_parent_assignment
+
+
+def test_parent_from_a_different_procedure_is_rejected():
+    session = SessionLocal()
+    try:
+        child = _make_label(session, "hier-child-proc-a", procedure_name="hier-proc-a")
+        parent = _make_label(session, "hier-parent-proc-b", procedure_name="hier-proc-b")
+        with pytest.raises(HierarchyError):
+            validate_parent_assignment(session, child, parent.id)
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_parent_with_a_different_annotation_scope_is_rejected():
+    session = SessionLocal()
+    try:
+        child = _make_label(session, "hier-region-child", scope=AnnotationScope.REGION)
+        parent = _make_label(session, "hier-frame-parent", scope=AnnotationScope.FRAME)
+        with pytest.raises(HierarchyError):
+            validate_parent_assignment(session, child, parent.id)
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_direct_self_parent_is_rejected():
+    session = SessionLocal()
+    try:
+        label = _make_label(session, "hier-self")
+        with pytest.raises(HierarchyError):
+            validate_parent_assignment(session, label, label.id)
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_indirect_cycle_is_rejected():
+    session = SessionLocal()
+    try:
+        grandparent = _make_label(session, "hier-gp")
+        parent = _make_label(session, "hier-p")
+        child = _make_label(session, "hier-c")
+        parent.parent_label_id = grandparent.id
+        child.parent_label_id = parent.id
+        session.flush()
+        # Making the grandparent a child of its own descendant closes a loop.
+        with pytest.raises(HierarchyError):
+            validate_parent_assignment(session, grandparent, child.id)
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_unknown_parent_is_rejected():
+    session = SessionLocal()
+    try:
+        label = _make_label(session, "hier-orphan")
+        with pytest.raises(HierarchyError):
+            validate_parent_assignment(session, label, 99999999)
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_valid_parent_assignment_passes():
+    session = SessionLocal()
+    try:
+        parent = _make_label(session, "hier-ok-parent")
+        child = _make_label(session, "hier-ok-child")
+        assert validate_parent_assignment(session, child, parent.id) is None
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_clearing_the_parent_is_always_allowed():
+    session = SessionLocal()
+    try:
+        label = _make_label(session, "hier-clear")
+        assert validate_parent_assignment(session, label, None) is None
+    finally:
+        session.rollback()
+        session.close()
