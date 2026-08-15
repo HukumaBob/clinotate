@@ -47,9 +47,23 @@ for existing rows.
 
 A frame cannot simultaneously carry `no_findings_reviewed = true` and have
 any `Annotation` row (`MASK`, `BBOX`, or `CLASSIFICATION` — all three are
-positive assertions about frame content, so all reset the flag). Two
-enforcement points, since two independent codebases write `Annotation`
-rows against the same database:
+positive assertions about frame content, so all reset the flag). This
+includes anatomy landmark boxes (e.g. `pylorus`, `z_line`), not just polyp/
+lesion findings: the flag means "reviewed, nothing at all annotated on this
+frame," not "reviewed, no polyp." This is deliberate, not an oversight —
+the platform trains one multi-class YOLO detector across findings, anatomy
+landmarks, and artifacts together (not separate per-concept models), and a
+single YOLO label file already encodes "class X is absent from this frame"
+implicitly, just by having no line for it — a frame with a `pylorus` bbox
+and no polyp bbox is *already* a negative example for the polyp class in
+that file, with no separate flag needed. `no_findings_reviewed` exists only
+for frames nobody has drawn anything on yet, to distinguish "confirmed
+empty" from "simply unreviewed" for background-image curation; a frame with
+any annotation already carries a complete truth (present classes have
+boxes, absent classes don't), so keeping the flag exclusive to fully
+untouched frames avoids two conflicting signals about the same frame's
+content. Two enforcement points, since two independent codebases write
+`Annotation` rows against the same database:
 
 1. **Setting the flag** (`bulk-mark-no-findings`, backend API): frames that
    already have at least one `Annotation` are skipped, not overridden.
