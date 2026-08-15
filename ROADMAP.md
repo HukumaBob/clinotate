@@ -419,7 +419,7 @@ is the intended anchor-frame-only track behavior once SAM 2.1 track gets
 real hardware testing, deferred since SAM 2.1 track itself is untested on
 this GPU per Phase 2a.2's own scope).
 
-### Phase 2b: Detection adapters, datasets, training — NOT STARTED, NOT PLANNED
+### Phase 2b: Detection adapters, datasets, training — `datasets` module and Dataset screen DONE (2026-08-16); detection adapters and training NOT STARTED, NOT PLANNED
 
 Scope per the design spec: Ultralytics YOLO11/YOLO12/YOLO26 detection
 adapters selectable per-job via `Job.payload`, RT-DETRv2 adapter, RF-DETR
@@ -635,6 +635,157 @@ added to the detection adapter registry as an interface-only stub alongside
 RT-DETRv2. No architectural pattern changed — the adapter-registry design
 already anticipated exactly this kind of model-version churn — only which
 concrete adapters are the near-term target.
+
+### Phase 2b's `datasets` module and Dataset screen — DONE (2026-08-16)
+
+Plan: [docs/superpowers/plans/2026-08-15-dataset-screen.md](docs/superpowers/plans/2026-08-15-dataset-screen.md),
+spec: [docs/superpowers/specs/2026-08-15-dataset-screen-design.md](docs/superpowers/specs/2026-08-15-dataset-screen-design.md).
+
+The `datasets` module (`Dataset`, `DatasetItem`) plus the Dataset screen,
+the first thing to actually consume `Label.parent_label_id`/`resolve_class`
+(shipped in the label-hierarchy phase above but unused until now) and
+`no_findings_reviewed` (shipped in the no-findings-flag phase, likewise
+unused until now). Executed via `superpowers:subagent-driven-development`
+across 8 tasks, each independently committed to `master` (no branches/
+worktrees, per this repo's single-developer workflow), task-scoped review
+after each, capped by this task's real-browser verification.
+
+**Composition rules:** a frame from the selected sequences enters a
+dataset when either (1) it carries at least one annotation whose
+`annotation_scope` matches the dataset's `task_type` (`classification` →
+FRAME only, `detection`/`segmentation` → REGION only) and not excluded via
+`excluded_label_ids`, or (2) `no_findings_reviewed` is set — a negative
+example, exported later with an empty label file. A frame whose only
+annotations are all excluded drops out entirely rather than becoming a
+negative — "we chose not to train this class" is not the same claim as
+"this frame contains nothing," and conflating the two would manufacture
+false negatives. `task_type` therefore filters composition, not just
+labels it: classification and detection/segmentation datasets are always
+disjoint frame sets by construction, not by convention.
+
+**`compute_balance` shares `resolve_class`** with the annotation/export
+path (`backend/app/taxonomy/hierarchy.py`, from the label-hierarchy
+phase) rather than reimplementing grouping logic for the panel — a class
+shown in the live balance panel is guaranteed to be the same class a
+future export would actually write, by construction rather than by
+convention kept in sync by hand.
+
+**Splits are assigned per sequence, never per frame.** Frame-level random
+splitting was considered and rejected: consecutive frames of one video are
+near-duplicates, so a frame landing in train and its neighbour in val is
+effectively the same image on both sides of the split, inflating
+validation metrics into meaninglessness. `split_config` holds requested
+train/val percentages (test is the remainder); at save time whole
+sequences are assigned to a split and every frame inherits its sequence's
+assignment, so the realized per-split frame counts can (and with few
+sequences, will) diverge from the requested percentages — the panel
+reports realized counts alongside the request rather than hiding the gap.
+`DatasetItem` rows are materialized at save time, not recomputed live:
+composition freezes so a later annotation pass never silently changes
+what a previously-saved dataset means, keeping training-run comparisons
+meaningful.
+
+**The screen:** `/datasets` (nav label deliberately kept singular
+"Dataset" after a mid-plan revert), a sequence picker with frame/labeled
+counts, a live class-balance panel (`BalancePanel.tsx`) that recomputes
+on every selection/grouping/exclusion change (debounced 300ms), a
+collapse toggle per class that has taxonomy children (leaf classes render
+as plain text, no disclosure control), a per-class Include checkbox, and
+a name/split/Save form with reachable (aria-described) disabled-reasons
+for the three save guards: no sequences selected, empty name, and
+train%+val% exceeding 100.
+
+**`polyp` seeding created TWO abstract parent labels, one per procedure**
+(id 2523 under `egds`, id 2524 under `colono`), not one — egds has its own
+polyp subtype vocabulary, distinct from colono's `0-Ip`/`0-Is`/`IIa`/LST
+ladder, and a label's parent must stay within its own procedure's taxonomy
+(enforced by the label-hierarchy phase's `validate_parent_assignment`).
+Both collapse to the same display name `polyp` but are different label
+rows with different children.
+
+**Deliberately deferred, not overlooked:** YOLO export (`data.yaml`,
+image/label files, class-map fingerprint, archive download,
+`Dataset.storage_key`), the Train screen and `ModelVersion`, and
+auto-applied balance recommendations (trusting a heuristic blindly at the
+current ~75 annotated frames is premature; manual exclusion covers the
+same need honestly). `Dataset` is create/delete only — no edit endpoint,
+since editing one would reopen the frozen-composition question this plan
+deliberately settled.
+
+**Real-browser verification (this task, 2026-08-16),** against the dev
+stack, `manualcheck@example.com` login, live dev database — done because
+this repo's frontend unit tests mock `apiClient` wholesale and cannot
+observe whether the panel recomputes against real data or whether a
+flagged frame really becomes a negative:
+- Nav shows `Dataset` (singular); `/datasets` route confirmed.
+- Selected the 8 sequences carrying detection annotations
+  (`colono 2026-08-15 #1`, `colono 2026-08-06 #2`, `caecum01`, `ileum`,
+  `colono 2026-08-04 #1`, `colono 2026-08-01 #3`, `colono 2026-07-31 #2`,
+  `colono 2026-07-31 #1`) under `task_type = detection`: panel showed
+  66 frames, 23 negatives, `polyp` as **one** class of 35 instances / 33
+  frames (not five subtypes), `colon_adenoma` 8/6, `foam` 2/2, five
+  singletons at 1/1, severity `severe_imbalance`, 7 classes below the
+  default threshold of 10 — matching a direct `psql` query against the
+  same sequence set exactly.
+- Collapse toggle on `polyp` expanded it into `pedunculated_polyp_0_Ip`
+  16, `sessile_polyp_0_Is` 14, `flat_lesion_0_IIa` 3,
+  `lst_g_nodular_mixed` 1, `lst_ng_flat_elevated` 1 (instances); toggling
+  back recollapsed to 35/33. Leaf rows (`colon_adenoma`, `foam`, every
+  singleton, every polyp subtype) rendered with no collapse toggle —
+  confirmed by full a11y-tree snapshot, not just visual inspection.
+- Excluding `transparent_cap` removed it from both the chart and the
+  below-threshold list (7 → 6) and dropped total frames 66 → 65.
+- With all 8 sequences selected the panel reported `Negatives: 23` as a
+  visible row, not hidden.
+- Save guards: Train=70/Val=50 disabled Save with a screen-reader-visible
+  alert ("Train % and Val % must not exceed 100 combined."); deselecting
+  all sequences disabled Save with "Select at least one sequence to save
+  a dataset."; both match the two dedicated `aria-describedby` messages
+  added in `de573e1`.
+- Saved `browser-check` (detection, 8 sequences, Train 70/Val 20/Test 10,
+  `transparent_cap` excluded): appeared in the table with 66 frames,
+  `severe_imbalance`. `GET /datasets/{id}` confirmed `item_count: 66`,
+  `split_counts: {train: 40, val: 20, test: 6}` (all three non-empty),
+  and a full per-item check (66 `DatasetItem` rows) confirmed zero
+  sequences span more than one split.
+- Deleted `browser-check` via the table's two-click Delete/Confirm button;
+  `psql` confirmed zero rows in `datasets` afterward.
+- Both suites: backend `280 passed, 15 failed` (the same 15 pre-existing,
+  unrelated failures tracked in the label-hierarchy phase's entry above —
+  `test_jobs.py`, `test_mask_postprocess_endpoint.py`,
+  `test_media_service.py` — count risen from the 239/244 baseline as
+  expected, the 15 unchanged); frontend `431 passed`.
+
+**Two real UI bugs found during this verification, left unfixed per this
+task's scope (verification + ROADMAP entry only — no code changes
+authorized):**
+- **Excluding a class has no undo in the UI.** `BalancePanel.tsx` renders
+  one row per entry in the *server's* `report.classes`, and the backend
+  (`backend/app/datasets/service.py`) omits any `excluded_label_ids`
+  member from that list entirely — so once a class's Include checkbox is
+  unchecked, its row (checkbox included) disappears from the DOM. Nothing
+  else on the page offers to re-include it; the only way back is to
+  discard the whole `excluded` selection (e.g. a page reload), which also
+  undoes every other exclusion made in the session. Confirmed via a full
+  a11y-tree snapshot after exclusion — no hidden control, no separate
+  "excluded classes" list.
+- **Save is not actually guarded against an empty name.** `canSave` reads
+  `name.trim().length > 0`, and the Name field's live DOM value, React
+  `value` prop, and fiber `memoizedProps.value` were all confirmed empty
+  (via `evaluate_script`, not just the a11y snapshot) after clearing it
+  with a real keyboard `Ctrl+A`/`Backspace` — yet the Save button's
+  `disabled` prop, read the same way, was `false`. Root cause not
+  investigated (out of this task's scope); flagging for a follow-up fix
+  before this screen is treated as production-ready for the empty-name
+  case specifically. The other two guards (split > 100%, no sequences
+  selected) were verified working correctly.
+- Also observed, not a defect: after deleting the saved dataset, the
+  datasets table briefly still showed a leftover row from an unrelated
+  earlier session's data until a full page reload — a stale
+  `useDatasets()` cache not invalidated after delete, separate from the
+  Save-guard bug above. A reload confirmed "No datasets yet." and `psql`
+  confirmed zero `datasets` rows, so this is a cache-invalidation
+  cosmetic issue, not a data-integrity one.
 
 ### Phase 2a.3: Media screen — DONE (2026-07-29)
 
