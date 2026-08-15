@@ -38,7 +38,7 @@ describe("AppHeader", () => {
     renderHeader();
 
     const navItems = screen.getAllByTestId("app-header-nav-item").map((el) => el.textContent);
-    expect(navItems).toEqual(["Tags", "Media", "Sequences", "Datasets", "Train", "Results"]);
+    expect(navItems).toEqual(["Tags", "Media", "Sequences", "Dataset", "Train", "Results"]);
   });
 
   it("renders Media as a real link to /media", () => {
@@ -70,10 +70,10 @@ describe("AppHeader", () => {
     }
   });
 
-  it("renders Datasets as a real link to /datasets", () => {
+  it("renders Dataset as a real link to /datasets", () => {
     renderHeader();
 
-    const datasetsLink = screen.getByRole("link", { name: "Datasets" });
+    const datasetsLink = screen.getByRole("link", { name: "Dataset" });
     expect(datasetsLink).toHaveAttribute("href", "/datasets");
   });
 

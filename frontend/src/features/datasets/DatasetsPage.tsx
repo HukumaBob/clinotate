@@ -135,7 +135,12 @@ export function DatasetsPage() {
     setName("");
   }
 
-  const canSave = name.trim().length > 0;
+  const splitExceeds100 = trainPercent + valPercent > 100;
+  const canSave =
+    name.trim().length > 0 &&
+    !splitExceeds100 &&
+    !createDataset.isPending &&
+    selectedSequenceIds.size > 0;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-gray-950 p-8 text-gray-100">
@@ -259,6 +264,14 @@ export function DatasetsPage() {
                 Save dataset
               </button>
             </div>
+            {splitExceeds100 && (
+              <p className="text-xs text-amber-400">
+                Train % and Val % must not exceed 100 combined.
+              </p>
+            )}
+            {selectedSequenceIds.size === 0 && (
+              <p className="text-xs text-gray-500">Select at least one sequence to save a dataset.</p>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">

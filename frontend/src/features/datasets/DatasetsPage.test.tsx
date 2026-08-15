@@ -66,6 +66,7 @@ describe("DatasetsPage", () => {
     render(<DatasetsPage />, { wrapper });
     expect(await screen.findByRole("button", { name: /save dataset/i })).toBeDisabled();
 
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
     await userEvent.type(screen.getByLabelText(/name/i), "my-dataset");
     expect(screen.getByRole("button", { name: /save dataset/i })).toBeEnabled();
   });
@@ -73,5 +74,55 @@ describe("DatasetsPage", () => {
   it("shows Test percentage as the computed remainder", async () => {
     render(<DatasetsPage />, { wrapper });
     await waitFor(() => expect(screen.getByTestId("test-remainder")).toHaveTextContent("10"));
+  });
+
+  it("disables saving with zero sequences selected, and enables once one is picked", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.type(screen.getByLabelText(/name/i), "my-dataset");
+    expect(screen.getByRole("button", { name: /save dataset/i })).toBeDisabled();
+
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+    expect(screen.getByRole("button", { name: /save dataset/i })).toBeEnabled();
+  });
+
+  it("disables saving and shows a message when train + val exceeds 100", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+    await userEvent.type(screen.getByLabelText(/name/i), "my-dataset");
+    expect(screen.getByRole("button", { name: /save dataset/i })).toBeEnabled();
+
+    const trainInput = screen.getByLabelText(/train %/i);
+    await userEvent.clear(trainInput);
+    await userEvent.type(trainInput, "70");
+    const valInput = screen.getByLabelText(/val %/i);
+    await userEvent.clear(valInput);
+    await userEvent.type(valInput, "50");
+
+    expect(screen.getByRole("button", { name: /save dataset/i })).toBeDisabled();
+    expect(screen.getByText(/train.*val.*(must not exceed|<=|exceed).*100/i)).toBeInTheDocument();
+  });
+
+  it("disables saving while a create mutation is pending", async () => {
+    let resolveCreate: (() => void) | undefined;
+    vi.mocked(apiClient.POST).mockImplementation(async (path: string) => {
+      if (path === "/datasets") {
+        return new Promise((resolve) => {
+          resolveCreate = () => resolve({ data: { id: 1 } });
+        });
+      }
+      return { data: BALANCE };
+    });
+
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+    await userEvent.type(screen.getByLabelText(/name/i), "my-dataset");
+
+    const saveButton = screen.getByRole("button", { name: /save dataset/i });
+    expect(saveButton).toBeEnabled();
+    await userEvent.click(saveButton);
+
+    await waitFor(() => expect(saveButton).toBeDisabled());
+
+    resolveCreate?.();
   });
 });
