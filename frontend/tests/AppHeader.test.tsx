@@ -38,7 +38,7 @@ describe("AppHeader", () => {
     renderHeader();
 
     const navItems = screen.getAllByTestId("app-header-nav-item").map((el) => el.textContent);
-    expect(navItems).toEqual(["Tags", "Media", "Sequences", "Dataset", "Train", "Results"]);
+    expect(navItems).toEqual(["Tags", "Media", "Sequences", "Datasets", "Train", "Results"]);
   });
 
   it("renders Media as a real link to /media", () => {
@@ -62,12 +62,19 @@ describe("AppHeader", () => {
     expect(sequencesLink).toHaveAttribute("href", "/sequences");
   });
 
-  it("does not render the remaining three items as links", () => {
+  it("does not render the remaining two items as links", () => {
     renderHeader();
 
-    for (const label of ["Dataset", "Train", "Results"]) {
+    for (const label of ["Train", "Results"]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
+  });
+
+  it("renders Datasets as a real link to /datasets", () => {
+    renderHeader();
+
+    const datasetsLink = screen.getByRole("link", { name: "Datasets" });
+    expect(datasetsLink).toHaveAttribute("href", "/datasets");
   });
 
   it("shows the current user's email when authenticated", () => {

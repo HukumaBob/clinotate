@@ -5,6 +5,7 @@ import { SequenceGridPage } from "../features/annotation/SequenceGridPage";
 import { SequencesPage } from "../features/annotation/SequencesPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
+import { DatasetsPage } from "../features/datasets/DatasetsPage";
 import { MediaPage } from "../features/media/MediaPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TagsPage } from "../features/tags/TagsPage";
@@ -31,6 +32,7 @@ export function App() {
           <Route path="/tags" element={<TagsPage />} />
           <Route path="/sequences" element={<SequencesPage />} />
           <Route path="/sequences/:sequenceId" element={<SequenceGridPage />} />
+          <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
