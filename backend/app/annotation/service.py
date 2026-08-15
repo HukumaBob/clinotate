@@ -31,6 +31,13 @@ def create_classification_annotation(
         created_by_id=created_by.id,
     )
     session.add(annotation)
+
+    frame = session.get(Frame, frame_id)
+    if frame is not None and frame.no_findings_reviewed:
+        frame.no_findings_reviewed = False
+        frame.no_findings_reviewed_by_id = None
+        frame.no_findings_reviewed_at = None
+
     session.commit()
     session.refresh(annotation)
     return annotation
@@ -93,6 +100,12 @@ def bulk_classify_frames(
                 created_by_id=created_by.id,
             )
         )
+
+        frame = session.get(Frame, frame_id)
+        if frame is not None and frame.no_findings_reviewed:
+            frame.no_findings_reviewed = False
+            frame.no_findings_reviewed_by_id = None
+            frame.no_findings_reviewed_at = None
 
     session.commit()
     return frame_ids

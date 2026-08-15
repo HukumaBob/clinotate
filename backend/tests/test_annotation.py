@@ -489,6 +489,63 @@ def test_bulk_classify_assigns_label_to_all_frames():
         assert annotations[0]["annotation_type"] == "classification"
 
 
+def _mark_no_findings_directly(frame_id: int) -> None:
+    from app.db import SessionLocal
+    from app.media.models import Frame
+
+    session = SessionLocal()
+    frame = session.get(Frame, frame_id)
+    frame.no_findings_reviewed = True
+    session.commit()
+    session.close()
+
+
+def test_creating_classification_annotation_clears_no_findings_flag():
+    token = _register_and_login("clearflag1@example.com")
+    headers = _headers(token)
+    frame_id = _create_frame(token)
+    label_id = _create_label_in_category(token, "clear-flag-landmark", "antrum")
+
+    _mark_no_findings_directly(frame_id)
+
+    client.post(
+        f"/annotation/frames/{frame_id}/annotations",
+        json={"label_id": label_id},
+        headers=headers,
+    )
+
+    from app.db import SessionLocal
+    from app.media.models import Frame
+
+    session = SessionLocal()
+    frame = session.get(Frame, frame_id)
+    assert frame.no_findings_reviewed is False
+    session.close()
+
+
+def test_bulk_classify_clears_no_findings_flag_on_touched_frames():
+    token = _register_and_login("clearflag2@example.com")
+    headers = _headers(token)
+    frame_id = _create_frame(token)
+    label_id = _create_label_in_category(token, "clear-flag-bulk-landmark", "antrum")
+
+    _mark_no_findings_directly(frame_id)
+
+    client.post(
+        "/annotation/frames/bulk-classify",
+        json={"frame_ids": [frame_id], "label_id": label_id},
+        headers=headers,
+    )
+
+    from app.db import SessionLocal
+    from app.media.models import Frame
+
+    session = SessionLocal()
+    frame = session.get(Frame, frame_id)
+    assert frame.no_findings_reviewed is False
+    session.close()
+
+
 def test_bulk_classify_replaces_existing_label_in_same_category():
     token = _register_and_login("bulkclass2@example.com")
     frame_id = _create_frame(token)
