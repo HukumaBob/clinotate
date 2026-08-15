@@ -14,6 +14,7 @@ export function ClassificationsPanel() {
   const deleteEvaluationType = useDeleteEvaluationType();
 
   const [newName, setNewName] = useState("");
+  const [newScope, setNewScope] = useState<"frame" | "region" | "">("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
@@ -27,13 +28,21 @@ export function ClassificationsPanel() {
       setCreateError("Name is required");
       return;
     }
+    if (!newScope) {
+      setCreateError("Scope is required");
+      return;
+    }
     setCreateError(null);
-    const result = await createEvaluationType.mutateAsync({ name: newName.trim() });
+    const result = await createEvaluationType.mutateAsync({
+      name: newName.trim(),
+      annotation_scope: newScope,
+    });
     if (result.error) {
       setCreateError((result.error as { detail?: string }).detail ?? "Create failed");
       return;
     }
     setNewName("");
+    setNewScope("");
   }
 
   async function handleSaveEdit(id: number) {
@@ -144,6 +153,26 @@ export function ClassificationsPanel() {
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
         />
+        <label className="flex items-center gap-1 text-xs text-gray-300">
+          <input
+            type="radio"
+            name="new-classification-scope"
+            value="frame"
+            checked={newScope === "frame"}
+            onChange={() => setNewScope("frame")}
+          />
+          Frame
+        </label>
+        <label className="flex items-center gap-1 text-xs text-gray-300">
+          <input
+            type="radio"
+            name="new-classification-scope"
+            value="region"
+            checked={newScope === "region"}
+            onChange={() => setNewScope("region")}
+          />
+          Region
+        </label>
         <button
           type="button"
           className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-500"

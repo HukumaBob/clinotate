@@ -19,7 +19,10 @@ function wrapper({ children }: { children: ReactNode }) {
 function mockEvaluationTypes() {
   vi.mocked(apiClient.GET).mockImplementation(async (path) => {
     if (path === "/taxonomy/evaluation-types") {
-      return { data: [{ id: 100, name: "geometric" }], error: undefined } as never;
+      return {
+        data: [{ id: 100, name: "geometric", annotation_scope: "region" }],
+        error: undefined,
+      } as never;
     }
     return { data: [], error: undefined } as never;
   });
@@ -36,12 +39,8 @@ describe("ClassificationsPanel", () => {
     expect(await screen.findByText("geometric")).toBeInTheDocument();
   });
 
-  it("creates a new classification from the inline form", async () => {
+  it("requires a scope choice before creating a new classification", async () => {
     mockEvaluationTypes();
-    vi.mocked(apiClient.POST).mockResolvedValue({
-      data: { id: 200, name: "morphological" },
-      error: undefined,
-    } as never);
 
     render(<ClassificationsPanel />, { wrapper });
 
@@ -49,9 +48,27 @@ describe("ClassificationsPanel", () => {
     await userEvent.type(screen.getByPlaceholderText(/new classification/i), "morphological");
     await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
 
+    expect(apiClient.POST).not.toHaveBeenCalled();
+    expect(screen.getByText(/scope is required/i)).toBeInTheDocument();
+  });
+
+  it("creates a new classification with the chosen scope from the inline form", async () => {
+    mockEvaluationTypes();
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { id: 200, name: "morphological", annotation_scope: "region" },
+      error: undefined,
+    } as never);
+
+    render(<ClassificationsPanel />, { wrapper });
+
+    await screen.findByText("geometric");
+    await userEvent.type(screen.getByPlaceholderText(/new classification/i), "morphological");
+    await userEvent.click(screen.getByLabelText(/^region$/i));
+    await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
+
     expect(apiClient.POST).toHaveBeenCalledWith(
       "/taxonomy/evaluation-types",
-      expect.objectContaining({ body: { name: "morphological" } })
+      expect.objectContaining({ body: { name: "morphological", annotation_scope: "region" } })
     );
   });
 
