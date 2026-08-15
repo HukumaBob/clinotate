@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 
+from app.taxonomy.models import AnnotationScope
+
 
 class ProcedureCreate(BaseModel):
     name: str
@@ -33,16 +35,19 @@ class CategoryRead(BaseModel):
 
 class EvaluationTypeCreate(BaseModel):
     name: str
+    annotation_scope: AnnotationScope
 
 
 class EvaluationTypeUpdate(BaseModel):
     name: str | None = None
+    annotation_scope: AnnotationScope | None = None
 
 
 class EvaluationTypeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    annotation_scope: AnnotationScope
 
 
 class LabelCreate(BaseModel):

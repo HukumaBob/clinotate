@@ -80,7 +80,9 @@ def _create_label(token: str) -> int:
     )
     if evaluation_type is None:
         evaluation_type = client.post(
-            "/taxonomy/evaluation-types", json={"name": "annotation-test-evaluation-type"}, headers=headers
+            "/taxonomy/evaluation-types",
+            json={"name": "annotation-test-evaluation-type", "annotation_scope": "region"},
+            headers=headers,
         ).json()
 
     return client.post(
@@ -453,7 +455,9 @@ def _create_label_in_category(
     )
     if evaluation_type is None:
         evaluation_type = client.post(
-            "/taxonomy/evaluation-types", json={"name": evaluation_type_name}, headers=headers
+            "/taxonomy/evaluation-types",
+            json={"name": evaluation_type_name, "annotation_scope": "frame"},
+            headers=headers,
         ).json()
 
     return client.post(

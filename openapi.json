@@ -3230,6 +3230,14 @@
         ],
         "title": "AnnotationRead"
       },
+      "AnnotationScope": {
+        "type": "string",
+        "enum": [
+          "frame",
+          "region"
+        ],
+        "title": "AnnotationScope"
+      },
       "AnnotationStatus": {
         "type": "string",
         "enum": [
@@ -3557,11 +3565,15 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "annotation_scope": {
+            "$ref": "#/components/schemas/AnnotationScope"
           }
         },
         "type": "object",
         "required": [
-          "name"
+          "name",
+          "annotation_scope"
         ],
         "title": "EvaluationTypeCreate"
       },
@@ -3574,12 +3586,16 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "annotation_scope": {
+            "$ref": "#/components/schemas/AnnotationScope"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "name"
+          "name",
+          "annotation_scope"
         ],
         "title": "EvaluationTypeRead"
       },
@@ -3595,6 +3611,16 @@
               }
             ],
             "title": "Name"
+          },
+          "annotation_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnotationScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

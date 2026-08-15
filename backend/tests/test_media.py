@@ -664,7 +664,7 @@ def test_media_library_lists_videos_and_photo_sequences():
     if evaluation_type is None:
         evaluation_type = client.post(
             "/taxonomy/evaluation-types",
-            json={"name": "last-edited-evaluation-type"},
+            json={"name": "last-edited-evaluation-type", "annotation_scope": "region"},
             headers=headers,
         ).json()
     label_id = client.post(
@@ -956,7 +956,9 @@ def test_delete_video_derived_sequence_with_annotations_returns_409():
     )
     if evaluation_type is None:
         evaluation_type = client.post(
-            "/taxonomy/evaluation-types", json={"name": "delete-guard-evaluation-type"}, headers=headers
+            "/taxonomy/evaluation-types",
+            json={"name": "delete-guard-evaluation-type", "annotation_scope": "region"},
+            headers=headers,
         ).json()
 
     label_id = client.post(
@@ -1241,7 +1243,7 @@ def test_get_sequence_reports_actual_annotation_count():
     if evaluation_type is None:
         evaluation_type = client.post(
             "/taxonomy/evaluation-types",
-            json={"name": "seq-count-evaluation-type"},
+            json={"name": "seq-count-evaluation-type", "annotation_scope": "region"},
             headers=headers,
         ).json()
     label_id = client.post(
@@ -1357,7 +1359,7 @@ def test_sequence_stats_groups_annotations_by_label_across_types():
     if evaluation_type is None:
         evaluation_type = client.post(
             "/taxonomy/evaluation-types",
-            json={"name": "stats-label-evaluation-type"},
+            json={"name": "stats-label-evaluation-type", "annotation_scope": "region"},
             headers=headers,
         ).json()
 
@@ -1655,7 +1657,9 @@ def _create_label_for_delete_tests(headers: dict[str, str], suffix: str) -> int:
     )
     if evaluation_type is None:
         evaluation_type = client.post(
-            "/taxonomy/evaluation-types", json={"name": f"frame-delete-evaluation-type-{suffix}"}, headers=headers
+            "/taxonomy/evaluation-types",
+            json={"name": f"frame-delete-evaluation-type-{suffix}", "annotation_scope": "region"},
+            headers=headers,
         ).json()
 
     return client.post(
@@ -1965,7 +1969,9 @@ def _make_label(headers: dict[str, str], procedure_id: int, name: str) -> int:
     evaluation_type = next((e for e in evaluation_types if e["name"] == f"{name}-eval-type"), None)
     if evaluation_type is None:
         evaluation_type = client.post(
-            "/taxonomy/evaluation-types", json={"name": f"{name}-eval-type"}, headers=headers
+            "/taxonomy/evaluation-types",
+            json={"name": f"{name}-eval-type", "annotation_scope": "region"},
+            headers=headers,
         ).json()
     return client.post(
         "/taxonomy/labels",

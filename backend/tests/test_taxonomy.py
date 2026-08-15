@@ -99,7 +99,9 @@ def test_delete_category_with_labels_returns_409():
         "/taxonomy/categories", json={"name": "Anatomy", "procedure_id": procedure["id"]}, headers=token
     ).json()
     evaluation_type = client.post(
-        "/taxonomy/evaluation-types", json={"name": "tax4-geometric"}, headers=token
+        "/taxonomy/evaluation-types",
+        json={"name": "tax4-geometric", "annotation_scope": "region"},
+        headers=token,
     ).json()
     client.post(
         "/taxonomy/labels",
@@ -115,10 +117,70 @@ def test_delete_category_with_labels_returns_409():
     assert delete_response.status_code == 409
 
 
+def test_create_evaluation_type_requires_annotation_scope():
+    token = _auth_headers(_register_and_login("tax-scope1@example.com"))
+
+    response = client.post(
+        "/taxonomy/evaluation-types", json={"name": "tax-scope1-frame"}, headers=token
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_evaluation_type_with_frame_scope():
+    token = _auth_headers(_register_and_login("tax-scope2@example.com"))
+
+    response = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-scope2-frame", "annotation_scope": "frame"},
+        headers=token,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["annotation_scope"] == "frame"
+
+
+def test_taxonomy_tree_includes_annotation_scope_on_evaluation_type():
+    token = _auth_headers(_register_and_login("tax-scope3@example.com"))
+    procedure = client.post(
+        "/taxonomy/procedures", json={"name": "tax-scope3-colono"}, headers=token
+    ).json()
+    category = client.post(
+        "/taxonomy/categories",
+        json={"name": "Landmark", "procedure_id": procedure["id"]},
+        headers=token,
+    ).json()
+    evaluation_type = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax-scope3-frame", "annotation_scope": "frame"},
+        headers=token,
+    ).json()
+    client.post(
+        "/taxonomy/labels",
+        json={
+            "name": "antrum",
+            "category_id": category["id"],
+            "evaluation_type_id": evaluation_type["id"],
+        },
+        headers=token,
+    )
+
+    response = client.get(f"/taxonomy/tree?procedure_id={procedure['id']}", headers=token)
+
+    assert response.status_code == 200
+    tree = response.json()
+    node = next(n for n in tree if n["category"]["id"] == category["id"])
+    assert node["evaluation_types"][0]["evaluation_type"]["annotation_scope"] == "frame"
+
+
 def test_create_and_list_evaluation_types():
     token = _auth_headers(_register_and_login("tax5@example.com"))
 
-    create_response = client.post("/taxonomy/evaluation-types", json={"name": "tax5-geometric"}, headers=token)
+    create_response = client.post(
+        "/taxonomy/evaluation-types",
+        json={"name": "tax5-geometric", "annotation_scope": "region"},
+        headers=token,
+    )
     assert create_response.status_code == 201
 
     list_response = client.get("/taxonomy/evaluation-types", headers=token)
@@ -133,7 +195,9 @@ def test_delete_evaluation_type_with_labels_returns_409():
         "/taxonomy/categories", json={"name": "Anatomy", "procedure_id": procedure["id"]}, headers=token
     ).json()
     evaluation_type = client.post(
-        "/taxonomy/evaluation-types", json={"name": "tax6-geometric"}, headers=token
+        "/taxonomy/evaluation-types",
+        json={"name": "tax6-geometric", "annotation_scope": "region"},
+        headers=token,
     ).json()
     client.post(
         "/taxonomy/labels",
@@ -156,7 +220,9 @@ def test_create_and_list_labels():
         "/taxonomy/categories", json={"name": "Anatomy", "procedure_id": procedure["id"]}, headers=token
     ).json()
     evaluation_type = client.post(
-        "/taxonomy/evaluation-types", json={"name": "tax7-geometric"}, headers=token
+        "/taxonomy/evaluation-types",
+        json={"name": "tax7-geometric", "annotation_scope": "region"},
+        headers=token,
     ).json()
 
     response = client.post(
@@ -188,10 +254,14 @@ def test_taxonomy_tree_groups_labels_by_category_and_evaluation_type():
         "/taxonomy/categories", json={"name": "Findings", "procedure_id": procedure["id"]}, headers=token
     ).json()
     geometric = client.post(
-        "/taxonomy/evaluation-types", json={"name": "tax8-geometric"}, headers=token
+        "/taxonomy/evaluation-types",
+        json={"name": "tax8-geometric", "annotation_scope": "region"},
+        headers=token,
     ).json()
     morphological = client.post(
-        "/taxonomy/evaluation-types", json={"name": "tax8-morphological"}, headers=token
+        "/taxonomy/evaluation-types",
+        json={"name": "tax8-morphological", "annotation_scope": "region"},
+        headers=token,
     ).json()
 
     client.post(
@@ -319,7 +389,9 @@ def test_delete_label_with_annotations_returns_409():
         "/taxonomy/categories", json={"name": "Anatomy", "procedure_id": procedure["id"]}, headers=headers
     ).json()
     evaluation_type = client.post(
-        "/taxonomy/evaluation-types", json={"name": "tax11-geometric"}, headers=headers
+        "/taxonomy/evaluation-types",
+        json={"name": "tax11-geometric", "annotation_scope": "region"},
+        headers=headers,
     ).json()
     label = client.post(
         "/taxonomy/labels",
@@ -342,7 +414,9 @@ def test_label_mask_counts_reflects_annotation_usage():
         "/taxonomy/categories", json={"name": "Anatomy", "procedure_id": procedure["id"]}, headers=headers
     ).json()
     evaluation_type = client.post(
-        "/taxonomy/evaluation-types", json={"name": "tax12-geometric"}, headers=headers
+        "/taxonomy/evaluation-types",
+        json={"name": "tax12-geometric", "annotation_scope": "region"},
+        headers=headers,
     ).json()
     label = client.post(
         "/taxonomy/labels",

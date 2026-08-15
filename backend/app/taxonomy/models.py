@@ -1,9 +1,15 @@
+import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+
+
+class AnnotationScope(str, enum.Enum):
+    FRAME = "frame"
+    REGION = "region"
 
 
 class Procedure(Base):
@@ -27,6 +33,7 @@ class EvaluationType(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
+    annotation_scope: Mapped[AnnotationScope] = mapped_column(Enum(AnnotationScope))
 
 
 class Label(Base):
