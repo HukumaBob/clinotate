@@ -21,7 +21,9 @@ export function CascadingLabelPicker({ store, procedureId }: CascadingLabelPicke
   const setLabelSelection = useStore(store, (state) => state.setLabelSelection);
 
   const selectedCategory = tree.find((node) => node.category.id === labelCategoryId);
-  const evaluationTypeOptions = selectedCategory?.evaluation_types ?? [];
+  const evaluationTypeOptions = (selectedCategory?.evaluation_types ?? []).filter(
+    (node) => node.evaluation_type.annotation_scope === "region",
+  );
   const selectedEvaluationTypeNode = evaluationTypeOptions.find(
     (node) => node.evaluation_type.id === labelClassification,
   );

@@ -11,7 +11,7 @@ const TAXONOMY_TREE = [
     category: { id: 1, name: "lesion", procedure_id: 9 },
     evaluation_types: [
       {
-        evaluation_type: { id: 1, name: "geometric" },
+        evaluation_type: { id: 1, name: "geometric", annotation_scope: "region" },
         labels: [{ id: 2, name: "0-Ip", color: "#f00", category_id: 1, evaluation_type_id: 1, taxonomy_version: 1 }],
       },
     ],

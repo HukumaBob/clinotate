@@ -16,7 +16,7 @@ const TREE = [
     category: { id: 1, name: "Anatomy", procedure_id: 5 },
     evaluation_types: [
       {
-        evaluation_type: { id: 100, name: "geometric" },
+        evaluation_type: { id: 100, name: "geometric", annotation_scope: "region" },
         labels: [{ id: 10, name: "pharynx", color: "#2E81DA", category_id: 1, evaluation_type_id: 100, taxonomy_version: 1 }],
       },
     ],
@@ -25,7 +25,7 @@ const TREE = [
     category: { id: 2, name: "Findings", procedure_id: 5 },
     evaluation_types: [
       {
-        evaluation_type: { id: 200, name: "morphological" },
+        evaluation_type: { id: 200, name: "morphological", annotation_scope: "region" },
         labels: [{ id: 20, name: "colon_adenoma", color: "#DA352E", category_id: 2, evaluation_type_id: 200, taxonomy_version: 1 }],
       },
     ],
