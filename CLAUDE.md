@@ -40,6 +40,17 @@ decided during execution — it's the map between "what the plan said" and
 - **Language:** English only — code, comments, docstrings, README, UI copy.
   No Russian anywhere in the repository (conversation with the user is fine;
   committed content is not).
+  - **One standing exception:** the original design spec
+    (`docs/specs/2026-07-22-new-platform-design.md`) and the UI/UX spec
+    predate this rule and are written in Russian, section headings included
+    (`## Домены`, `## Модель данных`, `## ML-сервис: adapter-паттерн`).
+    They stay as they are. Documents that reference their sections — chiefly
+    `ROADMAP.md` — quote those headings verbatim, because translating a
+    heading in the citing document would break the reference to a section
+    that is genuinely named that. So Cyrillic appearing in `ROADMAP.md` as a
+    quoted spec heading, or as a quoted phrase of the user's own, is correct
+    and must not be "fixed". New prose, new documents, and all code remain
+    English-only.
 - **UI theme:** dark is the only implemented theme. Tailwind uses the
   `class` dark-mode strategy (`darkMode: "class"` in `tailwind.config.ts`),
   so light mode can be added later without reworking components — don't
