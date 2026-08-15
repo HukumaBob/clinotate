@@ -1,3 +1,5 @@
+from dataclasses import dataclass, field
+
 from sqlalchemy.orm import Session
 
 from app.taxonomy.models import Category, EvaluationType, Label
@@ -69,3 +71,89 @@ def validate_parent_assignment(
             if current.parent_label_id is None
             else session.get(Label, current.parent_label_id)
         )
+
+
+@dataclass(frozen=True)
+class LabelNode:
+    id: int
+    parent_label_id: int | None
+    is_abstract: bool
+
+
+@dataclass(frozen=True)
+class LabelTree:
+    nodes: dict[int, LabelNode]
+
+    def has_children(self, label_id: int) -> bool:
+        return any(node.parent_label_id == label_id for node in self.nodes.values())
+
+
+@dataclass(frozen=True)
+class GroupingRules:
+    """A dataset's deviations from the taxonomy's default grouping.
+
+    Empty rules mean "exactly as the taxonomy says" -- which is what makes the
+    knob remember its position instead of starting from zero every time.
+    """
+
+    collapse: frozenset[int] = field(default_factory=frozenset)
+    expand: frozenset[int] = field(default_factory=frozenset)
+
+    def is_collapsed(self, tree: LabelTree, label_id: int) -> bool:
+        if label_id in self.expand:
+            return False
+        if label_id in self.collapse:
+            return True
+        return tree.has_children(label_id)
+
+
+def build_label_tree(session: Session) -> LabelTree:
+    """Load every label's hierarchy position in one query.
+
+    ~200 labels today; a recursive CTE would be more machinery than the whole
+    tree costs to hold in memory, and it will still be hundreds of kilobytes
+    at thousands of labels.
+    """
+    rows = session.query(Label.id, Label.parent_label_id, Label.is_abstract).all()
+    return LabelTree(
+        nodes={
+            row.id: LabelNode(
+                id=row.id, parent_label_id=row.parent_label_id, is_abstract=row.is_abstract
+            )
+            for row in rows
+        }
+    )
+
+
+def resolve_class(label_id: int, tree: LabelTree, rules: GroupingRules) -> int:
+    """Return the label_id whose name this annotation's export class takes.
+
+    Walk up the parent chain, remembering the *highest* collapsed ancestor --
+    highest rather than first, so that under multi-level trees collapsing
+    `polyp` beats collapsing `LST` instead of the answer depending on
+    traversal order.
+
+    A concrete parent's own direct annotations need no special case: the
+    parent resolves to itself and its children resolve to the parent, so both
+    land in the same class.
+    """
+    node = tree.nodes.get(label_id)
+    if node is None:
+        return label_id
+
+    resolved = label_id
+    seen: set[int] = {label_id}
+    current = node
+    while current.parent_label_id is not None:
+        parent_id = current.parent_label_id
+        if parent_id in seen:  # defensive: a loop that validation did not catch
+            break
+        seen.add(parent_id)
+        parent = tree.nodes.get(parent_id)
+        if parent is None:
+            break
+        if rules.is_collapsed(tree, parent_id):
+            resolved = parent_id
+        current = parent
+
+    return resolved
