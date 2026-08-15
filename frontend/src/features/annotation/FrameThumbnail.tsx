@@ -15,6 +15,7 @@ interface FrameThumbnailProps {
   selected: boolean;
   onToggleSelect: () => void;
   markReason?: { kind: "quality" | "similarity"; label: string };
+  noFindingsReviewed: boolean;
 }
 
 export function FrameThumbnail({
@@ -26,6 +27,7 @@ export function FrameThumbnail({
   selected,
   onToggleSelect,
   markReason,
+  noFindingsReviewed,
 }: FrameThumbnailProps) {
   const annotationsQuery = useAnnotations(frameId);
   const annotations = annotationsQuery.data ?? [];
@@ -52,6 +54,11 @@ export function FrameThumbnail({
       {markReason && (
         <span className="absolute right-2 top-2 rounded bg-red-700/90 px-1.5 py-0.5 text-xs text-white">
           {markReason.label}
+        </span>
+      )}
+      {noFindingsReviewed && (
+        <span className="absolute bottom-1 left-1 rounded bg-green-700/90 px-1.5 py-0.5 text-xs text-white">
+          No findings
         </span>
       )}
       {maskAnnotations.map((annotation) => {

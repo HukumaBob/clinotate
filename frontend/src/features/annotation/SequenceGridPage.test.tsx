@@ -67,7 +67,7 @@ describe("SequenceGridPage", () => {
         } as never;
       }
       if (path === "/media/videos/{video_id}/sequences" || path.includes("/frames")) {
-        return { data: [{ id: 1, sequence_id: 9, storage_key: "k", frame_index: 0, width: 10, height: 10, image_url: "http://x/f.png" }], error: undefined } as never;
+        return { data: [{ id: 1, sequence_id: 9, storage_key: "k", frame_index: 0, width: 10, height: 10, image_url: "http://x/f.png", no_findings_reviewed: false }], error: undefined } as never;
       }
       if (path === "/taxonomy/tree") {
         return {
@@ -120,8 +120,8 @@ describe("SequenceGridPage", () => {
       if (path.includes("/frames")) {
         return {
           data: [
-            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png" },
-            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png" },
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
           ],
           error: undefined,
         } as never;
@@ -197,8 +197,8 @@ describe("SequenceGridPage", () => {
       if (path.includes("/frames")) {
         return {
           data: [
-            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png" },
-            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png" },
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
           ],
           error: undefined,
         } as never;
@@ -254,8 +254,8 @@ describe("SequenceGridPage", () => {
       if (path.includes("/frames")) {
         return {
           data: [
-            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png" },
-            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png" },
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
           ],
           error: undefined,
         } as never;
@@ -326,8 +326,8 @@ describe("SequenceGridPage", () => {
       if (path.includes("/frames")) {
         return {
           data: [
-            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png" },
-            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png" },
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
           ],
           error: undefined,
         } as never;
@@ -406,8 +406,8 @@ describe("SequenceGridPage", () => {
       if (path.includes("/frames")) {
         return {
           data: [
-            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png" },
-            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png" },
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
           ],
           error: undefined,
         } as never;
@@ -458,5 +458,63 @@ describe("SequenceGridPage", () => {
     const checkboxesAfterClear = screen.getAllByRole("checkbox") as HTMLInputElement[];
     expect(checkboxesAfterClear).toHaveLength(2);
     checkboxesAfterClear.forEach((checkbox) => expect(checkbox.checked).toBe(true));
+  });
+
+  it("calls bulk-mark-no-findings with the current selection when Mark no findings is used", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: {
+            id: 9,
+            name: "Seq",
+            video_id: null,
+            procedure_id: 7,
+            start_time: 0,
+            duration: 0,
+            annotation_count: 0,
+            crop_box: null,
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined } as never;
+      }
+      if (path.includes("/frames")) {
+        return {
+          data: [
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
+          ],
+          error: undefined,
+        } as never;
+      }
+      if (path === "/taxonomy/tree") {
+        return { data: [], error: undefined } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { marked_frame_ids: [1, 2], skipped_frame_ids: [] },
+      error: undefined,
+    } as never);
+
+    renderAtSequence("9");
+
+    fireEvent.click(screen.getByRole("button", { name: /select/i }));
+
+    const images = await screen.findAllByAltText(/Frame \d/);
+    images.forEach((img) => fireEvent.click(img.closest("button")!));
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark no findings" }));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/annotation/frames/bulk-mark-no-findings",
+      expect.objectContaining({
+        body: { frame_ids: [1, 2] },
+      }),
+    );
   });
 });

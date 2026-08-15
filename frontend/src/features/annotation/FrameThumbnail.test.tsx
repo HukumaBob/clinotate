@@ -53,7 +53,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} noFindingsReviewed={false} />,
       { wrapper },
     );
 
@@ -80,7 +80,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} noFindingsReviewed={false} />,
       { wrapper },
     );
 
@@ -91,7 +91,7 @@ describe("FrameThumbnail", () => {
     vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} noFindingsReviewed={false} />,
       { wrapper },
     );
 
@@ -119,7 +119,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} noFindingsReviewed={false} />,
       { wrapper },
     );
 
@@ -161,7 +161,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} noFindingsReviewed={false} />,
       { wrapper },
     );
 
@@ -189,7 +189,7 @@ describe("FrameThumbnail", () => {
     } as never);
 
     render(
-      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} />,
+      <FrameThumbnail frameId={5} imageUrl="http://example.com/frame.png" taxonomyTree={TAXONOMY_TREE} onClick={() => {}} selectable={false} selected={false} onToggleSelect={() => {}} noFindingsReviewed={false} />,
       { wrapper },
     );
 
@@ -209,6 +209,7 @@ describe("FrameThumbnail", () => {
         selectable
         selected
         onToggleSelect={() => {}}
+        noFindingsReviewed={false}
       />,
       { wrapper },
     );
@@ -232,6 +233,7 @@ describe("FrameThumbnail", () => {
         selectable
         selected={false}
         onToggleSelect={onToggleSelect}
+        noFindingsReviewed={false}
       />,
       { wrapper },
     );
@@ -256,6 +258,7 @@ describe("FrameThumbnail", () => {
         selectable={false}
         selected={false}
         onToggleSelect={() => {}}
+        noFindingsReviewed={false}
       />,
       { wrapper },
     );
@@ -265,5 +268,45 @@ describe("FrameThumbnail", () => {
 
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("shows a no-findings badge when noFindingsReviewed is true", () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+
+    render(
+      <FrameThumbnail
+        frameId={1}
+        imageUrl="https://example.com/frame.png"
+        taxonomyTree={[]}
+        onClick={() => {}}
+        selectable={false}
+        selected={false}
+        onToggleSelect={() => {}}
+        noFindingsReviewed={true}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText("No findings")).toBeInTheDocument();
+  });
+
+  it("does not show the no-findings badge when noFindingsReviewed is false", () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+
+    render(
+      <FrameThumbnail
+        frameId={1}
+        imageUrl="https://example.com/frame.png"
+        taxonomyTree={[]}
+        onClick={() => {}}
+        selectable={false}
+        selected={false}
+        onToggleSelect={() => {}}
+        noFindingsReviewed={false}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.queryByText("No findings")).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { useBulkClassifyFrames, useBulkClearClassification } from "../../entities/useAnnotations";
+import {
+  useBulkClassifyFrames,
+  useBulkClearClassification,
+  useBulkClearNoFindings,
+  useBulkMarkNoFindings,
+} from "../../entities/useAnnotations";
 import { useDeleteFrames, useFindSimilar, useFrames, useRankQuality } from "../../entities/useFrames";
 import { useJob } from "../../entities/useJobs";
 import { useSequence } from "../../entities/useSequence";
@@ -34,6 +39,8 @@ export function SequenceGridPage() {
   const findSimilar = useFindSimilar(sequenceIdNumber);
   const bulkClassifyFrames = useBulkClassifyFrames(sequenceIdNumber);
   const bulkClearClassification = useBulkClearClassification(sequenceIdNumber);
+  const bulkMarkNoFindings = useBulkMarkNoFindings(sequenceIdNumber);
+  const bulkClearNoFindings = useBulkClearNoFindings(sequenceIdNumber);
   const jobQuery = useJob(activeJobId);
 
   useEffect(() => {
@@ -166,6 +173,19 @@ export function SequenceGridPage() {
     });
   }
 
+  function handleToggleNoFindings() {
+    const frameIds = Array.from(selectedFrameIds);
+    const selectedFrames = (framesQuery.data ?? []).filter((frame) => frameIds.includes(frame.id));
+    const allAlreadyMarked =
+      selectedFrames.length > 0 && selectedFrames.every((frame) => frame.no_findings_reviewed);
+
+    if (allAlreadyMarked) {
+      bulkClearNoFindings.mutate({ frameIds });
+    } else {
+      bulkMarkNoFindings.mutate({ frameIds });
+    }
+  }
+
   function handleClearMarks() {
     setSelectedFrameIds((current) => {
       const next = new Set(current);
@@ -177,6 +197,9 @@ export function SequenceGridPage() {
   }
 
   const sequenceName = sequenceQuery.data?.name ?? `Sequence #${sequenceId}`;
+  const selectedFrames = (framesQuery.data ?? []).filter((frame) => selectedFrameIds.has(frame.id));
+  const hasNoFindingsMarkedForAllSelected =
+    selectedFrames.length > 0 && selectedFrames.every((frame) => frame.no_findings_reviewed);
 
   return (
     <div className="min-h-full bg-gray-950 text-gray-100">
@@ -202,6 +225,8 @@ export function SequenceGridPage() {
           frameClassificationEvaluationTypeName="Frame classification"
           onAssignClassification={handleAssignClassification}
           onClearClassification={handleClearClassification}
+          hasNoFindingsMarkedForAllSelected={hasNoFindingsMarkedForAllSelected}
+          onToggleNoFindings={handleToggleNoFindings}
         />
       </div>
       <div className="grid grid-cols-2 gap-3 p-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
@@ -216,6 +241,7 @@ export function SequenceGridPage() {
             selected={selectedFrameIds.has(frame.id)}
             onToggleSelect={() => toggleFrameSelected(frame.id)}
             markReason={frameMarkReasons.get(frame.id)}
+            noFindingsReviewed={frame.no_findings_reviewed}
           />
         ))}
       </div>
