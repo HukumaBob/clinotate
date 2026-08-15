@@ -472,9 +472,16 @@ already-specified backend domain, and calling out the one real gap:
   SAM-3-only schemas — not whether a registry pattern exists, since it
   already does.
 
-**Open design question logged 2026-08-15, for whoever picks up the Dataset
-screen / `datasets` module:** a chat session worked through two related
-taxonomy questions that both point at the same missing mechanism —
+**Open design question logged 2026-08-15 — now RESOLVED by
+[docs/superpowers/specs/2026-08-15-label-hierarchy-grouping-design.md](docs/superpowers/specs/2026-08-15-label-hierarchy-grouping-design.md)
+(approved 2026-08-15, not yet implemented).** The decisions: recursive
+`Label.parent_label_id` + `Label.is_abstract` in the taxonomy holding the
+default grouping, with per-dataset `grouping_overrides` as a delta on top;
+one shared `resolve_class` function behind both export and the live
+balance panel; hierarchy stays live (a rebuild picks up taxonomy changes)
+with the resolved class map recorded into each export as a fingerprint;
+the quality-label migration lands first, carrying the parent edges with
+it. The original question, kept for context —
 
 1. `frame_classification`'s `Quality` category currently has one label
    (`low_quality`), while `geometric` (region/MASK-BBOX)'s own `Quality`
