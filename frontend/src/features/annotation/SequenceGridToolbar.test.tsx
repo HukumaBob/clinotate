@@ -448,7 +448,7 @@ const sampleTaxonomyTree = [
     category: { id: 1, name: "Landmark", procedure_id: 1 },
     evaluation_types: [
       {
-        evaluation_type: { id: 9, name: "Frame classification" },
+        evaluation_type: { id: 9, name: "frame_classification", annotation_scope: "frame" },
         labels: [
           { id: 101, name: "antrum", color: "#ff0000", category_id: 1, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
           { id: 102, name: "ge_junction", color: "#00ff00", category_id: 1, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
@@ -460,9 +460,15 @@ const sampleTaxonomyTree = [
     category: { id: 2, name: "Quality", procedure_id: 1 },
     evaluation_types: [
       {
-        evaluation_type: { id: 9, name: "Frame classification" },
+        evaluation_type: { id: 9, name: "frame_classification", annotation_scope: "frame" },
         labels: [
           { id: 201, name: "low_quality", color: "#0000ff", category_id: 2, evaluation_type_id: 9, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
+        ],
+      },
+      {
+        evaluation_type: { id: 10, name: "geometric", annotation_scope: "region" },
+        labels: [
+          { id: 202, name: "foam", color: "#111111", category_id: 2, evaluation_type_id: 10, taxonomy_version: 1, created_at: "2026-01-01T00:00:00Z" },
         ],
       },
     ],
@@ -480,7 +486,6 @@ describe("SequenceGridToolbar classification controls", () => {
         onDeleteSelected={() => {}}
         onCancel={() => {}}
         taxonomyTree={sampleTaxonomyTree}
-        frameClassificationEvaluationTypeName="Frame classification"
         onAssignClassification={() => {}}
         onClearClassification={() => {}}
       />,
@@ -500,7 +505,6 @@ describe("SequenceGridToolbar classification controls", () => {
         onDeleteSelected={() => {}}
         onCancel={() => {}}
         taxonomyTree={sampleTaxonomyTree}
-        frameClassificationEvaluationTypeName="Frame classification"
         onAssignClassification={() => {}}
         onClearClassification={() => {}}
       />,
@@ -525,7 +529,6 @@ describe("SequenceGridToolbar classification controls", () => {
         onDeleteSelected={() => {}}
         onCancel={() => {}}
         taxonomyTree={sampleTaxonomyTree}
-        frameClassificationEvaluationTypeName="Frame classification"
         onAssignClassification={onAssignClassification}
         onClearClassification={() => {}}
       />,
@@ -548,7 +551,6 @@ describe("SequenceGridToolbar classification controls", () => {
         onDeleteSelected={() => {}}
         onCancel={() => {}}
         taxonomyTree={sampleTaxonomyTree}
-        frameClassificationEvaluationTypeName="Frame classification"
         onAssignClassification={() => {}}
         onClearClassification={() => {}}
       />,
@@ -569,7 +571,6 @@ describe("SequenceGridToolbar classification controls", () => {
         onDeleteSelected={() => {}}
         onCancel={() => {}}
         taxonomyTree={sampleTaxonomyTree}
-        frameClassificationEvaluationTypeName="Frame classification"
         onAssignClassification={() => {}}
         onClearClassification={onClearClassification}
       />,
@@ -591,7 +592,6 @@ describe("SequenceGridToolbar classification controls", () => {
         onDeleteSelected={() => {}}
         onCancel={() => {}}
         taxonomyTree={sampleTaxonomyTree}
-        frameClassificationEvaluationTypeName="Frame classification"
         onAssignClassification={() => {}}
         onClearClassification={() => {}}
       />,
@@ -599,6 +599,34 @@ describe("SequenceGridToolbar classification controls", () => {
 
     expect(screen.getByRole("button", { name: "Assign" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
+  });
+
+  it("only offers labels from frame-scoped evaluation types in the category dropdown, even when a category has both", async () => {
+    const user = userEvent.setup();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        taxonomyTree={sampleTaxonomyTree}
+        onAssignClassification={() => {}}
+        onClearClassification={() => {}}
+      />,
+    );
+
+    const categorySelect = screen.getByLabelText("Classification category");
+    const optionLabels = Array.from(categorySelect.querySelectorAll("option")).map((o) => o.textContent);
+    expect(optionLabels).toContain("Landmark");
+    expect(optionLabels).toContain("Quality");
+
+    await user.selectOptions(categorySelect, "2");
+    const labelSelect = screen.getByLabelText("Classification label");
+    const labelOptionNames = Array.from(labelSelect.querySelectorAll("option")).map((o) => o.textContent);
+    expect(labelOptionNames).toContain("low_quality");
+    expect(labelOptionNames).not.toContain("foam");
   });
 
   it("calls onToggleNoFindings when Mark no findings is clicked", () => {

@@ -339,7 +339,7 @@ describe("SequenceGridPage", () => {
               category: { id: 1, name: "Location", procedure_id: 7 },
               evaluation_types: [
                 {
-                  evaluation_type: { id: 20, name: "Frame classification" },
+                  evaluation_type: { id: 20, name: "frame_classification", annotation_scope: "frame" },
                   labels: [{ id: 101, name: "Antrum", color: "#00ff00", category_id: 1 }],
                 },
               ],
@@ -419,7 +419,7 @@ describe("SequenceGridPage", () => {
               category: { id: 1, name: "Location", procedure_id: 7 },
               evaluation_types: [
                 {
-                  evaluation_type: { id: 20, name: "Frame classification" },
+                  evaluation_type: { id: 20, name: "frame_classification", annotation_scope: "frame" },
                   labels: [{ id: 101, name: "Antrum", color: "#00ff00", category_id: 1 }],
                 },
               ],

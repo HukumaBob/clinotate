@@ -22,7 +22,6 @@ interface SequenceGridToolbarProps {
   hasAutoMarks?: boolean;
   onClearMarks?: () => void;
   taxonomyTree?: TaxonomyTreeNode[];
-  frameClassificationEvaluationTypeName?: string;
   onAssignClassification?: (labelId: number) => void;
   onClearClassification?: (categoryId: number, evaluationTypeId: number) => void;
   hasNoFindingsMarkedForAllSelected?: boolean;
@@ -47,7 +46,6 @@ export function SequenceGridToolbar({
   hasAutoMarks = false,
   onClearMarks = () => {},
   taxonomyTree = [],
-  frameClassificationEvaluationTypeName = "Frame classification",
   onAssignClassification = () => {},
   onClearClassification = () => {},
   hasNoFindingsMarkedForAllSelected = false,
@@ -62,7 +60,7 @@ export function SequenceGridToolbar({
       taxonomyTree
         .map((node) => {
           const evaluationTypeNode = node.evaluation_types.find(
-            (candidate) => candidate.evaluation_type.name === frameClassificationEvaluationTypeName,
+            (candidate) => candidate.evaluation_type.annotation_scope === "frame",
           );
           return {
             category: node.category,
@@ -71,7 +69,7 @@ export function SequenceGridToolbar({
           };
         })
         .filter((entry) => entry.labels.length > 0),
-    [taxonomyTree, frameClassificationEvaluationTypeName],
+    [taxonomyTree],
   );
 
   const labelsForSelectedCategory =

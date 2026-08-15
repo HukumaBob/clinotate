@@ -225,7 +225,6 @@ export function SequenceGridPage() {
           hasAutoMarks={autoCheckedFrameIds.size > 0}
           onClearMarks={handleClearMarks}
           taxonomyTree={taxonomyTree}
-          frameClassificationEvaluationTypeName="Frame classification"
           onAssignClassification={handleAssignClassification}
           onClearClassification={handleClearClassification}
           hasNoFindingsMarkedForAllSelected={hasNoFindingsMarkedForAllSelected}
