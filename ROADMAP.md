@@ -472,6 +472,45 @@ already-specified backend domain, and calling out the one real gap:
   SAM-3-only schemas — not whether a registry pattern exists, since it
   already does.
 
+**Open design question logged 2026-08-15, for whoever picks up the Dataset
+screen / `datasets` module:** a chat session worked through two related
+taxonomy questions that both point at the same missing mechanism —
+
+1. `frame_classification`'s `Quality` category currently has one label
+   (`low_quality`), while `geometric` (region/MASK-BBOX)'s own `Quality`
+   category has `bad_picture`/`close_focus`/`dirty_optic` as leftover
+   region-scoped labels from the pre-taxonomy platform (which had no
+   frame-level classification at all, so "picture is unfocused" had to be
+   shoehorned into a bbox). Conclusion: these three describe the whole
+   frame (defocus/glare/obstruction aren't spatially bounded the way
+   `foam`/`feces`/`mucus` are), so they belong in `frame_classification`
+   alongside `low_quality`, not `geometric`. Not yet done — needs a
+   migration moving existing annotations, not just a taxonomy edit.
+2. Separately: `bulk_mark_no_findings`'s conflict rule (any `Annotation`
+   row, `CLASSIFICATION` included, clears `no_findings_reviewed` — see
+   [docs/specs/2026-08-14-frame-no-findings-flag-design.md](docs/specs/2026-08-14-frame-no-findings-flag-design.md))
+   was re-examined and confirmed correct for training *one* multi-class
+   YOLO detector across findings+anatomy+artifacts together (not separate
+   per-concept models) — a single YOLO label file already encodes
+   per-class absence implicitly via missing lines, so the flag only needs
+   to mark frames nobody annotated at all. No code change came out of
+   this, just the reasoning is now recorded in the spec.
+3. The bigger idea that came out of both: labels need a **parent-class
+   grouping mechanism** so fine-grained annotation stays available (e.g.
+   `0-Ip`...`LST` polyp subtypes, or `close_focus`/`dirty_optic`/
+   `bad_picture` as quality sub-reasons) while dataset export can group
+   them into a coarser, balanced class (`polyp`, `low_quality`) for
+   actual training — imbalanced fine-grained classes are a known problem
+   worth solving once, in the taxonomy (`Label.parent_label_id`, doesn't
+   exist yet — today's hierarchy is only `relations` used for tag/category
+   resolution at import time, not class-grouping), not per-export as a
+   hand-maintained mapping file. The editing *UI* for that grouping should
+   live on the not-yet-built Dataset screen next to its live
+   `balance_metrics` panel (already in the design spec's `Dataset` model,
+   see above) — the whole point is choosing groupings while watching the
+   resulting class balance, not editing hierarchy blind on the Tags
+   screen. Scoped as part of Phase 2b's `datasets` module, not started.
+
 **Spec correction logged 2026-07-22 (before Phase 2 work started):** the
 design spec originally described SAM-2 (point/box only) and YOLO11/RT-DETRv2
 as current, with SAM-3/YOLO26 as future work "when they arrive." Both have
