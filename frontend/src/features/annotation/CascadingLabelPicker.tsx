@@ -27,9 +27,13 @@ export function CascadingLabelPicker({ store, procedureId }: CascadingLabelPicke
   const selectedEvaluationTypeNode = evaluationTypeOptions.find(
     (node) => node.evaluation_type.id === labelClassification,
   );
-  const tagOptions = labelClassification === null
-    ? evaluationTypeOptions.flatMap((node) => node.labels)
-    : (selectedEvaluationTypeNode?.labels ?? []);
+  // Abstract labels are grouping containers for dataset export, not things an
+  // annotator can put on a frame.
+  const tagOptions = (
+    labelClassification === null
+      ? evaluationTypeOptions.flatMap((node) => node.labels)
+      : (selectedEvaluationTypeNode?.labels ?? [])
+  ).filter((label) => !label.is_abstract);
 
   return (
     <div className="flex gap-2">

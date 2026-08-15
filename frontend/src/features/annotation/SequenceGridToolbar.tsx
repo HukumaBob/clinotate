@@ -65,7 +65,9 @@ export function SequenceGridToolbar({
           return {
             category: node.category,
             evaluationTypeId: evaluationTypeNode?.evaluation_type.id ?? null,
-            labels: evaluationTypeNode?.labels ?? [],
+            // Abstract labels are grouping containers for dataset export, not
+            // things an annotator can put on a frame.
+            labels: (evaluationTypeNode?.labels ?? []).filter((label) => !label.is_abstract),
           };
         })
         .filter((entry) => entry.labels.length > 0),

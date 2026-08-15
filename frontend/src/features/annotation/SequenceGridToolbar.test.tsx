@@ -664,4 +664,59 @@ describe("SequenceGridToolbar classification controls", () => {
 
     expect(screen.getByRole("button", { name: "Unmark no findings" })).toBeInTheDocument();
   });
+
+  it("does not offer abstract labels in the classification dropdown", async () => {
+    const user = userEvent.setup();
+    const tree = [
+      {
+        category: { id: 3, name: "Quality", procedure_id: 1 },
+        evaluation_types: [
+          {
+            evaluation_type: { id: 9, name: "frame_classification", annotation_scope: "frame" },
+            labels: [
+              {
+                id: 70,
+                name: "quality_group",
+                color: "#FFFFFF",
+                category_id: 3,
+                evaluation_type_id: 9,
+                taxonomy_version: 1,
+                parent_label_id: null,
+                is_abstract: true,
+              },
+              {
+                id: 71,
+                name: "close_focus",
+                color: "#FFFFFF",
+                category_id: 3,
+                evaluation_type_id: 9,
+                taxonomy_version: 1,
+                parent_label_id: 70,
+                is_abstract: false,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        taxonomyTree={tree}
+        onAssignClassification={() => {}}
+        onClearClassification={() => {}}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("Classification category"), "3");
+
+    expect(await screen.findByRole("option", { name: "close_focus" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "quality_group" })).not.toBeInTheDocument();
+  });
 });
