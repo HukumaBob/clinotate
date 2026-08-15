@@ -45,6 +45,10 @@ class Label(Base):
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
     evaluation_type_id: Mapped[int] = mapped_column(ForeignKey("evaluation_types.id"))
     taxonomy_version: Mapped[int] = mapped_column(default=1)
+    parent_label_id: Mapped[int | None] = mapped_column(
+        ForeignKey("labels.id"), nullable=True, default=None
+    )
+    is_abstract: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
