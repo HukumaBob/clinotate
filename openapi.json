@@ -2805,6 +2805,212 @@
         }
       }
     },
+    "/datasets/balance": {
+      "post": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Dataset Balance",
+        "description": "Live recompute for the panel. Writes nothing -- that is its contract.",
+        "operationId": "dataset_balance_datasets_balance_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BalanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceReportRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/datasets": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "List Datasets",
+        "operationId": "list_datasets_datasets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Datasets Datasets Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Create",
+        "operationId": "create_datasets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/datasets/{dataset_id}": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Dataset",
+        "operationId": "get_dataset_datasets__dataset_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Delete Dataset",
+        "operationId": "delete_dataset_datasets__dataset_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/jobs/sam3/predict": {
       "post": {
         "tags": [
@@ -3268,6 +3474,85 @@
         ],
         "title": "AnnotationType"
       },
+      "BalanceReportRead": {
+        "properties": {
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/ClassCountRead"
+            },
+            "type": "array",
+            "title": "Classes"
+          },
+          "total_frames": {
+            "type": "integer",
+            "title": "Total Frames"
+          },
+          "negative_frames": {
+            "type": "integer",
+            "title": "Negative Frames"
+          },
+          "below_threshold": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Below Threshold"
+          },
+          "threshold": {
+            "type": "integer",
+            "title": "Threshold"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "classes",
+          "total_frames",
+          "negative_frames",
+          "below_threshold",
+          "threshold",
+          "metrics"
+        ],
+        "title": "BalanceReportRead"
+      },
+      "BalanceRequest": {
+        "properties": {
+          "sequence_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Sequence Ids"
+          },
+          "task_type": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "grouping_overrides": {
+            "$ref": "#/components/schemas/GroupingOverrides"
+          },
+          "excluded_label_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Excluded Label Ids"
+          },
+          "threshold": {
+            "type": "integer",
+            "title": "Threshold",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_type"
+        ],
+        "title": "BalanceRequest"
+      },
       "Body_upload_photo_sequence_media_sequences_photos_post": {
         "properties": {
           "files": {
@@ -3526,6 +3811,34 @@
         "type": "object",
         "title": "CategoryUpdate"
       },
+      "ClassCountRead": {
+        "properties": {
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "instances": {
+            "type": "integer",
+            "title": "Instances"
+          },
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label_id",
+          "name",
+          "instances",
+          "frames"
+        ],
+        "title": "ClassCountRead"
+      },
       "CropBox": {
         "properties": {
           "left": {
@@ -3559,6 +3872,151 @@
         },
         "type": "object",
         "title": "CropBox"
+      },
+      "DatasetCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "task_type": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "sequence_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Sequence Ids"
+          },
+          "split_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Split Config"
+          },
+          "grouping_overrides": {
+            "$ref": "#/components/schemas/GroupingOverrides"
+          },
+          "excluded_label_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Excluded Label Ids"
+          },
+          "threshold": {
+            "type": "integer",
+            "title": "Threshold",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "task_type"
+        ],
+        "title": "DatasetCreate"
+      },
+      "DatasetItemRead": {
+        "properties": {
+          "frame_id": {
+            "type": "integer",
+            "title": "Frame Id"
+          },
+          "sequence_id": {
+            "type": "integer",
+            "title": "Sequence Id"
+          },
+          "split": {
+            "$ref": "#/components/schemas/SplitName"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_id",
+          "sequence_id",
+          "split"
+        ],
+        "title": "DatasetItemRead"
+      },
+      "DatasetRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "task_type": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "taxonomy_version": {
+            "type": "integer",
+            "title": "Taxonomy Version"
+          },
+          "split_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Split Config"
+          },
+          "grouping_overrides": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Grouping Overrides"
+          },
+          "excluded_label_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Excluded Label Ids"
+          },
+          "balance_metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Balance Metrics"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "item_count": {
+            "type": "integer",
+            "title": "Item Count"
+          },
+          "split_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Split Counts"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DatasetItemRead"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "task_type",
+          "taxonomy_version",
+          "split_config",
+          "grouping_overrides",
+          "excluded_label_ids",
+          "balance_metrics",
+          "created_at",
+          "item_count",
+          "split_counts"
+        ],
+        "title": "DatasetRead"
       },
       "EvaluationTypeCreate": {
         "properties": {
@@ -3718,6 +4176,26 @@
           "no_findings_reviewed"
         ],
         "title": "FrameRead"
+      },
+      "GroupingOverrides": {
+        "properties": {
+          "collapse": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Collapse"
+          },
+          "expand": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Expand"
+          }
+        },
+        "type": "object",
+        "title": "GroupingOverrides"
       },
       "HTTPValidationError": {
         "properties": {
@@ -4897,6 +5375,15 @@
         ],
         "title": "SettingsUpdate"
       },
+      "SplitName": {
+        "type": "string",
+        "enum": [
+          "train",
+          "val",
+          "test"
+        ],
+        "title": "SplitName"
+      },
       "SuggestSequenceNameResponse": {
         "properties": {
           "name": {
@@ -4909,6 +5396,15 @@
           "name"
         ],
         "title": "SuggestSequenceNameResponse"
+      },
+      "TaskType": {
+        "type": "string",
+        "enum": [
+          "detection",
+          "segmentation",
+          "classification"
+        ],
+        "title": "TaskType"
       },
       "TaxonomyTreeEvaluationTypeNode": {
         "properties": {

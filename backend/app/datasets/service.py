@@ -1,10 +1,11 @@
 import math
 from dataclasses import dataclass, field
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.annotation.models import Annotation
-from app.datasets.models import TaskType
+from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
 from app.media.models import Frame
 from app.taxonomy.hierarchy import GroupingRules, build_label_tree, resolve_class
 from app.taxonomy.models import AnnotationScope, EvaluationType, Label
@@ -226,3 +227,111 @@ def compute_balance(
         threshold=threshold,
         metrics=metrics,
     )
+
+
+def assign_splits(
+    sequence_ids: list[int], split_config: dict
+) -> dict[int, SplitName]:
+    """Assign whole sequences to splits; frames inherit their sequence's split.
+
+    Splitting frames instead would leak -- consecutive frames of one video are
+    near-duplicates, so the same image would sit on both sides of the split and
+    inflate validation metrics into meaninglessness.
+
+    With few sequences the realized fractions cannot match the requested ones
+    (7 sequences at 70/20/10 lands on 71/14/14). Fill train first, then val,
+    then test, and let the caller report realized counts.
+    """
+    ordered = sorted(sequence_ids)
+    total = len(ordered)
+    if total == 0:
+        return {}
+
+    train_pct = split_config.get("train", 70) / 100
+    val_pct = split_config.get("val", 20) / 100
+
+    train_n = int(total * train_pct)
+    val_n = int(total * val_pct)
+    # Guarantee at least one training sequence whenever anything was selected.
+    if train_n == 0:
+        train_n = 1
+        val_n = min(val_n, max(total - train_n, 0))
+
+    assignment: dict[int, SplitName] = {}
+    for index, sequence_id in enumerate(ordered):
+        if index < train_n:
+            assignment[sequence_id] = SplitName.TRAIN
+        elif index < train_n + val_n:
+            assignment[sequence_id] = SplitName.VAL
+        else:
+            assignment[sequence_id] = SplitName.TEST
+    return assignment
+
+
+def create_dataset(session: Session, payload, user) -> Dataset:
+    """Create a Dataset and freeze its frame list.
+
+    Composition is materialized here rather than recomputed on read: otherwise
+    tomorrow's annotation silently changes yesterday's dataset, and the split
+    shifts with it.
+    """
+    rules = GroupingRules(
+        collapse=frozenset(payload.grouping_overrides.collapse),
+        expand=frozenset(payload.grouping_overrides.expand),
+    )
+    excluded = set(payload.excluded_label_ids)
+
+    report = compute_balance(
+        session, payload.sequence_ids, payload.task_type, rules, excluded, payload.threshold
+    )
+    composition = collect_frames(session, payload.sequence_ids, payload.task_type, excluded)
+
+    taxonomy_version = (
+        session.query(func.max(Label.taxonomy_version)).scalar() or 1
+    )
+
+    dataset = Dataset(
+        name=payload.name,
+        task_type=payload.task_type,
+        taxonomy_version=taxonomy_version,
+        split_config=payload.split_config,
+        grouping_overrides=payload.grouping_overrides.model_dump(),
+        excluded_label_ids=list(excluded),
+        balance_metrics={
+            "severity": report.metrics.get("severity"),
+            "metrics": report.metrics,
+            "classes": [
+                {"label_id": c.label_id, "name": c.name,
+                 "instances": c.instances, "frames": c.frames}
+                for c in report.classes
+            ],
+            "below_threshold": report.below_threshold,
+            "threshold": report.threshold,
+            "negative_frames": report.negative_frames,
+        },
+        created_by_id=user.id,
+    )
+    session.add(dataset)
+    session.flush()
+
+    frame_ids = [item.frame_id for item in composition]
+    sequence_by_frame = dict(
+        session.query(Frame.id, Frame.sequence_id).filter(Frame.id.in_(frame_ids)).all()
+    ) if frame_ids else {}
+
+    split_by_sequence = assign_splits(payload.sequence_ids, payload.split_config)
+
+    for item in composition:
+        sequence_id = sequence_by_frame.get(item.frame_id)
+        session.add(
+            DatasetItem(
+                dataset_id=dataset.id,
+                frame_id=item.frame_id,
+                annotation_ids=item.annotation_ids,
+                split=split_by_sequence.get(sequence_id, SplitName.TRAIN),
+            )
+        )
+
+    session.commit()
+    session.refresh(dataset)
+    return dataset

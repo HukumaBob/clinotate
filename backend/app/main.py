@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.annotation.router import router as annotation_router
 from app.auth.router import router as auth_router
-import app.datasets.models  # noqa: F401 -- registers Dataset/DatasetItem on Base.metadata; router follows in Task 5
+from app.datasets.router import router as datasets_router
 from app.jobs.router import router as jobs_router
 from app.media.router import router as media_router
 from app.settings.router import router as settings_router
@@ -21,6 +21,7 @@ app.include_router(auth_router)
 app.include_router(taxonomy_router)
 app.include_router(media_router)
 app.include_router(annotation_router)
+app.include_router(datasets_router)
 app.include_router(jobs_router)
 app.include_router(settings_router)
 
