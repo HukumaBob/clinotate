@@ -137,27 +137,30 @@ def bulk_mark_no_findings(
 ) -> tuple[list[int], list[int]]:
     _require_frames_exist(session, frame_ids)
 
-    marked: list[int] = []
-    skipped: list[int] = []
+    annotated_frame_ids = {
+        row.frame_id
+        for row in session.query(Annotation.frame_id)
+        .filter(Annotation.frame_id.in_(frame_ids))
+        .distinct()
+        .all()
+    }
+
+    frame_ids_to_mark = [
+        frame_id for frame_id in frame_ids if frame_id not in annotated_frame_ids
+    ]
+    skipped = [frame_id for frame_id in frame_ids if frame_id in annotated_frame_ids]
+
     now = datetime.now(timezone.utc)
-
-    for frame_id in frame_ids:
-        has_annotation = (
-            session.query(Annotation).filter(Annotation.frame_id == frame_id).first()
-            is not None
-        )
-        if has_annotation:
-            skipped.append(frame_id)
-            continue
-
-        frame = session.get(Frame, frame_id)
+    frames_to_mark = (
+        session.query(Frame).filter(Frame.id.in_(frame_ids_to_mark)).all()
+    )
+    for frame in frames_to_mark:
         frame.no_findings_reviewed = True
         frame.no_findings_reviewed_by_id = reviewed_by.id
         frame.no_findings_reviewed_at = now
-        marked.append(frame_id)
 
     session.commit()
-    return marked, skipped
+    return frame_ids_to_mark, skipped
 
 
 def bulk_clear_no_findings(session: Session, frame_ids: list[int]) -> list[int]:
