@@ -4,7 +4,12 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { apiClient } from "../shared/api/client";
-import { useBulkClassifyFrames, useBulkClearClassification } from "./useAnnotations";
+import {
+  useBulkClassifyFrames,
+  useBulkClearClassification,
+  useBulkMarkNoFindings,
+  useBulkClearNoFindings,
+} from "./useAnnotations";
 
 vi.mock("../shared/api/client", () => ({
   apiClient: {
@@ -43,6 +48,47 @@ describe("useBulkClearClassification", () => {
 
     expect(apiClient.POST).toHaveBeenCalledWith("/annotation/frames/bulk-clear-classification", {
       body: { frame_ids: [1, 2], category_id: 3, evaluation_type_id: 9 },
+    });
+  });
+});
+
+describe("useBulkMarkNoFindings", () => {
+  it("posts frame ids and invalidates frames + annotations queries", async () => {
+    const postMock = vi.mocked(apiClient.POST);
+    postMock.mockResolvedValueOnce({
+      data: { marked_frame_ids: [1, 2], skipped_frame_ids: [] },
+      error: undefined,
+    } as never);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useBulkMarkNoFindings(42), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    });
+
+    result.current.mutate({ frameIds: [1, 2] });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(postMock).toHaveBeenCalledWith("/annotation/frames/bulk-mark-no-findings", {
+      body: { frame_ids: [1, 2] },
+    });
+  });
+});
+
+describe("useBulkClearNoFindings", () => {
+  it("posts frame ids to the bulk-clear-no-findings endpoint", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      data: { cleared_frame_ids: [1, 2], skipped_frame_ids: [] },
+    } as never);
+
+    const { result } = renderHook(() => useBulkClearNoFindings(42), { wrapper });
+    result.current.mutate({ frameIds: [1, 2] });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiClient.POST).toHaveBeenCalledWith("/annotation/frames/bulk-clear-no-findings", {
+      body: { frame_ids: [1, 2] },
     });
   });
 });

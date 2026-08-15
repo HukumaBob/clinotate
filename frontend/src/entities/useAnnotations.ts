@@ -103,3 +103,36 @@ export function useBulkClearClassification(sequenceId: number) {
     },
   });
 }
+
+export function useBulkMarkNoFindings(sequenceId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ frameIds }: { frameIds: number[] }) => {
+      const result = await apiClient.POST("/annotation/frames/bulk-mark-no-findings", {
+        body: { frame_ids: frameIds },
+      });
+      return result.data;
+    },
+    onSuccess: (_data, variables) => {
+      for (const frameId of variables.frameIds) {
+        queryClient.invalidateQueries({ queryKey: ["annotations", frameId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["frames", sequenceId] });
+    },
+  });
+}
+
+export function useBulkClearNoFindings(sequenceId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ frameIds }: { frameIds: number[] }) => {
+      const result = await apiClient.POST("/annotation/frames/bulk-clear-no-findings", {
+        body: { frame_ids: frameIds },
+      });
+      return result.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["frames", sequenceId] });
+    },
+  });
+}
