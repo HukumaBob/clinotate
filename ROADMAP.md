@@ -472,16 +472,121 @@ already-specified backend domain, and calling out the one real gap:
   SAM-3-only schemas — not whether a registry pattern exists, since it
   already does.
 
-**Open design question logged 2026-08-15 — now RESOLVED by
+**Open design question logged 2026-08-15 — RESOLVED and IMPLEMENTED
+2026-08-15** per
 [docs/superpowers/specs/2026-08-15-label-hierarchy-grouping-design.md](docs/superpowers/specs/2026-08-15-label-hierarchy-grouping-design.md)
-(approved 2026-08-15, not yet implemented).** The decisions: recursive
-`Label.parent_label_id` + `Label.is_abstract` in the taxonomy holding the
-default grouping, with per-dataset `grouping_overrides` as a delta on top;
-one shared `resolve_class` function behind both export and the live
-balance panel; hierarchy stays live (a rebuild picks up taxonomy changes)
-with the resolved class map recorded into each export as a fingerprint;
-the quality-label migration lands first, carrying the parent edges with
-it. The original question, kept for context —
+and
+[docs/superpowers/plans/2026-08-15-label-hierarchy-grouping.md](docs/superpowers/plans/2026-08-15-label-hierarchy-grouping.md).
+What actually shipped, executed as 8 tasks via `subagent-driven-development`:
+
+1. **Two new `Label` columns** (`a3c5355`): `parent_label_id` (self-referencing
+   FK, nullable) and `is_abstract` (bool, default `false`). `Dataset.
+   grouping_overrides` and the Dataset-screen balance panel remain deferred
+   to Phase 2b's `datasets` module, unchanged from the original plan.
+2. **Three invariants enforced in `backend/app/taxonomy/hierarchy.py`'s
+   `validate_parent_assignment`** (`5448b52`), all raising `HierarchyError`
+   → HTTP 422, not a DB constraint, because procedure is only reachable
+   through `Category` (a composite FK would cost more than it's worth) and
+   because "same annotation scope" needed application logic, not SQL:
+   - same procedure (a mask label cannot be re-parented onto a label from a
+     different procedure's taxonomy — verified live below);
+   - no cycles (walks the parent chain from the proposed parent; hitting the
+     child again is rejected before it can loop at export time instead of
+     failing where the mistake was made);
+   - same `annotation_scope` as the child (a mask/`geometric` label cannot
+     hang under a whole-frame/`frame_classification` parent or vice versa —
+     the same category error `AnnotationScope` already exists to prevent,
+     entered from the other side).
+3. **`resolve_class`** (`e671188`) in the same module: walks a label's
+   parent chain and returns the highest *collapsed* ancestor's id (or the
+   label's own id if nothing collapses it), given a `LabelTree` (all labels'
+   hierarchy positions, loaded in one query — ~200 labels today, not worth a
+   recursive CTE) and `GroupingRules` (a dataset's `collapse`/`expand`
+   deltas on top of the taxonomy default, where "has children" = collapsed
+   by default). No caller yet, as planned — the Dataset screen and export
+   pipeline that will call it are still Phase 2b, not this plan.
+4. **Quality-label migration** (`d0965f8`, Alembic revision
+   `663b8b5c3cad`): moved `bad_picture`, `close_focus`, `dirty_optic`
+   (colono + egds) from `geometric`/region-scoped to `frame_classification`,
+   parented under each procedure's `low_quality`. UPDATE-only plus one
+   INSERT (egds had no `low_quality` label yet; colono's already existed),
+   keyed on label name rather than hardcoded ids so it stays correct if
+   another environment's taxonomy layout differs. Verified against the dev
+   database both by the migration's own log (181 → 182 labels, 82
+   annotations unchanged) and, in this task, directly via `psql`: colono's
+   `low_quality` is id 2373 with `dirty_optic` (id 2222) as its only
+   migrated child; egds' `low_quality` is id 2476 with `bad_picture` (2171),
+   `close_focus` (2166) and `dirty_optic` (2165) as children. Region-scoped
+   Quality labels that were never in scope for this move (`foam`, `feces`,
+   `mucus`, `bilis`, `liquor`, `bad_preparation`) stayed `geometric`,
+   confirmed unchanged in both the Tags screen table and the frame editor's
+   mask picker.
+5. **Picker filtering** (`6cf1bd9`): both the sequence grid's
+   frame-classification "Category…" dropdown and the frame editor's
+   `CascadingLabelPicker` (mask/region annotation) now exclude any label
+   with `is_abstract = true`, and the sequence grid's dropdown for `Quality`
+   now lists the migrated three alongside `low_quality` while the mask
+   picker's `Quality` list no longer does.
+6. **Tags screen parent/abstract editor** (`92284bb`): the label edit form
+   gained a "Parent label" dropdown (scoped to same-procedure labels) and an
+   "Abstract (grouping only, not annotatable)" checkbox, both persisted via
+   `PATCH /taxonomy/labels/{id}`.
+
+**Real-browser verification (this task, 2026-08-15), against the dev stack
+at commit `92284bb`** — done because this repo's frontend unit tests mock
+`apiClient` wholesale and cannot observe whether an abstract label still
+renders in a real picker against real taxonomy data:
+- Sequence grid Select mode → Category "Quality": colono offers
+  `dirty_optic`/`low_quality`; egds offers `dirty_optic`/`close_focus`/
+  `bad_picture`/`low_quality`. Frame editor's `CascadingLabelPicker` →
+  Category "Quality" for the same egds sequence lists only `foam`/`mucus`/
+  `liquor`/`bad_preparation`/`bilis` — none of the three migrated labels
+  appear there, matching the scope split.
+- Tags screen: edited a disposable `test-polyp-label` row (id 2377, one of
+  ~15 identically-named dev-debris rows left by earlier test runs, per this
+  plan's own "known wrinkle" note below — a real clinical label was
+  deliberately avoided), set its parent to `pedunculated_polyp_0_Ip`, saved,
+  reloaded the page, and confirmed the parent field still read
+  `pedunculated_polyp_0_Ip`. Checked "Abstract," saved, and confirmed the
+  frame editor's Findings tag list dropped from 15 `test-polyp-label`
+  options to 14; unchecked it, saved, and the count returned to 15. Both
+  changes reverted before finishing, per this task's own constraint against
+  altering real taxonomy data.
+- `PATCH /taxonomy/labels/2166` (egds `close_focus`) with
+  `{"parent_label_id": 2373}` (colono `low_quality`, a different procedure)
+  returned HTTP 422 with `"Parent label must belong to the same procedure
+  as its child"`; a follow-up `psql` check confirmed label 2166's
+  `parent_label_id` was untouched (still 2476, egds' own `low_quality`) —
+  no silent partial write.
+- Both suites: backend `239 passed, 15 failed` (the 15 are the
+  pre-existing, unrelated failures tracked separately — `test_jobs.py`,
+  `test_mask_postprocess_endpoint.py`, `test_media_service.py`, all failing
+  on a `null value in column "annotation_scope"` `NOT NULL` violation
+  unrelated to this plan); frontend `415 passed`. Both match the numbers
+  expected going into this task.
+
+**Deviation during this task's execution:** the frontend dev server
+originally running on port 5173 was serving a stale build from an earlier
+session; verification used a second instance on port 5174 built from the
+current commit instead, after discovering `backend/app/main.py`'s
+`CORSMiddleware` only allow-listed `localhost:5173`. The allow-list was
+temporarily extended to include 5174 for the duration of this task's
+browser session and reverted immediately afterward — `git diff --stat
+backend/app/main.py` shows no changes going into this commit. If a future
+task needs a second concurrent frontend port routinely, that allow-list
+should gain the second origin permanently rather than being toggled
+per-session.
+
+**Known limitation, not fixed here:** `backend/tests/test_quality_migration.py`
+cannot pass in this environment as part of `pytest -q`, because `conftest.py`
+builds an ephemeral, unseeded test database per run — the migration has no
+`low_quality`/`bad_picture`/`close_focus`/`dirty_optic` rows to find by name
+there, unlike the dev database this task verified against directly via
+`psql`. This is a pre-existing gap in the test-DB fixture (no taxonomy
+seed), not a defect in the migration itself; fixing it is out of this
+plan's scope.
+
+The original question, kept for context —
 
 1. `frame_classification`'s `Quality` category currently has one label
    (`low_quality`), while `geometric` (region/MASK-BBOX)'s own `Quality`
