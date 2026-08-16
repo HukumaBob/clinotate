@@ -56,4 +56,18 @@ describe("DatasetMetricsDialog", () => {
     );
     expect(screen.getByTestId("dialog-empty")).toBeInTheDocument();
   });
+
+  it("exposes dialog semantics for assistive tech", () => {
+    render(<DatasetMetricsDialog dataset={DATASET} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAccessibleName(/colono-detection/i);
+  });
+
+  it("calls onClose when Escape is pressed", async () => {
+    const onClose = vi.fn();
+    render(<DatasetMetricsDialog dataset={DATASET} onClose={onClose} />);
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
+  });
 });

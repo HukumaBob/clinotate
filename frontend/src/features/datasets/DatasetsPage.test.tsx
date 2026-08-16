@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,11 @@ import { DatasetsPage } from "./DatasetsPage";
 vi.mock("../../shared/api/client", () => ({
   apiClient: { GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
 }));
+
+// DatasetsPage debounces the balance request by 300ms; wait comfortably
+// past that before reading the last request, since a shorter waitFor() can
+// resolve early against a stale pre-keystroke request.
+const DEBOUNCE_WAIT_MS = 500;
 
 const SEQUENCES = {
   items: [
@@ -194,6 +199,58 @@ describe("DatasetsPage", () => {
     await waitFor(() => {
       const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
       expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({ 1: 20 });
+    });
+  });
+
+  it("treats a limit of 0 as clearing the cap, not as a real limit", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+
+    const limitInput = (await screen.findByLabelText(/limit polyp/i)) as HTMLInputElement;
+    await userEvent.clear(limitInput);
+    await userEvent.type(limitInput, "0");
+
+    // Wait past the debounce window for real, then assert on the settled
+    // request -- a waitFor() here can resolve early against a stale
+    // pre-keystroke request whose class_limits happens to also be {}.
+    await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_WAIT_MS));
+    const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
+    expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({});
+  });
+
+  it("treats a negative limit as clearing the cap", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+
+    const limitInput = (await screen.findByLabelText(/limit polyp/i)) as HTMLInputElement;
+    await userEvent.clear(limitInput);
+    // A number input with min=1 won't let userEvent.type land a leading "-"
+    // in .value at all (matching real browser behavior), so drive the
+    // negative value through a raw change event instead -- this is exactly
+    // the path a spinner/paste/programmatic value could still take.
+    fireEvent.change(limitInput, { target: { value: "-5" } });
+
+    await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_WAIT_MS));
+    const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
+    expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({});
+  });
+
+  it("clears an existing cap when the input is emptied", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+
+    await userEvent.clear(await screen.findByLabelText(/limit polyp/i));
+    await userEvent.type(await screen.findByLabelText(/limit polyp/i), "20");
+    await waitFor(() => {
+      const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
+      expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({ 1: 20 });
+    });
+
+    await userEvent.clear(await screen.findByLabelText(/limit polyp/i));
+
+    await waitFor(() => {
+      const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
+      expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({});
     });
   });
 });

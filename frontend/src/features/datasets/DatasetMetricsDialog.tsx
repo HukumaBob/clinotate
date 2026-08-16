@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import type { components } from "../../shared/api/generated/schema";
 
 type DatasetRead = components["schemas"]["DatasetRead"];
@@ -18,6 +20,16 @@ interface StoredClassCount {
  * composition is frozen at save time, so its balance is too. It must never
  * call /datasets/balance to recompute anything. */
 export function DatasetMetricsDialog({ dataset, onClose }: DatasetMetricsDialogProps) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const snapshot = (dataset.balance_metrics ?? {}) as {
     severity?: unknown;
     threshold?: unknown;
@@ -39,7 +51,12 @@ export function DatasetMetricsDialog({ dataset, onClose }: DatasetMetricsDialogP
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4 text-sm text-gray-200">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${dataset.name} metrics`}
+        className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4 text-sm text-gray-200"
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-100">{dataset.name}</h2>
           <button

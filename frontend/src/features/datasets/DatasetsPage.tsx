@@ -165,7 +165,11 @@ export function DatasetsPage() {
   function changeLimit(labelId: number, limit: number | null) {
     setClassLimits((current) => {
       const next = { ...current };
-      if (limit === null) {
+      // A cap of 0 (or negative, or non-finite) is treated as "clear the
+      // cap" -- excluding a class entirely is what the exclude checkbox is
+      // for, and a stored 0 would silently drop the class from the report
+      // while its checkbox still shows it as included.
+      if (limit === null || !Number.isFinite(limit) || limit < 1) {
         delete next[labelId];
       } else {
         next[labelId] = limit;
