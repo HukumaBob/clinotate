@@ -3596,6 +3596,13 @@
             "type": "array",
             "title": "Excluded Label Ids"
           },
+          "class_limits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Class Limits"
+          },
           "threshold": {
             "type": "integer",
             "title": "Threshold",
@@ -3959,6 +3966,13 @@
             "type": "array",
             "title": "Excluded Label Ids"
           },
+          "class_limits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Class Limits"
+          },
           "threshold": {
             "type": "integer",
             "title": "Threshold",
@@ -4028,6 +4042,13 @@
             "type": "array",
             "title": "Excluded Label Ids"
           },
+          "class_limits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Class Limits"
+          },
           "balance_metrics": {
             "additionalProperties": true,
             "type": "object",
@@ -4066,6 +4087,7 @@
           "split_config",
           "grouping_overrides",
           "excluded_label_ids",
+          "class_limits",
           "balance_metrics",
           "created_at",
           "item_count",

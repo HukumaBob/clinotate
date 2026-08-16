@@ -30,6 +30,102 @@ def scope_for_task(task_type: TaskType) -> AnnotationScope:
     return _SCOPE_BY_TASK[task_type]
 
 
+def _apportion(total: int, weights: dict, order: list) -> dict:
+    """Split `total` across `order` proportionally to `weights`.
+
+    Largest-remainder: floor each share, then hand the leftovers to the
+    largest fractional parts, ties broken by the caller's order. Never
+    allocates more to a key than its own weight.
+    """
+    weight_sum = sum(weights[key] for key in order)
+    if weight_sum <= 0 or total <= 0:
+        return {key: 0 for key in order}
+
+    exact = {key: total * weights[key] / weight_sum for key in order}
+    allocation = {key: min(int(exact[key]), weights[key]) for key in order}
+    leftover = total - sum(allocation.values())
+
+    while leftover > 0:
+        candidates = [key for key in order if allocation[key] < weights[key]]
+        if not candidates:
+            break
+        best = max(candidates, key=lambda key: (exact[key] - allocation[key],))
+        allocation[best] += 1
+        leftover -= 1
+    return allocation
+
+
+def apply_class_limits(
+    composition: list[FrameComposition],
+    class_by_annotation: dict[int, int],
+    limits: dict[int, int],
+    unit_by_frame: dict[int, "GroupingKey"],
+    sequence_by_frame: dict[int, int],
+) -> list[FrameComposition]:
+    """Cap each limited class, spreading the survivors across grouping units.
+
+    Taking the first N by id would draw from whichever procedures were
+    annotated first; taking N at random would need a stored seed, which
+    conflicts with composition being frozen at save time. Apportioning by
+    unit gives the model the class under different scopes, preps and
+    patients, and is reproducible with no seed because every tie breaks by
+    id.
+
+    A frame whose annotations are all capped away leaves the dataset rather
+    than becoming a negative -- a cap is a bookkeeping decision, not a claim
+    that the frame is empty.
+    """
+    if not limits:
+        return composition
+
+    # annotation ids of each limited class, bucketed by unit then sequence
+    per_class: dict[int, dict["GroupingKey", dict[int, list[int]]]] = {}
+    for item in composition:
+        unit = unit_by_frame.get(item.frame_id, ("sequence", item.frame_id))
+        sequence_id = sequence_by_frame.get(item.frame_id, 0)
+        for annotation_id in item.annotation_ids:
+            class_id = class_by_annotation.get(annotation_id)
+            if class_id is None or class_id not in limits:
+                continue
+            per_class.setdefault(class_id, {}).setdefault(unit, {}).setdefault(
+                sequence_id, []
+            ).append(annotation_id)
+
+    keep: set[int] = set()
+    for class_id, by_unit in per_class.items():
+        cap = limits[class_id]
+        unit_order = sorted(by_unit, key=lambda unit: (unit[0], unit[1]))
+        unit_weights = {
+            unit: sum(len(ids) for ids in by_unit[unit].values()) for unit in unit_order
+        }
+        per_unit = _apportion(cap, unit_weights, unit_order)
+
+        for unit in unit_order:
+            by_sequence = by_unit[unit]
+            sequence_order = sorted(by_sequence)
+            sequence_weights = {sid: len(by_sequence[sid]) for sid in sequence_order}
+            per_sequence = _apportion(per_unit[unit], sequence_weights, sequence_order)
+            for sequence_id in sequence_order:
+                keep.update(sorted(by_sequence[sequence_id])[: per_sequence[sequence_id]])
+
+    limited: list[FrameComposition] = []
+    for item in composition:
+        if item.is_negative:
+            limited.append(item)
+            continue
+        kept_ids = [
+            annotation_id
+            for annotation_id in item.annotation_ids
+            if class_by_annotation.get(annotation_id) not in limits
+            or annotation_id in keep
+        ]
+        if kept_ids:
+            limited.append(
+                FrameComposition(frame_id=item.frame_id, annotation_ids=kept_ids)
+            )
+    return limited
+
+
 def collect_frames(
     session: Session,
     sequence_ids: list[int],
@@ -37,6 +133,7 @@ def collect_frames(
     excluded_label_ids: set[int],
     tree: LabelTree | None = None,
     rules: GroupingRules | None = None,
+    class_limits: dict[int, int] | None = None,
 ) -> list[FrameComposition]:
     """Frames entering a dataset: annotated-and-compatible, or flagged negative.
 
@@ -80,13 +177,16 @@ def collect_frames(
     )
 
     kept_by_frame: dict[int, list[int]] = {}
+    class_by_annotation: dict[int, int] = {}
     for annotation_id, frame_id, label_id in rows:
         if label_id in excluded_label_ids:
             continue
+        resolved_id = label_id
         if tree is not None and rules is not None:
             resolved_id = resolve_class(label_id, tree, rules)
             if resolved_id in excluded_label_ids:
                 continue
+        class_by_annotation[annotation_id] = resolved_id
         kept_by_frame.setdefault(frame_id, []).append(annotation_id)
 
     composition: list[FrameComposition] = []
@@ -98,6 +198,18 @@ def collect_frames(
             )
         elif frame.no_findings_reviewed:
             composition.append(FrameComposition(frame_id=frame.id, is_negative=True))
+
+    if class_limits:
+        sequence_by_frame = {frame.id: frame.sequence_id for frame in frames}
+        keys_by_sequence = grouping_keys_for_sequences(session, sequence_ids)
+        unit_by_frame = {
+            frame.id: keys_by_sequence.get(frame.sequence_id, ("sequence", frame.sequence_id))
+            for frame in frames
+        }
+        composition = apply_class_limits(
+            composition, class_by_annotation, class_limits, unit_by_frame, sequence_by_frame
+        )
+
     return composition
 
 
@@ -185,6 +297,7 @@ def compute_balance(
     excluded_label_ids: set[int],
     threshold: int = 10,
     tree: LabelTree | None = None,
+    class_limits: dict[int, int] | None = None,
 ) -> BalanceReport:
     """Live class balance for a selection. Writes nothing.
 
@@ -195,7 +308,9 @@ def compute_balance(
     built one, to avoid loading the full label table twice in one request.
     """
     tree = tree if tree is not None else build_label_tree(session)
-    composition = collect_frames(session, sequence_ids, task_type, excluded_label_ids, tree, rules)
+    composition = collect_frames(
+        session, sequence_ids, task_type, excluded_label_ids, tree, rules, class_limits
+    )
     negative_frames = sum(1 for item in composition if item.is_negative)
 
     annotation_ids = [aid for item in composition for aid in item.annotation_ids]
@@ -355,13 +470,15 @@ def create_dataset(session: Session, payload, user) -> Dataset:
         expand=frozenset(payload.grouping_overrides.expand),
     )
     excluded = set(payload.excluded_label_ids)
+    class_limits = dict(payload.class_limits)
     tree = build_label_tree(session)
 
     report = compute_balance(
-        session, payload.sequence_ids, payload.task_type, rules, excluded, payload.threshold, tree
+        session, payload.sequence_ids, payload.task_type, rules, excluded,
+        payload.threshold, tree, class_limits,
     )
     composition = collect_frames(
-        session, payload.sequence_ids, payload.task_type, excluded, tree, rules
+        session, payload.sequence_ids, payload.task_type, excluded, tree, rules, class_limits
     )
 
     frame_ids = [item.frame_id for item in composition]
@@ -391,6 +508,7 @@ def create_dataset(session: Session, payload, user) -> Dataset:
         split_config=payload.split_config,
         grouping_overrides=payload.grouping_overrides.model_dump(),
         excluded_label_ids=list(excluded),
+        class_limits=class_limits,
         balance_metrics={
             "severity": report.metrics.get("severity"),
             "metrics": report.metrics,

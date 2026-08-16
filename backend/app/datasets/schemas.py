@@ -15,6 +15,7 @@ class BalanceRequest(BaseModel):
     task_type: TaskType
     grouping_overrides: GroupingOverrides = Field(default_factory=GroupingOverrides)
     excluded_label_ids: list[int] = Field(default_factory=list)
+    class_limits: dict[int, int] = Field(default_factory=dict)
     threshold: int = 10
 
 
@@ -41,6 +42,7 @@ class DatasetCreate(BaseModel):
     split_config: dict = Field(default_factory=lambda: {"train": 70, "val": 20})
     grouping_overrides: GroupingOverrides = Field(default_factory=GroupingOverrides)
     excluded_label_ids: list[int] = Field(default_factory=list)
+    class_limits: dict[int, int] = Field(default_factory=dict)
     threshold: int = 10
 
     @field_validator("split_config")
@@ -72,6 +74,7 @@ class DatasetRead(BaseModel):
     split_config: dict
     grouping_overrides: dict
     excluded_label_ids: list[int]
+    class_limits: dict[int, int]
     balance_metrics: dict
     created_at: datetime
     item_count: int

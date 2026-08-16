@@ -33,6 +33,7 @@ class Dataset(Base):
     # Delta over the taxonomy's default grouping: {"collapse": [...], "expand": [...]}
     grouping_overrides: Mapped[dict] = mapped_column(JSON, default=dict)
     excluded_label_ids: Mapped[list] = mapped_column(JSON, default=list)
+    class_limits: Mapped[dict] = mapped_column(JSON, default=dict)
     balance_metrics: Mapped[dict] = mapped_column(JSON, default=dict)
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(

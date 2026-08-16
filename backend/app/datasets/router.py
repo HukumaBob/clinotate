@@ -33,6 +33,7 @@ def _serialize_summary(dataset: Dataset, split_counts: dict) -> dict:
         "split_config": dataset.split_config,
         "grouping_overrides": dataset.grouping_overrides,
         "excluded_label_ids": dataset.excluded_label_ids,
+        "class_limits": dataset.class_limits,
         "balance_metrics": dataset.balance_metrics,
         "created_at": dataset.created_at,
         "item_count": sum(split_counts.values()),
@@ -80,6 +81,7 @@ def dataset_balance(payload: BalanceRequest, session: Session = Depends(get_sess
     report = compute_balance(
         session, payload.sequence_ids, payload.task_type, rules,
         set(payload.excluded_label_ids), payload.threshold,
+        class_limits=dict(payload.class_limits),
     )
     return {
         "classes": [
