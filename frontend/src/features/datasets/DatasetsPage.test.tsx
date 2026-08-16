@@ -253,4 +253,40 @@ describe("DatasetsPage", () => {
       expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({});
     });
   });
+
+  it("shows per-scope annotation counts and the owning video in the picker", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences") {
+        return {
+          data: {
+            items: [
+              {
+                id: 1,
+                name: "seq-a",
+                video_id: 7,
+                procedure_id: 1,
+                frame_count: 100,
+                labeled_frame_count: 10,
+                preview_frames: [],
+                region_annotation_count: 12,
+                frame_annotation_count: 3,
+              },
+              SEQUENCES.items[1],
+            ],
+            total: 2,
+          },
+        };
+      }
+      if (path === "/datasets") return { data: [] };
+      if (path === "/taxonomy/procedures") return { data: [] };
+      if (path === "/taxonomy/tree") return { data: TREE };
+      return { data: [] };
+    });
+
+    render(<DatasetsPage />, { wrapper });
+    const row = (await screen.findByText("seq-a")).closest("tr")!;
+    expect(row).toHaveTextContent("12");
+    expect(row).toHaveTextContent("3");
+    expect(row).toHaveTextContent("7");
+  });
 });

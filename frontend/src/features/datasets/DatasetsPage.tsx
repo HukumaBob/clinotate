@@ -257,6 +257,9 @@ export function DatasetsPage() {
                     <th className="px-2 py-1 font-normal">Name</th>
                     <th className="px-2 py-1 font-normal">Frames</th>
                     <th className="px-2 py-1 font-normal">Labeled</th>
+                    <th className="px-2 py-1 font-normal">Region</th>
+                    <th className="px-2 py-1 font-normal">Frame</th>
+                    <th className="px-2 py-1 font-normal">Video</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -273,6 +276,9 @@ export function DatasetsPage() {
                       <td className="px-2 py-1">{sequence.name}</td>
                       <td className="px-2 py-1">{sequence.frame_count}</td>
                       <td className="px-2 py-1">{sequence.labeled_frame_count}</td>
+                      <td className="px-2 py-1">{sequence.region_annotation_count}</td>
+                      <td className="px-2 py-1">{sequence.frame_annotation_count}</td>
+                      <td className="px-2 py-1">{sequence.video_id ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>

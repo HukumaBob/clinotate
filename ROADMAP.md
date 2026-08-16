@@ -623,6 +623,131 @@ The original question, kept for context —
    resulting class balance, not editing hierarchy blind on the Tags
    screen. Scoped as part of Phase 2b's `datasets` module, not started.
 
+**Dataset screen: grouping-unit correction, class limits, metrics/
+recommendations, and the per-scope picker columns — DONE (2026-08-16)**
+per
+[docs/superpowers/specs/2026-08-16-dataset-grouping-unit-and-panel-design.md](docs/superpowers/specs/2026-08-16-dataset-grouping-unit-and-panel-design.md)
+and
+[docs/superpowers/plans/2026-08-16-dataset-grouping-unit-and-panel.md](docs/superpowers/plans/2026-08-16-dataset-grouping-unit-and-panel.md).
+Executed via `superpowers:subagent-driven-development` across 8 tasks, each
+committed directly to `master` per this repo's single-developer git
+workflow (no branches/worktrees). What shipped:
+
+1. **`grouping_key`, the unit of data independence** (`16c5162`): every
+   sequence resolves to `("video", video_id)` when it has a parent video,
+   or `("sequence", sequence_id)` for a standalone photo batch. This fixed
+   a real bug in split assignment (`e9a02ac`) — before this task, `Dataset`
+   split assignment operated per-sequence, so a video with two child
+   sequences (e.g. video 2113 owning both `caecum01` and `ileum`) could put
+   one sequence in `train` and the other in `val`, leaking frames from the
+   same source video across the train/val boundary. Verified on live data
+   both during the task and again in this task's own browser pass: `GET
+   /datasets/{id}` for a dataset built from sequences 2074 (`caecum01`) and
+   2075 (`ileum`) — both children of video 2113 — shows every item from
+   both sequences landing in the same `val` split; no video spans two
+   splits.
+2. **Class limits, apportioned across grouping units, not drained from
+   one** (`c3cac3b`): a per-class instance cap spreads its cut across the
+   contributing videos/photo batches by weight, rather than naively
+   keeping the first N instances by id (which would have silently emptied
+   whichever unit happened to sort first). A limit below 1 (`0`, negative,
+   non-finite) is treated as *clearing* the cap, not as a real limit of
+   zero — the exclude checkbox is what removes a class entirely, and a
+   stored `0` would have silently dropped the class from the report while
+   its "Include" checkbox still showed it as checked, i.e. two controls on
+   the same screen disagreeing about the same class. This was caught by
+   code review as a real Critical during the task (typing `0` made the
+   class vanish end-to-end against the live backend) and fixed in
+   `ceae211`; this task's own browser pass re-confirmed the fix holds:
+   capping `polyp` from 45 to 10 instances reduced its count in the panel,
+   and typing `0` into the same field cleared the cap (`polyp` returned to
+   45/43, not zero).
+3. **Per-scope annotation counts on the sequence list** (`6b96ed7`):
+   `SequenceListItem` gained `region_annotation_count` and
+   `frame_annotation_count`, so a task-type-aware caller (`detection` only
+   cares about region-scoped annotations; `classification` only about
+   frame-scoped) can tell in advance whether selecting a given sequence
+   will contribute anything.
+4. **Balance recommendations derived from the computed metrics**
+   (`9979f3a`, pluralization fix folded into `5ff8853`): under-threshold,
+   loss-weighting, cap-largest, and — the piece with no counterpart in the
+   older Django reference — single-unit-concentration warnings ("100% of
+   'X' comes from one video or photo batch"), computed from the same
+   grouping unit introduced in step 1. Advisory only, by design (see
+   "Deferred, deliberately" below) — nothing about generating a
+   recommendation mutates `excluded_label_ids`, `class_limits`, or dataset
+   state.
+5. **Key-metrics block and recommendations in the balance panel**
+   (`5ff8853`): imbalance ratio, Gini index, normalized entropy, min/max
+   per class, and severity render below the class bars; recommendations
+   render below that. The below-threshold summary deliberately stays the
+   headline above both — severity is not lead-worthy because collapsing a
+   label group *raises* `imbalance_ratio` while being the correct thing to
+   do, so optimizing for severity in the UI would mislead.
+6. **Saved-dataset Metrics dialog** (`35dac54`/`ceae211`): a `Datasets`
+   table row's "Metrics" action opens a dialog showing the `Dataset`'s
+   stored `balance_metrics` snapshot (not a live recompute), with a Close
+   button and Escape-to-close.
+7. **Sequence-picker Region/Frame/Video columns** (this task, `TBD`): the
+   Dataset screen's sequence picker gained three columns reading
+   `region_annotation_count`, `frame_annotation_count`, and `video_id`
+   (rendered `—` for a photo batch with no owning video) — the same fields
+   from step 3, now visible where a user actually picks sequences instead
+   of only reachable via the API.
+
+**Real-browser verification (this task, 2026-08-16), against the dev stack
+at commit `TBD`** — done because this repo's frontend unit tests mock
+`apiClient` wholesale and cannot observe whether the panel really
+recomputes against live data or whether a limit really reduces a class:
+- Picker columns matched a DB ground-truth table exactly: `caecum01` (id
+  2074) showed region 0 / frame 29 / video 2113; `ileum` (id 2075) showed
+  region 3 / frame 0 / video 2113; the two `colono 2026-08-16` polyp
+  sequences (ids 2322/2323, video 2178) showed region 0 / frame 9 and
+  region 0 / frame 87; `colono 2026-08-06 #2` (id 2094, a photo batch)
+  showed region 52 / frame 0 / video `—`.
+- With `task_type=detection`, selecting only `caecum01` (0 region
+  annotations) produced 0 classes and severity `no_data`; adding `colono
+  2026-08-06 #2` (52 region annotations) produced 7 classes headed by
+  `polyp` at 45/43. A direct `POST /datasets/balance` call with the
+  identical `sequence_ids`/`task_type` returned the same class list,
+  `total_frames`, and all five metrics fields (imbalance ratio 45.0, Gini
+  0.74, normalized entropy 0.32, severity `severe_imbalance`) — confirmed
+  byte-for-byte against the panel.
+- Recommendations named real classes, including an
+  `under_threshold` warning (6 classes below 10 instances) and two
+  `single_unit_concentration` warnings ("100% of 'polyp' comes from one
+  video or photo batch...", same for `lst_g_homogeneous`).
+- Setting a limit of 10 on `polyp` dropped its panel count from 45 to 10;
+  typing `0` afterward cleared the cap (the input went blank) and `polyp`
+  returned to 45/43 rather than disappearing — the `ceae211` fix confirmed
+  live, not just in unit tests.
+- Saved a dataset (`task8-verification-dataset`, detection, sequences
+  2074/2075/2094/2322/2323) — appeared in the table with the correct
+  frame count and severity; its Metrics action opened a dialog matching
+  the panel's live numbers; Escape closed it.
+- **The split check, the point of this whole plan:** `GET
+  /datasets/{id}` on the saved dataset showed every item from sequence
+  2074 and every item from sequence 2075 in the same `val` split (both
+  children of video 2113); items from sequence 2094 (no owning video, a
+  photo batch) landed in `train`. No video spanned two splits.
+- Deleted the dataset via the UI; `GET /datasets` confirmed the table
+  ended empty.
+- Both suites: backend `309 passed, 16 failed` (pre-existing and
+  unrelated — `test_jobs.py`, `test_mask_postprocess_endpoint.py`,
+  `test_media_service.py`, `test_quality_migration.py`, tracked in this
+  file's teardown-defect and quality-migration notes above); frontend
+  `457 passed`.
+
+**Deferred, deliberately:** the pie chart — at 26 classes its sectors are
+indistinguishable and its legend outgrows the chart, while the existing
+bars answer the same question at any scale. YOLO export, `data.yaml`, the
+class-map fingerprint, and archive download remain the next separate
+piece of work. Auto-applying a recommendation with one click (present in
+the older Django reference) was deliberately not built — the
+recommendations here stay advisory-only, because silently applying an
+exclusion or cap on the user's behalf is exactly the kind of invisible
+data decision this screen exists to make visible.
+
 **Spec correction logged 2026-07-22 (before Phase 2 work started):** the
 design spec originally described SAM-2 (point/box only) and YOLO11/RT-DETRv2
 as current, with SAM-3/YOLO26 as future work "when they arrive." Both have
