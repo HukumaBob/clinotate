@@ -37,6 +37,28 @@ describe("BalancePanel", () => {
     expect(screen.getByTestId("below-threshold-summary")).toHaveTextContent("ileum");
   });
 
+  it("pluralizes the headline correctly for exactly one under-threshold class", () => {
+    renderPanel();
+    expect(screen.getByTestId("below-threshold-summary")).toHaveTextContent(
+      "1 class below 10 instances"
+    );
+    expect(screen.getByTestId("below-threshold-summary")).not.toHaveTextContent(
+      "1 classes below 10 instances"
+    );
+  });
+
+  it("pluralizes the headline correctly for multiple under-threshold classes", () => {
+    renderPanel({
+      report: {
+        ...REPORT,
+        below_threshold: ["ileum", "colon", "cecum", "duodenum", "jejunum", "rectum"],
+      },
+    });
+    expect(screen.getByTestId("below-threshold-summary")).toHaveTextContent(
+      "6 classes below 10 instances"
+    );
+  });
+
   it("shows both instance and frame counts for each class", () => {
     renderPanel();
     const row = screen.getByTestId("class-row-1");

@@ -64,7 +64,8 @@ export function BalancePanel({
         data-testid="below-threshold-summary"
         className="rounded border border-amber-700 bg-amber-950 px-3 py-2"
       >
-        <strong>{report.below_threshold.length}</strong> classes below{" "}
+        <strong>{report.below_threshold.length}</strong>{" "}
+        {report.below_threshold.length === 1 ? "class" : "classes"} below{" "}
         {report.threshold} instances
         {report.below_threshold.length > 0 && (
           <span className="text-gray-300">: {report.below_threshold.join(", ")}</span>

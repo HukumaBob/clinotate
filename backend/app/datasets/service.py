@@ -380,6 +380,8 @@ def compute_balance(
     threshold: int = 10,
     tree: LabelTree | None = None,
     class_limits: dict[int, int] | None = None,
+    composition: list[FrameComposition] | None = None,
+    grouping_keys: dict[int, "GroupingKey"] | None = None,
 ) -> BalanceReport:
     """Live class balance for a selection. Writes nothing.
 
@@ -388,11 +390,18 @@ def compute_balance(
 
     `tree` may be passed in by a caller (e.g. create_dataset) that already
     built one, to avoid loading the full label table twice in one request.
+
+    `composition`/`grouping_keys` may likewise be passed in by a caller that
+    already computed them (e.g. create_dataset, which needs both again right
+    after this call) -- when omitted, this function computes them itself,
+    preserving the old behavior for callers like the /balance endpoint that
+    only want a report.
     """
     tree = tree if tree is not None else build_label_tree(session)
-    composition = collect_frames(
-        session, sequence_ids, task_type, excluded_label_ids, tree, rules, class_limits
-    )
+    if composition is None:
+        composition = collect_frames(
+            session, sequence_ids, task_type, excluded_label_ids, tree, rules, class_limits
+        )
     negative_frames = sum(1 for item in composition if item.is_negative)
 
     annotation_ids = [aid for item in composition for aid in item.annotation_ids]
@@ -419,7 +428,8 @@ def compute_balance(
     sequence_by_frame = dict(
         session.query(Frame.id, Frame.sequence_id).filter(Frame.id.in_(frame_ids_in_rows)).all()
     ) if frame_ids_in_rows else {}
-    grouping_keys = grouping_keys_for_sequences(session, sequence_ids)
+    if grouping_keys is None:
+        grouping_keys = grouping_keys_for_sequences(session, sequence_ids)
 
     instances: dict[int, int] = {}
     frames_by_class: dict[int, set[int]] = {}
@@ -575,12 +585,20 @@ def create_dataset(session: Session, payload, user) -> Dataset:
     class_limits = dict(payload.class_limits)
     tree = build_label_tree(session)
 
+    # Computed once and threaded through both compute_balance and the item
+    # materialization below -- collect_frames (frame/annotation queries plus
+    # the apply_class_limits apportionment) and grouping_keys_for_sequences
+    # are each otherwise expensive enough, and deterministic enough, that
+    # running them twice per save would be pure waste.
+    composition = collect_frames(
+        session, payload.sequence_ids, payload.task_type, excluded, tree, rules, class_limits
+    )
+    grouping_keys = grouping_keys_for_sequences(session, payload.sequence_ids)
+
     report = compute_balance(
         session, payload.sequence_ids, payload.task_type, rules, excluded,
         payload.threshold, tree, class_limits,
-    )
-    composition = collect_frames(
-        session, payload.sequence_ids, payload.task_type, excluded, tree, rules, class_limits
+        composition=composition, grouping_keys=grouping_keys,
     )
 
     frame_ids = [item.frame_id for item in composition]
@@ -635,7 +653,6 @@ def create_dataset(session: Session, payload, user) -> Dataset:
     for sequence_id in sequence_by_frame.values():
         frame_counts_by_sequence[sequence_id] = frame_counts_by_sequence.get(sequence_id, 0) + 1
 
-    grouping_keys = grouping_keys_for_sequences(session, payload.sequence_ids)
     split_by_sequence = assign_splits(
         payload.sequence_ids, payload.split_config, frame_counts_by_sequence, grouping_keys
     )
