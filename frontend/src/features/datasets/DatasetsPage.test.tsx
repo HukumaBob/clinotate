@@ -27,6 +27,29 @@ const BALANCE = {
   metrics: { severity: "moderate_imbalance" },
 };
 
+const BALANCE_WITHOUT_POLYP = {
+  classes: [],
+  total_frames: 33,
+  negative_frames: 0,
+  below_threshold: [],
+  threshold: 10,
+  metrics: { severity: "no_data" },
+};
+
+const TREE = [
+  {
+    id: 1,
+    name: "category",
+    evaluation_types: [
+      {
+        id: 1,
+        name: "eval-type",
+        labels: [{ id: 1, name: "polyp", parent_label_id: null, taxonomy_version: 1 }],
+      },
+    ],
+  },
+];
+
 function wrapper({ children }: { children: React.ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
@@ -38,6 +61,7 @@ describe("DatasetsPage", () => {
       if (path === "/media/sequences") return { data: SEQUENCES };
       if (path === "/datasets") return { data: [] };
       if (path === "/taxonomy/procedures") return { data: [] };
+      if (path === "/taxonomy/tree") return { data: TREE };
       return { data: [] };
     });
     vi.mocked(apiClient.POST).mockResolvedValue({ data: BALANCE });
@@ -128,5 +152,33 @@ describe("DatasetsPage", () => {
     await waitFor(() => expect(saveButton).toBeDisabled());
 
     resolveCreate?.();
+  });
+
+  it("lets a user re-include a class after excluding it", async () => {
+    vi.mocked(apiClient.POST).mockImplementation(async (path: string, options?: { body?: { excluded_label_ids?: number[] } }) => {
+      if (path === "/datasets/balance") {
+        const excludedIds = options?.body?.excluded_label_ids ?? [];
+        return { data: excludedIds.includes(1) ? BALANCE_WITHOUT_POLYP : BALANCE };
+      }
+      return { data: BALANCE };
+    });
+
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+    await screen.findByTestId("exclude-1");
+
+    await userEvent.click(screen.getByTestId("exclude-1"));
+
+    await waitFor(() => {
+      const section = screen.getByTestId("excluded-classes");
+      expect(section).toHaveTextContent("polyp");
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Re-include polyp" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("excluded-classes")).not.toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("exclude-1")).toBeInTheDocument();
   });
 });

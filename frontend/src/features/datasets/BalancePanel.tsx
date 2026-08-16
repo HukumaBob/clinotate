@@ -13,6 +13,10 @@ interface BalancePanelProps {
    * don't pass it keep the old behavior. The report itself (ClassCountRead)
    * carries no parent/child signal, so this must come from the caller. */
   collapsibleLabelIds?: Set<number>;
+  /** Classes currently excluded from the dataset. Once a class is excluded,
+   * the backend drops it from report.classes, so this is the only remaining
+   * way to show the user it exists and let them restore it. */
+  excludedLabels?: { id: number; name: string }[];
 }
 
 export function BalancePanel({
@@ -22,6 +26,7 @@ export function BalancePanel({
   onToggleCollapse,
   onToggleExclude,
   collapsibleLabelIds,
+  excludedLabels = [],
 }: BalancePanelProps) {
   const maxInstances = Math.max(1, ...report.classes.map((c) => c.instances));
 
@@ -85,6 +90,29 @@ export function BalancePanel({
           </li>
         ))}
       </ul>
+
+      {excludedLabels.length > 0 && (
+        <div
+          data-testid="excluded-classes"
+          className="rounded border border-gray-800 bg-gray-900 p-2"
+        >
+          <div className="mb-1 text-xs font-semibold text-gray-400">Excluded classes</div>
+          <ul className="flex flex-col gap-1">
+            {excludedLabels.map((label) => (
+              <li key={label.id} className="flex items-center justify-between gap-2">
+                <span className="truncate text-gray-300">{label.name}</span>
+                <button
+                  type="button"
+                  className="text-xs text-blue-400 hover:text-blue-300"
+                  onClick={() => onToggleExclude(label.id)}
+                >
+                  Re-include {label.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div data-testid="severity-reference" className="text-xs text-gray-500">
         Reference: {String(report.metrics.severity ?? "no_data")}

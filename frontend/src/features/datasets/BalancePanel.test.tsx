@@ -73,4 +73,17 @@ describe("BalancePanel", () => {
     expect(screen.queryByTestId("collapse-2")).not.toBeInTheDocument();
     expect(screen.getByText("ileum")).toBeInTheDocument();
   });
+
+  it("shows excluded classes with a control to restore them", async () => {
+    const props = renderPanel({ excludedLabels: [{ id: 3, name: "cecum" }] });
+    const section = screen.getByTestId("excluded-classes");
+    expect(section).toHaveTextContent("cecum");
+    await userEvent.click(screen.getByRole("button", { name: "Re-include cecum" }));
+    expect(props.onToggleExclude).toHaveBeenCalledWith(3);
+  });
+
+  it("renders no excluded-classes section when nothing is excluded", () => {
+    renderPanel({ excludedLabels: [] });
+    expect(screen.queryByTestId("excluded-classes")).not.toBeInTheDocument();
+  });
 });

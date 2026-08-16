@@ -61,6 +61,22 @@ export function DatasetsPage() {
     return ids;
   }, [treeQuery.data]);
 
+  const excludedLabels = useMemo(() => {
+    const tree = treeQuery.data ?? [];
+    const namesById = new Map<number, string>();
+    for (const categoryNode of tree) {
+      for (const evalTypeNode of categoryNode.evaluation_types) {
+        for (const label of evalTypeNode.labels) {
+          namesById.set(label.id, label.name);
+        }
+      }
+    }
+    return Array.from(excluded).map((id) => ({
+      id,
+      name: namesById.get(id) ?? `label ${id}`,
+    }));
+  }, [excluded, treeQuery.data]);
+
   // Debounce the balance request so a click storm doesn't fire a request per click.
   const [debouncedRequest, setDebouncedRequest] = useState({
     sequence_ids: [] as number[],
@@ -300,6 +316,7 @@ export function DatasetsPage() {
               onToggleCollapse={toggleCollapse}
               onToggleExclude={toggleExclude}
               collapsibleLabelIds={collapsibleLabelIds}
+              excludedLabels={excludedLabels}
             />
           ) : (
             <p className="text-sm text-gray-500">
