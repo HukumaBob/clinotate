@@ -6,6 +6,7 @@ from app.datasets.models import TaskType
 from app.datasets.service import collect_frames, scope_for_task
 from app.db import SessionLocal
 from app.media.models import Frame, Sequence
+from app.taxonomy.hierarchy import GroupingRules, build_label_tree
 from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label, Procedure
 
 
@@ -158,6 +159,67 @@ def test_frame_whose_annotations_are_all_excluded_drops_out_and_is_not_a_negativ
         _annotate(session, frames[0], rare, user_id)
 
         result = collect_frames(session, [sequence.id], TaskType.DETECTION, {rare.id})
+
+        assert result == []
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_excluding_a_collapsed_parent_id_removes_its_leaf_children_annotations():
+    # BalancePanel renders ClassCount.label_id, which for a collapsed group is
+    # the abstract PARENT id -- no annotation ever references it directly.
+    # collect_frames must resolve each annotation's label through the same
+    # shared resolve_class before testing exclusion, or unchecking the parent
+    # is a silent no-op while the raw annotations stay in the dataset.
+    session = SessionLocal()
+    try:
+        _, category, region, _, sequence, frames, user_id = _fixture(session, "parentexcl")
+        parent = Label(
+            name="ds-parentexcl-polyp", category_id=category.id,
+            evaluation_type_id=region.id, is_abstract=True,
+        )
+        session.add(parent)
+        session.flush()
+        child = Label(
+            name="ds-parentexcl-adenoma", category_id=category.id,
+            evaluation_type_id=region.id, parent_label_id=parent.id,
+        )
+        session.add(child)
+        session.flush()
+        _annotate(session, frames[0], child, user_id)
+
+        tree = build_label_tree(session)
+        rules = GroupingRules()
+
+        result_excluding_parent = collect_frames(
+            session, [sequence.id], TaskType.DETECTION, {parent.id}, tree, rules
+        )
+        result_excluding_child = collect_frames(
+            session, [sequence.id], TaskType.DETECTION, {child.id}, tree, rules
+        )
+        result_excluding_nothing = collect_frames(
+            session, [sequence.id], TaskType.DETECTION, set(), tree, rules
+        )
+
+        assert result_excluding_parent == []
+        assert result_excluding_child == []
+        assert {c.frame_id for c in result_excluding_nothing} == {frames[0].id}
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_collect_frames_without_tree_falls_back_to_raw_id_matching():
+    # Callers that don't pass tree/rules (or existing tests) must keep the
+    # old, raw-annotation-label-id-only behavior.
+    session = SessionLocal()
+    try:
+        _, category, region, _, sequence, frames, user_id = _fixture(session, "notree")
+        leaf = _label(session, category, region, "ds-notree-leaf")
+        _annotate(session, frames[0], leaf, user_id)
+
+        result = collect_frames(session, [sequence.id], TaskType.DETECTION, {leaf.id})
 
         assert result == []
     finally:

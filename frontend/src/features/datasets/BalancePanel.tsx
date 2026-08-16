@@ -17,6 +17,16 @@ interface BalancePanelProps {
    * the backend drops it from report.classes, so this is the only remaining
    * way to show the user it exists and let them restore it. */
   excludedLabels?: { id: number; name: string }[];
+  /** Maps a child label id to its parent's label id, built from the full
+   * taxonomy tree. Once a group is expanded, the report returns its leaf
+   * children instead of the parent row -- none of which are parents
+   * themselves, so without this map there is no surviving control to
+   * re-collapse the group. A leaf row whose parent appears here (i.e. the
+   * parent is currently expanded) renders a toggle that re-collapses it. */
+  parentLabelIdByChildId?: Map<number, number>;
+  /** Label name lookup, used to show the parent's name in the re-collapse
+   * control's accessible name ("Collapse into {parentName}"). */
+  labelNamesById?: Map<number, string>;
 }
 
 export function BalancePanel({
@@ -27,6 +37,8 @@ export function BalancePanel({
   onToggleExclude,
   collapsibleLabelIds,
   excludedLabels = [],
+  parentLabelIdByChildId,
+  labelNamesById,
 }: BalancePanelProps) {
   const maxInstances = Math.max(1, ...report.classes.map((c) => c.instances));
 
@@ -52,7 +64,12 @@ export function BalancePanel({
       </div>
 
       <ul className="flex flex-col gap-1">
-        {report.classes.map((entry) => (
+        {report.classes.map((entry) => {
+          const isParent = collapsibleLabelIds === undefined || collapsibleLabelIds.has(entry.label_id);
+          const parentId = parentLabelIdByChildId?.get(entry.label_id);
+          const isExpandedChild = !isParent && parentId !== undefined;
+
+          return (
           <li
             key={entry.label_id}
             data-testid={`class-row-${entry.label_id}`}
@@ -65,15 +82,25 @@ export function BalancePanel({
               checked={!excluded.has(entry.label_id)}
               onChange={() => onToggleExclude(entry.label_id)}
             />
-            {collapsibleLabelIds === undefined || collapsibleLabelIds.has(entry.label_id) ? (
+            {isParent ? (
               <button
                 type="button"
                 data-testid={`collapse-${entry.label_id}`}
-                aria-label={`Toggle grouping for ${entry.name}`}
+                aria-label={`Expand ${entry.name}`}
                 className="w-32 truncate text-left text-gray-100 hover:text-blue-400"
                 onClick={() => onToggleCollapse(entry.label_id)}
               >
                 {collapsed.has(entry.label_id) ? "▸" : "▾"} {entry.name}
+              </button>
+            ) : isExpandedChild ? (
+              <button
+                type="button"
+                data-testid={`collapse-${entry.label_id}`}
+                aria-label={`Collapse into ${labelNamesById?.get(parentId) ?? `label ${parentId}`}`}
+                className="w-32 truncate text-left text-gray-100 hover:text-blue-400"
+                onClick={() => onToggleCollapse(parentId)}
+              >
+                {entry.name}
               </button>
             ) : (
               <span className="w-32 truncate text-left text-gray-100">{entry.name}</span>
@@ -88,7 +115,8 @@ export function BalancePanel({
               {entry.instances} / {entry.frames}
             </span>
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       {excludedLabels.length > 0 && (

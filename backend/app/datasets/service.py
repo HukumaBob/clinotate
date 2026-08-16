@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.annotation.models import Annotation
 from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
 from app.media.models import Frame
-from app.taxonomy.hierarchy import GroupingRules, build_label_tree, resolve_class
+from app.taxonomy.hierarchy import GroupingRules, LabelTree, build_label_tree, resolve_class
 from app.taxonomy.models import AnnotationScope, EvaluationType, Label
 
 _SCOPE_BY_TASK = {
@@ -35,12 +35,24 @@ def collect_frames(
     sequence_ids: list[int],
     task_type: TaskType,
     excluded_label_ids: set[int],
+    tree: LabelTree | None = None,
+    rules: GroupingRules | None = None,
 ) -> list[FrameComposition]:
     """Frames entering a dataset: annotated-and-compatible, or flagged negative.
 
     A frame whose every annotation is excluded leaves the dataset entirely
     rather than becoming a negative -- excluding a class is a bookkeeping
     decision, not a claim that the frame is empty.
+
+    An id in excluded_label_ids may name either the raw annotation label
+    (a leaf) or the resolved class the balance panel actually displays (the
+    highest collapsed ancestor, e.g. an abstract parent like "polyp" that no
+    annotation ever references directly). Both must be checked -- excluding
+    a leaf only, without resolving through the same tree/rules the panel
+    uses, would make excluding a collapsed group a silent no-op. When
+    tree/rules are omitted, resolution is skipped and only the raw label id
+    is matched, preserving the old behavior for callers that don't have a
+    tree handy.
     """
     if not sequence_ids:
         return []
@@ -71,6 +83,10 @@ def collect_frames(
     for annotation_id, frame_id, label_id in rows:
         if label_id in excluded_label_ids:
             continue
+        if tree is not None and rules is not None:
+            resolved_id = resolve_class(label_id, tree, rules)
+            if resolved_id in excluded_label_ids:
+                continue
         kept_by_frame.setdefault(frame_id, []).append(annotation_id)
 
     composition: list[FrameComposition] = []
@@ -168,13 +184,18 @@ def compute_balance(
     rules: GroupingRules,
     excluded_label_ids: set[int],
     threshold: int = 10,
+    tree: LabelTree | None = None,
 ) -> BalanceReport:
     """Live class balance for a selection. Writes nothing.
 
     Classes resolve through the taxonomy's shared resolve_class, so this panel
     and any future export cannot disagree about what a class is.
+
+    `tree` may be passed in by a caller (e.g. create_dataset) that already
+    built one, to avoid loading the full label table twice in one request.
     """
-    composition = collect_frames(session, sequence_ids, task_type, excluded_label_ids)
+    tree = tree if tree is not None else build_label_tree(session)
+    composition = collect_frames(session, sequence_ids, task_type, excluded_label_ids, tree, rules)
     negative_frames = sum(1 for item in composition if item.is_negative)
 
     annotation_ids = [aid for item in composition for aid in item.annotation_ids]
@@ -191,7 +212,6 @@ def compute_balance(
         .all()
     )
 
-    tree = build_label_tree(session)
     resolved_ids = {row.label_id: resolve_class(row.label_id, tree, rules) for row in rows}
     names = {
         label.id: label.name
@@ -325,11 +345,14 @@ def create_dataset(session: Session, payload, user) -> Dataset:
         expand=frozenset(payload.grouping_overrides.expand),
     )
     excluded = set(payload.excluded_label_ids)
+    tree = build_label_tree(session)
 
     report = compute_balance(
-        session, payload.sequence_ids, payload.task_type, rules, excluded, payload.threshold
+        session, payload.sequence_ids, payload.task_type, rules, excluded, payload.threshold, tree
     )
-    composition = collect_frames(session, payload.sequence_ids, payload.task_type, excluded)
+    composition = collect_frames(
+        session, payload.sequence_ids, payload.task_type, excluded, tree, rules
+    )
 
     frame_ids = [item.frame_id for item in composition]
     sequence_by_frame = dict(

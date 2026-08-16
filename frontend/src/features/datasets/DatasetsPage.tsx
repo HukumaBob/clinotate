@@ -61,7 +61,7 @@ export function DatasetsPage() {
     return ids;
   }, [treeQuery.data]);
 
-  const excludedLabels = useMemo(() => {
+  const labelNamesById = useMemo(() => {
     const tree = treeQuery.data ?? [];
     const namesById = new Map<number, string>();
     for (const categoryNode of tree) {
@@ -71,11 +71,30 @@ export function DatasetsPage() {
         }
       }
     }
+    return namesById;
+  }, [treeQuery.data]);
+
+  const parentLabelIdByChildId = useMemo(() => {
+    const tree = treeQuery.data ?? [];
+    const parentById = new Map<number, number>();
+    for (const categoryNode of tree) {
+      for (const evalTypeNode of categoryNode.evaluation_types) {
+        for (const label of evalTypeNode.labels) {
+          if (label.parent_label_id != null) {
+            parentById.set(label.id, label.parent_label_id);
+          }
+        }
+      }
+    }
+    return parentById;
+  }, [treeQuery.data]);
+
+  const excludedLabels = useMemo(() => {
     return Array.from(excluded).map((id) => ({
       id,
-      name: namesById.get(id) ?? `label ${id}`,
+      name: labelNamesById.get(id) ?? `label ${id}`,
     }));
-  }, [excluded, treeQuery.data]);
+  }, [excluded, labelNamesById]);
 
   // Debounce the balance request so a click storm doesn't fire a request per click.
   const [debouncedRequest, setDebouncedRequest] = useState({
@@ -317,6 +336,8 @@ export function DatasetsPage() {
               onToggleExclude={toggleExclude}
               collapsibleLabelIds={collapsibleLabelIds}
               excludedLabels={excludedLabels}
+              parentLabelIdByChildId={parentLabelIdByChildId}
+              labelNamesById={labelNamesById}
             />
           ) : (
             <p className="text-sm text-gray-500">

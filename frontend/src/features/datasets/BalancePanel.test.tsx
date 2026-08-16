@@ -86,4 +86,35 @@ describe("BalancePanel", () => {
     renderPanel({ excludedLabels: [] });
     expect(screen.queryByTestId("excluded-classes")).not.toBeInTheDocument();
   });
+
+  it("lets a leaf row re-collapse its expanded parent group", async () => {
+    // After expanding "polyp" (label_id 1), the report returns its leaf
+    // children instead -- none of which are parents themselves, so without
+    // parentLabelIdByChildId there is no surviving control to re-collapse.
+    const leafReport = {
+      classes: [
+        { label_id: 10, name: "colon_adenoma", instances: 8, frames: 8 },
+        { label_id: 11, name: "foam", instances: 2, frames: 2 },
+      ],
+      total_frames: 10,
+      negative_frames: 0,
+      below_threshold: [],
+      threshold: 10,
+      metrics: { severity: "moderate_imbalance" },
+    };
+    const props = renderPanel({
+      report: leafReport,
+      collapsibleLabelIds: new Set<number>(), // neither leaf is a parent
+      parentLabelIdByChildId: new Map<number, number>([
+        [10, 1],
+        [11, 1],
+      ]),
+      labelNamesById: new Map<number, string>([[1, "polyp"]]),
+    });
+
+    const toggle = screen.getByTestId("collapse-10");
+    expect(toggle).toHaveAccessibleName("Collapse into polyp");
+    await userEvent.click(toggle);
+    expect(props.onToggleCollapse).toHaveBeenCalledWith(1);
+  });
 });
