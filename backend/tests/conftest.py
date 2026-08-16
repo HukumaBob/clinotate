@@ -7,11 +7,48 @@ from app.config import get_settings
 from app.db import Base
 
 
+def _assert_test_database_url(url: str) -> None:
+    """Hard safety guard: every raw-DDL teardown helper in this file must
+    call this before touching the database. `endoscopy_test` is disposable;
+    `endoscopy` holds real clinical data (annotations, labels, taxonomy).
+    A bug here must fail loudly instead of ever risking the real database.
+    """
+    if not url.endswith("/endoscopy_test"):
+        raise RuntimeError(
+            f"Refusing to run destructive schema DDL against non-test database URL: {url!r}. "
+            "Expected it to end with '/endoscopy_test'."
+        )
+
+
+def _reset_schema(engine, url: str) -> None:
+    """Hard reset: drop and recreate the `public` schema.
+
+    `Base.metadata.drop_all()` drops tables in dependency order it infers
+    from the ORM's FK graph, but that inference has repeatedly fallen out
+    of sync with the real schema (e.g. `datasets`/`dataset_items` added FKs
+    to `labels`/`frames`/`users` after `drop_all` order was last correct),
+    causing `DependentObjectsStillExist` and leaving a half-dropped schema
+    that poisons every subsequent test run. Dropping the whole schema
+    sidesteps table-level ordering entirely -- CASCADE semantics are
+    implicit when the schema itself is dropped.
+    """
+    _assert_test_database_url(url)
+    with engine.begin() as connection:
+        connection.execute(text("DROP SCHEMA public CASCADE"))
+        connection.execute(text("CREATE SCHEMA public"))
+
+
 @pytest.fixture(scope="session")
 def test_engine():
     settings = get_settings()
     test_db_url = settings.database_url.rsplit("/", 1)[0] + "/endoscopy_test"
+    _assert_test_database_url(test_db_url)
     engine = create_engine(test_db_url)
+    # Defensive: a prior run's teardown may have failed midway (e.g. after
+    # a schema change made `drop_all`'s dependency ordering stale) and left
+    # a half-dropped schema behind. Reset unconditionally before creating
+    # tables so a dirty state can never poison this run's setup.
+    _reset_schema(engine, test_db_url)
     Base.metadata.create_all(engine)
     # `create_all` builds tables from the ORM models, not from Alembic
     # migrations -- so data-seeding migrations (e.g. the
@@ -27,7 +64,10 @@ def test_engine():
             )
         )
     yield engine
-    Base.metadata.drop_all(engine)
+    # Reset (not drop_all) for the same reason as above: drop_all's
+    # inferred ordering is not guaranteed to stay valid as FKs are added,
+    # and a failure here would otherwise poison every future run.
+    _reset_schema(engine, test_db_url)
 
 
 @pytest.fixture
