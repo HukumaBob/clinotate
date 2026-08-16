@@ -93,6 +93,9 @@ def dataset_balance(payload: BalanceRequest, session: Session = Depends(get_sess
         "below_threshold": report.below_threshold,
         "threshold": report.threshold,
         "metrics": report.metrics,
+        "recommendations": [
+            {"kind": r.kind, "message": r.message} for r in report.recommendations
+        ],
     }
 
 

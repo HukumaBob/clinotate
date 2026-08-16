@@ -222,6 +222,12 @@ class ClassCount:
 
 
 @dataclass
+class Recommendation:
+    kind: str
+    message: str
+
+
+@dataclass
 class BalanceReport:
     classes: list[ClassCount]
     total_frames: int
@@ -229,6 +235,80 @@ class BalanceReport:
     below_threshold: list[str]
     threshold: int
     metrics: dict
+    recommendations: list["Recommendation"] = field(default_factory=list)
+
+
+def build_recommendations(
+    report: BalanceReport, concentration: dict[int, float]
+) -> list[Recommendation]:
+    """Concrete next actions, computed from this selection's own numbers.
+
+    `concentration[label_id]` is the share of that class's instances coming
+    from its single largest grouping unit. Advisory only: this never applies
+    an exclusion or a cap on the user's behalf, it only names one.
+    """
+    if not report.classes:
+        return []
+
+    recommendations: list[Recommendation] = []
+
+    if report.below_threshold:
+        names = ", ".join(report.below_threshold)
+        recommendations.append(
+            Recommendation(
+                kind="under_threshold",
+                message=(
+                    f"{len(report.below_threshold)} class(es) below {report.threshold} "
+                    f"instances: {names}. Annotate more, collapse them into a parent "
+                    f"class, or exclude them."
+                ),
+            )
+        )
+
+    severity = report.metrics.get("severity")
+    if severity in {"severe_imbalance", "extreme_imbalance"}:
+        recommendations.append(
+            Recommendation(
+                kind="loss_weighting",
+                message=(
+                    f"Imbalance is {severity.replace('_', ' ')}. Consider Focal Loss or "
+                    f"weighted sampling so the rare classes still contribute gradient."
+                ),
+            )
+        )
+
+    ratio = report.metrics.get("imbalance_ratio") or 0
+    if ratio > 10 and report.classes:
+        largest = report.classes[0]
+        smallest = min(report.classes, key=lambda c: c.instances)
+        suggested = max(smallest.instances * 10, report.threshold)
+        if suggested < largest.instances:
+            recommendations.append(
+                Recommendation(
+                    kind="cap_largest",
+                    message=(
+                        f"'{largest.name}' has {largest.instances} instances against "
+                        f"'{smallest.name}' at {smallest.instances}. Capping "
+                        f"'{largest.name}' to about {suggested} would even the ratio."
+                    ),
+                )
+            )
+
+    for entry in report.classes:
+        share = concentration.get(entry.label_id)
+        if share is not None and share >= 0.9 and entry.instances >= 2:
+            recommendations.append(
+                Recommendation(
+                    kind="single_unit_concentration",
+                    message=(
+                        f"{round(share * 100)}% of '{entry.name}' comes from one video "
+                        f"or photo batch. The model may learn that procedure rather "
+                        f"than the finding -- annotate it in other studies."
+                    ),
+                )
+            )
+
+    return recommendations
 
 
 def compute_imbalance_metrics(counts: dict[str, int]) -> dict:
@@ -333,12 +413,30 @@ def compute_balance(
         for label in session.query(Label).filter(Label.id.in_(set(resolved_ids.values()))).all()
     }
 
+    frame_ids_in_rows = {row.frame_id for row in rows}
+    sequence_by_frame = dict(
+        session.query(Frame.id, Frame.sequence_id).filter(Frame.id.in_(frame_ids_in_rows)).all()
+    ) if frame_ids_in_rows else {}
+    grouping_keys = grouping_keys_for_sequences(session, sequence_ids)
+
     instances: dict[int, int] = {}
     frames_by_class: dict[int, set[int]] = {}
+    instances_by_class_and_unit: dict[int, dict[GroupingKey, int]] = {}
     for row in rows:
         class_id = resolved_ids[row.label_id]
         instances[class_id] = instances.get(class_id, 0) + 1
         frames_by_class.setdefault(class_id, set()).add(row.frame_id)
+
+        sequence_id = sequence_by_frame.get(row.frame_id)
+        unit = grouping_keys.get(sequence_id, ("sequence", sequence_id))
+        by_unit = instances_by_class_and_unit.setdefault(class_id, {})
+        by_unit[unit] = by_unit.get(unit, 0) + 1
+
+    concentration: dict[int, float] = {
+        class_id: max(by_unit.values()) / instances[class_id]
+        for class_id, by_unit in instances_by_class_and_unit.items()
+        if instances[class_id] > 0
+    }
 
     classes = [
         ClassCount(
@@ -354,7 +452,7 @@ def compute_balance(
     below = [c.name for c in classes if c.instances < threshold]
     metrics = compute_imbalance_metrics({c.name: c.instances for c in classes})
 
-    return BalanceReport(
+    report = BalanceReport(
         classes=classes,
         total_frames=len(composition),
         negative_frames=negative_frames,
@@ -362,6 +460,8 @@ def compute_balance(
         threshold=threshold,
         metrics=metrics,
     )
+    report.recommendations = build_recommendations(report, concentration)
+    return report
 
 
 def assign_splits(
@@ -520,6 +620,9 @@ def create_dataset(session: Session, payload, user) -> Dataset:
             "below_threshold": report.below_threshold,
             "threshold": report.threshold,
             "negative_frames": report.negative_frames,
+            "recommendations": [
+                {"kind": r.kind, "message": r.message} for r in report.recommendations
+            ],
         },
         created_by_id=user.id,
     )

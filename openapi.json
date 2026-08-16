@@ -3561,6 +3561,13 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Metrics"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationRead"
+            },
+            "type": "array",
+            "title": "Recommendations"
           }
         },
         "type": "object",
@@ -4813,6 +4820,24 @@
         },
         "type": "object",
         "title": "RankQualityRequest"
+      },
+      "RecommendationRead": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "RecommendationRead"
       },
       "Sam2PredictRequest": {
         "properties": {

@@ -26,6 +26,11 @@ class ClassCountRead(BaseModel):
     frames: int
 
 
+class RecommendationRead(BaseModel):
+    kind: str
+    message: str
+
+
 class BalanceReportRead(BaseModel):
     classes: list[ClassCountRead]
     total_frames: int
@@ -33,6 +38,7 @@ class BalanceReportRead(BaseModel):
     below_threshold: list[str]
     threshold: int
     metrics: dict
+    recommendations: list[RecommendationRead] = Field(default_factory=list)
 
 
 class DatasetCreate(BaseModel):
