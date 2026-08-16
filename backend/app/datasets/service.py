@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.annotation.models import Annotation
 from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
-from app.media.models import Frame
+from app.media.models import Frame, Sequence
 from app.taxonomy.hierarchy import GroupingRules, LabelTree, build_label_tree, resolve_class
 from app.taxonomy.models import AnnotationScope, EvaluationType, Label
 
@@ -420,3 +420,38 @@ def create_dataset(session: Session, payload, user) -> Dataset:
     session.commit()
     session.refresh(dataset)
     return dataset
+
+
+GroupingKey = tuple[str, int]
+
+
+def grouping_key(video_id: int | None, sequence_id: int) -> GroupingKey:
+    """The unit within which data is NOT independent.
+
+    A sequence is a slice of one video, so every sequence cut from the same
+    video shares a patient, a scope, a bowel prep and a session. Treating
+    those as independent samples leaks: the same procedure lands on both
+    sides of a split, and validation then measures memorisation of that
+    procedure rather than generalisation. A photo batch has no video, so the
+    sequence is its own unit.
+
+    The tag distinguishes the two id spaces -- ("video", 7) and
+    ("sequence", 7) are different units.
+    """
+    if video_id is not None:
+        return ("video", video_id)
+    return ("sequence", sequence_id)
+
+
+def grouping_keys_for_sequences(
+    session: Session, sequence_ids: list[int]
+) -> dict[int, GroupingKey]:
+    """Map each sequence id to its grouping key in one query."""
+    if not sequence_ids:
+        return {}
+    rows = (
+        session.query(Sequence.id, Sequence.video_id)
+        .filter(Sequence.id.in_(sequence_ids))
+        .all()
+    )
+    return {row.id: grouping_key(row.video_id, row.id) for row in rows}
