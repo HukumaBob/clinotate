@@ -688,7 +688,7 @@ workflow (no branches/worktrees). What shipped:
    table row's "Metrics" action opens a dialog showing the `Dataset`'s
    stored `balance_metrics` snapshot (not a live recompute), with a Close
    button and Escape-to-close.
-7. **Sequence-picker Region/Frame/Video columns** (this task, `TBD`): the
+7. **Sequence-picker Region/Frame/Video columns** (this task, `1536dd5`): the
    Dataset screen's sequence picker gained three columns reading
    `region_annotation_count`, `frame_annotation_count`, and `video_id`
    (rendered `—` for a photo batch with no owning video) — the same fields
@@ -696,7 +696,7 @@ workflow (no branches/worktrees). What shipped:
    of only reachable via the API.
 
 **Real-browser verification (this task, 2026-08-16), against the dev stack
-at commit `TBD`** — done because this repo's frontend unit tests mock
+at commit `1536dd5`** — done because this repo's frontend unit tests mock
 `apiClient` wholesale and cannot observe whether the panel really
 recomputes against live data or whether a limit really reduces a class:
 - Picker columns matched a DB ground-truth table exactly: `caecum01` (id
