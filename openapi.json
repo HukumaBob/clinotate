@@ -5079,6 +5079,16 @@
             "type": "integer",
             "title": "Labeled Frame Count"
           },
+          "region_annotation_count": {
+            "type": "integer",
+            "title": "Region Annotation Count",
+            "default": 0
+          },
+          "frame_annotation_count": {
+            "type": "integer",
+            "title": "Frame Annotation Count",
+            "default": 0
+          },
           "preview_frames": {
             "items": {
               "$ref": "#/components/schemas/SequencePreviewFrame"

@@ -15,6 +15,7 @@ from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
 from app.jobs.service import enqueue_find_similar, enqueue_rank_quality, enqueue_video_transcode
 from app.media.models import Frame, Sequence, Video
+from app.taxonomy.models import AnnotationScope, EvaluationType, Label
 from app.media.schemas import (
     FindSimilarRequest,
     FrameBulkDelete,
@@ -417,6 +418,26 @@ def list_sequences(
         )
         labeled_counts_by_sequence = dict(labeled_count_rows)
 
+    region_counts: dict[int, int] = {}
+    frame_counts: dict[int, int] = {}
+    if sequence_ids:
+        scope_rows = (
+            session.query(
+                Frame.sequence_id,
+                EvaluationType.annotation_scope,
+                func.count(Annotation.id),
+            )
+            .join(Annotation, Annotation.frame_id == Frame.id)
+            .join(Label, Label.id == Annotation.label_id)
+            .join(EvaluationType, EvaluationType.id == Label.evaluation_type_id)
+            .filter(Frame.sequence_id.in_(sequence_ids))
+            .group_by(Frame.sequence_id, EvaluationType.annotation_scope)
+            .all()
+        )
+        for sequence_id, scope, count in scope_rows:
+            target = region_counts if scope == AnnotationScope.REGION else frame_counts
+            target[sequence_id] = count
+
     if labeled == "labeled":
         sequences = [s for s in sequences if labeled_counts_by_sequence.get(s.id, 0) > 0]
     elif labeled == "unlabeled":
@@ -466,6 +487,8 @@ def list_sequences(
                 procedure_id=sequence.procedure_id,
                 frame_count=frame_counts_by_sequence.get(sequence.id, 0),
                 labeled_frame_count=labeled_counts_by_sequence.get(sequence.id, 0),
+                region_annotation_count=region_counts.get(sequence.id, 0),
+                frame_annotation_count=frame_counts.get(sequence.id, 0),
                 preview_frames=preview_frames,
             )
         )

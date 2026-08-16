@@ -130,6 +130,8 @@ class SequenceListItem(BaseModel):
     procedure_id: int | None
     frame_count: int
     labeled_frame_count: int
+    region_annotation_count: int = 0
+    frame_annotation_count: int = 0
     preview_frames: list[SequencePreviewFrame]
 
 
