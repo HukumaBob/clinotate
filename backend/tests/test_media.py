@@ -1106,6 +1106,52 @@ def test_get_video_404_for_missing_video():
     assert response.status_code == 404
 
 
+def _upload_video_for_rename(headers: dict[str, str], title: str) -> int:
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": f"{title}-procedure"}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO_H264, "rb") as f:
+        response = client.post(
+            "/media/videos",
+            files={"file": ("tiny_h264.mp4", f, "video/mp4")},
+            data={"title": title, "procedure_id": procedure_id},
+            headers=headers,
+        )
+    return response.json()["id"]
+
+
+def test_update_video_renames_title_without_touching_filename():
+    headers = _auth_headers()
+    video_id = _upload_video_for_rename(headers, "rename-me")
+
+    response = client.patch(
+        f"/media/videos/{video_id}", json={"title": "Renamed title"}, headers=headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Renamed title"
+    # The stored object's filename is the storage key's identity -- renaming
+    # the display title must never rewrite it.
+    assert response.json()["filename"] == "tiny_h264.mp4"
+
+
+def test_update_video_rejects_blank_title():
+    headers = _auth_headers()
+    video_id = _upload_video_for_rename(headers, "blank-title-check")
+
+    response = client.patch(f"/media/videos/{video_id}", json={"title": "   "}, headers=headers)
+
+    assert response.status_code == 422
+
+
+def test_update_video_404_for_missing_video():
+    headers = _auth_headers()
+    response = client.patch(
+        "/media/videos/999999999", json={"title": "nope"}, headers=headers
+    )
+    assert response.status_code == 404
+
+
 def test_transcode_video_creates_job():
     headers = _auth_headers()
     procedure_id = client.post(

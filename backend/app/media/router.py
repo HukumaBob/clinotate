@@ -36,6 +36,7 @@ from app.media.schemas import (
     SequenceUpdate,
     SuggestSequenceNameResponse,
     VideoRead,
+    VideoUpdate,
 )
 from app.media.service import (
     compute_checksum,
@@ -136,6 +137,21 @@ def get_video(
     video = session.get(Video, video_id)
     if video is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return _video_read(video, storage)
+
+
+@router.patch("/videos/{video_id}", response_model=VideoRead)
+def update_video(
+    video_id: int,
+    payload: VideoUpdate,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> VideoRead:
+    video = session.get(Video, video_id)
+    if video is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    video.title = payload.title
+    session.commit()
     return _video_read(video, storage)
 
 

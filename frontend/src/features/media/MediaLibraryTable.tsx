@@ -3,7 +3,10 @@ import { useEffect, useState } from "react";
 import { useDeleteSequence, useDeleteVideo, useMediaLibrary } from "../../entities/useMediaLibrary";
 import type { MediaLibraryParams } from "../../entities/useMediaLibrary";
 import { useProcedures } from "../../entities/useProcedures";
+import { useUpdateSequence } from "../../entities/useSequences";
+import { useRenameVideo } from "../../entities/useVideo";
 import { MediaLibraryPagination } from "./MediaLibraryPagination";
+import { MediaNameCell } from "./MediaNameCell";
 import { useDebouncedValue } from "./useDebouncedValue";
 
 function formatSize(bytes: number): string {
@@ -52,6 +55,29 @@ export function MediaLibraryTable({
   const deleteSequence = useDeleteSequence();
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   const [errorsByKey, setErrorsByKey] = useState<Record<string, string>>({});
+  const renameVideo = useRenameVideo();
+  const updateSequence = useUpdateSequence();
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [renameErrorsByKey, setRenameErrorsByKey] = useState<Record<string, string>>({});
+
+  function handleRename(id: number, kind: "video" | "photo", name: string) {
+    const key = `${kind}-${id}`;
+    const onSettled = {
+      onSuccess: () => {
+        setEditingKey(null);
+        setRenameErrorsByKey((errors) => ({ ...errors, [key]: "" }));
+      },
+      onError: (error: unknown) => {
+        const detail = (error as { detail?: string } | undefined)?.detail ?? "Rename failed";
+        setRenameErrorsByKey((errors) => ({ ...errors, [key]: detail }));
+      },
+    };
+    if (kind === "video") {
+      renameVideo.mutate({ videoId: id, title: name }, onSettled);
+    } else {
+      updateSequence.mutate({ sequenceId: id, name }, onSettled);
+    }
+  }
 
   function handleDelete(id: number, kind: "video" | "photo") {
     const key = `${kind}-${id}`;
@@ -192,20 +218,24 @@ export function MediaLibraryTable({
                     )?.name ?? item.procedure_id);
               return (
                 <tr key={key} className="border-b border-gray-800 hover:bg-gray-900/50">
-                  <td
-                    className="py-1.5 px-3 text-gray-100 cursor-pointer text-blue-400 hover:text-blue-300 hover:underline"
-                    onClick={
-                      item.kind === "video" ? () => onSelectVideo?.(item.id) : () => onSelectSequence?.(item.id)
-                    }
-                  >
-                    {item.kind === "video" ? (
-                      <div>
-                        <div>{item.title}</div>
-                        <div className="text-xs text-gray-500">{item.filename}</div>
-                      </div>
-                    ) : (
-                      item.filename
-                    )}
+                  <td className="py-1.5 px-3 text-gray-100">
+                    <MediaNameCell
+                      key={`${key}-${item.kind === "video" ? item.title : item.filename}`}
+                      displayName={(item.kind === "video" ? item.title : item.filename) ?? ""}
+                      secondaryLine={item.kind === "video" ? item.filename : undefined}
+                      isEditing={editingKey === key}
+                      isSaving={renameVideo.isPending || updateSequence.isPending}
+                      error={renameErrorsByKey[key] || undefined}
+                      onOpen={() =>
+                        item.kind === "video" ? onSelectVideo?.(item.id) : onSelectSequence?.(item.id)
+                      }
+                      onStartEdit={() => {
+                        setEditingKey(key);
+                        setRenameErrorsByKey((errors) => ({ ...errors, [key]: "" }));
+                      }}
+                      onCancelEdit={() => setEditingKey(null)}
+                      onSave={(name) => handleRename(item.id, item.kind, name)}
+                    />
                   </td>
                   <td className="py-1.5 px-3 text-gray-100">{item.kind}</td>
                   <td className="py-1.5 px-3 text-gray-100">{procedureName}</td>

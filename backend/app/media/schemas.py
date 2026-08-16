@@ -19,6 +19,20 @@ class VideoRead(BaseModel):
     stream_url: str
 
 
+class VideoUpdate(BaseModel):
+    """Rename a video's display title. The stored `filename` is the storage
+    object's identity and is deliberately not editable."""
+
+    title: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _title_is_not_blank(self) -> "VideoUpdate":
+        self.title = self.title.strip()
+        if not self.title:
+            raise ValueError("title must not be blank")
+        return self
+
+
 class CropBox(BaseModel):
     left: float = Field(default=0, ge=0, le=100)
     right: float = Field(default=0, ge=0, le=100)

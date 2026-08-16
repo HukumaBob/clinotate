@@ -8,7 +8,7 @@ import { apiClient } from "../../shared/api/client";
 import { MediaLibraryTable } from "./MediaLibraryTable";
 
 vi.mock("../../shared/api/client", () => ({
-  apiClient: { GET: vi.fn(), DELETE: vi.fn() },
+  apiClient: { GET: vi.fn(), DELETE: vi.fn(), PATCH: vi.fn() },
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -580,5 +580,139 @@ describe("MediaLibraryTable", () => {
       const lastCall = libraryCalls[libraryCalls.length - 1];
       expect(lastCall?.[1]?.params?.query?.page).toBe(2);
     });
+  });
+
+  function mockLibraryWith(items: unknown[]) {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: { items, total: items.length, page: 1, page_size: 25 },
+      error: undefined,
+    } as never);
+  }
+
+  const VIDEO_ROW = {
+    id: 7,
+    kind: "video",
+    filename: "raw-file.mp4",
+    title: "Old title",
+    procedure_id: null,
+    uploaded_at: "2026-08-01T00:00:00Z",
+    last_edited_at: "2026-08-02T00:00:00Z",
+    size_bytes: 1_000,
+    linked_sequence_count: 0,
+  };
+
+  const PHOTO_ROW = {
+    id: 8,
+    kind: "photo",
+    filename: "Old batch name",
+    title: null,
+    procedure_id: null,
+    uploaded_at: "2026-08-01T00:00:00Z",
+    last_edited_at: "2026-08-02T00:00:00Z",
+    size_bytes: 1_000,
+    linked_sequence_count: 1,
+  };
+
+  it("renames a video's title via PATCH and leaves the stored filename alone", async () => {
+    mockLibraryWith([VIDEO_ROW]);
+    vi.mocked(apiClient.PATCH).mockResolvedValue({ data: {}, error: undefined } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("Old title");
+    await userEvent.click(screen.getByRole("button", { name: /rename "Old title"/i }));
+
+    const input = screen.getByRole("textbox", { name: /name/i });
+    await userEvent.clear(input);
+    await userEvent.type(input, "New title");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(apiClient.PATCH).toHaveBeenCalledWith("/media/videos/{video_id}", {
+        params: { path: { video_id: 7 } },
+        body: { title: "New title" },
+      })
+    );
+  });
+
+  it("renames a photo sequence via the sequence endpoint", async () => {
+    mockLibraryWith([PHOTO_ROW]);
+    vi.mocked(apiClient.PATCH).mockResolvedValue({ data: {}, error: undefined } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("Old batch name");
+    await userEvent.click(screen.getByRole("button", { name: /rename "Old batch name"/i }));
+
+    const input = screen.getByRole("textbox", { name: /name/i });
+    await userEvent.clear(input);
+    await userEvent.type(input, "New batch name");
+    await userEvent.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(apiClient.PATCH).toHaveBeenCalledWith(
+        "/media/sequences/{sequence_id}",
+        expect.objectContaining({
+          params: { path: { sequence_id: 8 } },
+          body: expect.objectContaining({ name: "New batch name" }),
+        })
+      )
+    );
+  });
+
+  it("cancels the edit on Escape without sending a request", async () => {
+    mockLibraryWith([VIDEO_ROW]);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("Old title");
+    await userEvent.click(screen.getByRole("button", { name: /rename "Old title"/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /name/i }), "scrapped");
+    await userEvent.keyboard("{Escape}");
+
+    expect(apiClient.PATCH).not.toHaveBeenCalled();
+    expect(screen.getByText("Old title")).toBeInTheDocument();
+  });
+
+  it("keeps Save disabled for a blank name", async () => {
+    mockLibraryWith([VIDEO_ROW]);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("Old title");
+    await userEvent.click(screen.getByRole("button", { name: /rename "Old title"/i }));
+    await userEvent.clear(screen.getByRole("textbox", { name: /name/i }));
+
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
+  });
+
+  it("shows the backend error inline when a rename fails", async () => {
+    mockLibraryWith([VIDEO_ROW]);
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: undefined,
+      error: { detail: "Video not found" },
+    } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("Old title");
+    await userEvent.click(screen.getByRole("button", { name: /rename "Old title"/i }));
+    await userEvent.clear(screen.getByRole("textbox", { name: /name/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /name/i }), "Whatever");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(screen.getByText("Video not found")).toBeInTheDocument());
+  });
+
+  it("does not open the video when the rename button is clicked", async () => {
+    mockLibraryWith([VIDEO_ROW]);
+    const onSelectVideo = vi.fn();
+
+    render(<MediaLibraryTable onSelectVideo={onSelectVideo} />, { wrapper });
+
+    await screen.findByText("Old title");
+    await userEvent.click(screen.getByRole("button", { name: /rename "Old title"/i }));
+
+    expect(onSelectVideo).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,24 @@ export function useVideo(videoId: number | null) {
   });
 }
 
+export function useRenameVideo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { videoId: number; title: string }) => {
+      const result = await apiClient.PATCH("/media/videos/{video_id}", {
+        params: { path: { video_id: params.videoId } },
+        body: { title: params.title },
+      });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: (_data, params) => {
+      queryClient.invalidateQueries({ queryKey: ["video", params.videoId] });
+      queryClient.invalidateQueries({ queryKey: ["media-library"] });
+    },
+  });
+}
+
 export function useTranscodeVideo() {
   const queryClient = useQueryClient();
   return useMutation({
