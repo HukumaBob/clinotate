@@ -7,9 +7,10 @@ type DatasetRead = components["schemas"]["DatasetRead"];
 interface DatasetsTableProps {
   datasets: DatasetRead[];
   onDelete: (datasetId: number) => void;
+  onShowMetrics: (dataset: DatasetRead) => void;
 }
 
-export function DatasetsTable({ datasets, onDelete }: DatasetsTableProps) {
+export function DatasetsTable({ datasets, onDelete, onShowMetrics }: DatasetsTableProps) {
   const [armed, setArmed] = useState<number | null>(null);
 
   if (datasets.length === 0) {
@@ -41,6 +42,13 @@ export function DatasetsTable({ datasets, onDelete }: DatasetsTableProps) {
               {new Date(dataset.created_at).toLocaleDateString()}
             </td>
             <td className="px-4 py-2 text-right">
+              <button
+                type="button"
+                className="mr-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"
+                onClick={() => onShowMetrics(dataset)}
+              >
+                Metrics
+              </button>
               {armed === dataset.id ? (
                 <button
                   type="button"

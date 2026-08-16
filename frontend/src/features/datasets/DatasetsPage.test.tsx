@@ -25,6 +25,7 @@ const BALANCE = {
   below_threshold: [],
   threshold: 10,
   metrics: { severity: "moderate_imbalance" },
+  recommendations: [],
 };
 
 const BALANCE_WITHOUT_POLYP = {
@@ -180,5 +181,19 @@ describe("DatasetsPage", () => {
       expect(screen.queryByTestId("excluded-classes")).not.toBeInTheDocument();
     });
     expect(await screen.findByTestId("exclude-1")).toBeInTheDocument();
+  });
+
+  it("sends a class limit in the balance request", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+
+    const limitInput = await screen.findByLabelText(/limit polyp/i);
+    await userEvent.clear(limitInput);
+    await userEvent.type(limitInput, "20");
+
+    await waitFor(() => {
+      const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
+      expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({ 1: 20 });
+    });
   });
 });

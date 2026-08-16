@@ -10,9 +10,11 @@ import {
 } from "../../entities/useDatasets";
 import type { components } from "../../shared/api/generated/schema";
 import { BalancePanel } from "./BalancePanel";
+import { DatasetMetricsDialog } from "./DatasetMetricsDialog";
 import { DatasetsTable } from "./DatasetsTable";
 
 type TaskType = components["schemas"]["TaskType"];
+type DatasetRead = components["schemas"]["DatasetRead"];
 
 const TASK_TYPES: TaskType[] = ["classification", "detection", "segmentation"];
 const DEBOUNCE_MS = 300;
@@ -21,6 +23,8 @@ export function DatasetsPage() {
   const [selectedSequenceIds, setSelectedSequenceIds] = useState<Set<number>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
+  const [classLimits, setClassLimits] = useState<Record<number, number>>({});
+  const [metricsDataset, setMetricsDataset] = useState<DatasetRead | null>(null);
   const [taskType, setTaskType] = useState<TaskType>("classification");
   const [threshold, setThreshold] = useState(10);
   const [name, setName] = useState("");
@@ -102,6 +106,7 @@ export function DatasetsPage() {
     task_type: taskType,
     grouping_overrides: { expand: [] as number[] },
     excluded_label_ids: [] as number[],
+    class_limits: {} as Record<number, number>,
     threshold,
   });
 
@@ -112,11 +117,12 @@ export function DatasetsPage() {
         task_type: taskType,
         grouping_overrides: { expand: Array.from(collapsed) },
         excluded_label_ids: Array.from(excluded),
+        class_limits: classLimits,
         threshold,
       });
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [selectedSequenceIds, collapsed, excluded, taskType, threshold]);
+  }, [selectedSequenceIds, collapsed, excluded, classLimits, taskType, threshold]);
 
   const balanceQuery = useDatasetBalance(debouncedRequest, debouncedRequest.sequence_ids.length > 0);
 
@@ -156,6 +162,18 @@ export function DatasetsPage() {
     });
   }
 
+  function changeLimit(labelId: number, limit: number | null) {
+    setClassLimits((current) => {
+      const next = { ...current };
+      if (limit === null) {
+        delete next[labelId];
+      } else {
+        next[labelId] = limit;
+      }
+      return next;
+    });
+  }
+
   async function handleSave() {
     if (!name.trim()) return;
     await createDataset.mutateAsync({
@@ -165,6 +183,7 @@ export function DatasetsPage() {
       split_config: { train: trainPercent, val: valPercent, test: testPercent },
       grouping_overrides: { expand: Array.from(collapsed) },
       excluded_label_ids: Array.from(excluded),
+      class_limits: classLimits,
       threshold,
     });
     setName("");
@@ -322,6 +341,7 @@ export function DatasetsPage() {
             <DatasetsTable
               datasets={datasets}
               onDelete={(datasetId) => deleteDataset.mutate(datasetId)}
+              onShowMetrics={(dataset) => setMetricsDataset(dataset)}
             />
           </div>
         </div>
@@ -338,6 +358,8 @@ export function DatasetsPage() {
               excludedLabels={excludedLabels}
               parentLabelIdByChildId={parentLabelIdByChildId}
               labelNamesById={labelNamesById}
+              classLimits={classLimits}
+              onChangeLimit={changeLimit}
             />
           ) : (
             <p className="text-sm text-gray-500">
@@ -346,6 +368,10 @@ export function DatasetsPage() {
           )}
         </div>
       </div>
+
+      {metricsDataset && (
+        <DatasetMetricsDialog dataset={metricsDataset} onClose={() => setMetricsDataset(null)} />
+      )}
     </div>
   );
 }

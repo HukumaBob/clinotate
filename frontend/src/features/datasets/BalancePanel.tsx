@@ -27,6 +27,12 @@ interface BalancePanelProps {
   /** Label name lookup, used to show the parent's name in the re-collapse
    * control's accessible name ("Collapse into {parentName}"). */
   labelNamesById?: Map<number, string>;
+  /** Current per-class cap, keyed by label id. A class absent from this map
+   * has no cap. */
+  classLimits?: Record<number, number>;
+  /** Called with the new cap for a class, or null to clear it. A limit of 0
+   * is never sent -- that is what the exclude checkbox is for. */
+  onChangeLimit?: (labelId: number, limit: number | null) => void;
 }
 
 export function BalancePanel({
@@ -39,6 +45,8 @@ export function BalancePanel({
   excludedLabels = [],
   parentLabelIdByChildId,
   labelNamesById,
+  classLimits = {},
+  onChangeLimit,
 }: BalancePanelProps) {
   const maxInstances = Math.max(1, ...report.classes.map((c) => c.instances));
   const totalInstances = report.classes.reduce((sum, entry) => sum + entry.instances, 0);
@@ -119,6 +127,20 @@ export function BalancePanel({
             <span className="w-24 text-right text-xs text-gray-400">
               {entry.instances} / {entry.frames}
             </span>
+            {onChangeLimit && (
+              <input
+                type="number"
+                min={1}
+                data-testid={`limit-${entry.label_id}`}
+                aria-label={`Limit ${entry.name}`}
+                className="w-16 rounded border border-gray-700 bg-gray-950 px-1 py-0.5 text-right text-xs text-gray-100"
+                value={classLimits[entry.label_id] ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  onChangeLimit(entry.label_id, raw === "" ? null : Number(raw));
+                }}
+              />
+            )}
           </li>
           );
         })}
