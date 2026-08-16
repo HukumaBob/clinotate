@@ -14,6 +14,7 @@ const REPORT = {
   below_threshold: ["ileum"],
   threshold: 10,
   metrics: { severity: "severe_imbalance", imbalance_ratio: 35, gini_index: 0.69 },
+  recommendations: [],
 };
 
 function renderPanel(overrides = {}) {
@@ -56,8 +57,8 @@ describe("BalancePanel", () => {
 
   it("shows severity as a secondary figure, not the headline", () => {
     renderPanel();
-    const severity = screen.getByTestId("severity-reference");
-    expect(severity).toHaveTextContent("severe_imbalance");
+    const metrics = screen.getByTestId("key-metrics");
+    expect(metrics).toHaveTextContent("severe_imbalance");
   });
 
   it("labels the checkbox to match its checked polarity (checked = included)", () => {
@@ -136,5 +137,55 @@ describe("BalancePanel", () => {
     expect(toggle).toHaveAccessibleName("Collapse into polyp");
     await userEvent.click(toggle);
     expect(props.onToggleCollapse).toHaveBeenCalledWith(1);
+  });
+
+  it("shows the computed key metrics as a labelled block", () => {
+    renderPanel({
+      report: {
+        ...REPORT,
+        metrics: {
+          severity: "severe_imbalance",
+          imbalance_ratio: 35,
+          gini_index: 0.587,
+          normalized_entropy: 0.528,
+          min_count: 1,
+          max_count: 35,
+          mean_count: 11.5,
+        },
+      },
+    });
+
+    const metrics = screen.getByTestId("key-metrics");
+    expect(metrics).toHaveTextContent("35");
+    expect(metrics).toHaveTextContent("0.59");
+    expect(metrics).toHaveTextContent("0.53");
+  });
+
+  it("renders recommendations when the report carries them", () => {
+    renderPanel({
+      report: {
+        ...REPORT,
+        recommendations: [
+          { kind: "under_threshold", message: "1 class(es) below 10 instances: ileum." },
+          { kind: "loss_weighting", message: "Consider Focal Loss or weighted sampling." },
+        ],
+      },
+    });
+
+    const list = screen.getByTestId("recommendations");
+    expect(list).toHaveTextContent("ileum");
+    expect(list).toHaveTextContent("Focal Loss");
+  });
+
+  it("renders no recommendations section when there are none", () => {
+    renderPanel({ report: { ...REPORT, recommendations: [] } });
+    expect(screen.queryByTestId("recommendations")).not.toBeInTheDocument();
+  });
+
+  it("keeps the under-threshold summary above the metrics block", () => {
+    renderPanel();
+    const summary = screen.getByTestId("below-threshold-summary");
+    const metrics = screen.getByTestId("key-metrics");
+    expect(summary.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

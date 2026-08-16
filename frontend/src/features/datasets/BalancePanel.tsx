@@ -41,6 +41,11 @@ export function BalancePanel({
   labelNamesById,
 }: BalancePanelProps) {
   const maxInstances = Math.max(1, ...report.classes.map((c) => c.instances));
+  const totalInstances = report.classes.reduce((sum, entry) => sum + entry.instances, 0);
+
+  function formatNumber(value: unknown, digits: number): string {
+    return typeof value === "number" ? value.toFixed(digits) : "-";
+  }
 
   return (
     <div className="flex flex-col gap-4 text-sm text-gray-200">
@@ -142,13 +147,42 @@ export function BalancePanel({
         </div>
       )}
 
-      <div data-testid="severity-reference" className="text-xs text-gray-500">
-        Reference: {String(report.metrics.severity ?? "no_data")}
-        {report.metrics.imbalance_ratio !== undefined &&
-          ` · ratio ${Number(report.metrics.imbalance_ratio).toFixed(1)}`}
-        {report.metrics.gini_index !== undefined &&
-          ` · Gini ${Number(report.metrics.gini_index).toFixed(2)}`}
+      <div data-testid="key-metrics" className="rounded border border-gray-800 bg-gray-900 p-3">
+        <h3 className="mb-2 text-xs uppercase tracking-wide text-gray-400">Key metrics</h3>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-300">
+          <dt>Total instances</dt>
+          <dd className="text-right">{totalInstances}</dd>
+          <dt>Total frames</dt>
+          <dd className="text-right">{report.total_frames}</dd>
+          <dt>Classes</dt>
+          <dd className="text-right">{report.classes.length}</dd>
+          <dt>Imbalance ratio</dt>
+          <dd className="text-right">{formatNumber(report.metrics.imbalance_ratio, 2)}</dd>
+          <dt>Gini index</dt>
+          <dd className="text-right">{formatNumber(report.metrics.gini_index, 2)}</dd>
+          <dt>Normalized entropy</dt>
+          <dd className="text-right">{formatNumber(report.metrics.normalized_entropy, 2)}</dd>
+          <dt>Min / max per class</dt>
+          <dd className="text-right">
+            {formatNumber(report.metrics.min_count, 0)} / {formatNumber(report.metrics.max_count, 0)}
+          </dd>
+          <dt>Severity</dt>
+          <dd className="text-right">{String(report.metrics.severity ?? "no_data")}</dd>
+        </dl>
       </div>
+
+      {(report.recommendations ?? []).length > 0 && (
+        <ul data-testid="recommendations" className="flex flex-col gap-1">
+          {(report.recommendations ?? []).map((recommendation) => (
+            <li
+              key={`${recommendation.kind}-${recommendation.message}`}
+              className="rounded border border-gray-800 bg-gray-900 px-3 py-2 text-xs text-gray-300"
+            >
+              {recommendation.message}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

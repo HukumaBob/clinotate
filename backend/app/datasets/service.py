@@ -254,11 +254,13 @@ def build_recommendations(
 
     if report.below_threshold:
         names = ", ".join(report.below_threshold)
+        count = len(report.below_threshold)
+        noun = "class" if count == 1 else "classes"
         recommendations.append(
             Recommendation(
                 kind="under_threshold",
                 message=(
-                    f"{len(report.below_threshold)} class(es) below {report.threshold} "
+                    f"{count} {noun} below {report.threshold} "
                     f"instances: {names}. Annotate more, collapse them into a parent "
                     f"class, or exclude them."
                 ),
