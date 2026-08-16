@@ -86,7 +86,7 @@ export function BalancePanel({
               <button
                 type="button"
                 data-testid={`collapse-${entry.label_id}`}
-                aria-label={`Expand ${entry.name}`}
+                aria-label={collapsed.has(entry.label_id) ? `Expand ${entry.name}` : `Collapse ${entry.name}`}
                 className="w-32 truncate text-left text-gray-100 hover:text-blue-400"
                 onClick={() => onToggleCollapse(entry.label_id)}
               >

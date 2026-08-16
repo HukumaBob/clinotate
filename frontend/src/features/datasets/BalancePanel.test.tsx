@@ -74,6 +74,26 @@ describe("BalancePanel", () => {
     expect(screen.getByText("ileum")).toBeInTheDocument();
   });
 
+  it("names the parent toggle Expand when collapsed and Collapse when expanded", () => {
+    const { rerender } = render(<BalancePanel {...{
+      report: REPORT,
+      collapsed: new Set<number>(),
+      excluded: new Set<number>(),
+      onToggleCollapse: vi.fn(),
+      onToggleExclude: vi.fn(),
+    }} />);
+    expect(screen.getByTestId("collapse-1")).toHaveAccessibleName("Collapse polyp");
+
+    rerender(<BalancePanel {...{
+      report: REPORT,
+      collapsed: new Set<number>([1]),
+      excluded: new Set<number>(),
+      onToggleCollapse: vi.fn(),
+      onToggleExclude: vi.fn(),
+    }} />);
+    expect(screen.getByTestId("collapse-1")).toHaveAccessibleName("Expand polyp");
+  });
+
   it("shows excluded classes with a control to restore them", async () => {
     const props = renderPanel({ excludedLabels: [{ id: 3, name: "cecum" }] });
     const section = screen.getByTestId("excluded-classes");
