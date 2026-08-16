@@ -253,43 +253,49 @@ def assign_splits(
     sequence_ids: list[int],
     split_config: dict,
     frame_counts_by_sequence: dict[int, int] | None = None,
+    grouping_keys: dict[int, "GroupingKey"] | None = None,
 ) -> dict[int, SplitName]:
-    """Assign whole sequences to splits; frames inherit their sequence's split.
+    """Assign whole grouping units to splits; sequences inherit their unit's.
 
-    Splitting frames instead would leak -- consecutive frames of one video are
-    near-duplicates, so the same image would sit on both sides of the split and
-    inflate validation metrics into meaninglessness.
+    The indivisible unit is the video, not the sequence: several sequences
+    cut from one video are the same procedure, so putting one in train and
+    another in val leaks -- validation would measure memorisation of that
+    procedure. A sequence with no video is its own unit.
 
-    Sequences are processed in DESCENDING contributed-frame-count order
-    (frames this dataset's composition actually draws from that sequence,
-    not the sequence's raw frame total), largest first. Assignment is a
-    largest-remainder-style deal: each sequence goes to whichever split is
-    currently furthest below its target share (target_pct * total, adjusted
-    for a guaranteed minimum -- see below). Dealing largest-first into
-    "most under target" rather than block-filling train, then val, then
-    test means the few sequences that actually carry content get spread
-    across all three splits instead of all landing in train just because
-    train's quota happens to be large enough to swallow every one of them.
+    Units are processed in DESCENDING contributed-frame-count order (summed
+    over the unit's sequences), largest first, and dealt largest-remainder
+    style: each unit goes to whichever split is currently furthest below its
+    target share. Dealing largest-first into "most under target" rather than
+    block-filling train, then val, then test means the few units that
+    actually carry content get spread across all three splits.
 
-    With few sequences the realized fractions cannot match the requested
-    ones (7 sequences at 70/20/10 lands on 71/14/14) -- expected, and the
-    caller reports realized counts rather than trying to force them even.
+    With few units the realized fractions cannot match the requested ones --
+    expected, and the caller reports realized counts rather than forcing
+    them even.
 
-    Whenever there are enough sequences to populate a split, that split is
-    guaranteed at least one: train always gets >=1; val gets >=1 once there
-    are 2+ sequences; test gets >=1 once there are 3+. Without this,
-    integer-truncation of small percentages (e.g. 6 sequences at 80/15
-    truncates val to zero) can silently produce an empty validation or test
-    split, which cannot validate anything.
+    When `grouping_keys` is omitted every sequence is treated as its own
+    unit, preserving the old behaviour for callers without keys.
     """
-    frame_counts_by_sequence = frame_counts_by_sequence or {}
-    ordered = sorted(
-        sequence_ids,
-        key=lambda sid: (-frame_counts_by_sequence.get(sid, 0), sid),
-    )
-    total = len(ordered)
-    if total == 0:
+    if not sequence_ids:
         return {}
+
+    frame_counts_by_sequence = frame_counts_by_sequence or {}
+    keys = grouping_keys or {sid: ("sequence", sid) for sid in sequence_ids}
+
+    sequences_by_unit: dict[GroupingKey, list[int]] = {}
+    for sequence_id in sequence_ids:
+        unit = keys.get(sequence_id, ("sequence", sequence_id))
+        sequences_by_unit.setdefault(unit, []).append(sequence_id)
+
+    frames_by_unit = {
+        unit: sum(frame_counts_by_sequence.get(sid, 0) for sid in members)
+        for unit, members in sequences_by_unit.items()
+    }
+    ordered_units = sorted(
+        sequences_by_unit,
+        key=lambda unit: (-frames_by_unit[unit], unit[0], unit[1]),
+    )
+    total = len(ordered_units)
 
     train_pct = split_config.get("train", 70) / 100
     val_pct = split_config.get("val", 20) / 100
@@ -298,12 +304,12 @@ def assign_splits(
 
     # Minimums come first and are satisfied directly against the
     # descending-content order, so the guarantee actually lands on
-    # content-bearing sequences when there are enough of them to go
-    # around, rather than being satisfiable by an empty sequence. train
-    # always gets >=1; val gets >=1 once there are 2+ sequences; test
-    # gets >=1 once there are 3+ -- these sum to at most `total` by
-    # construction (1+1+1 <= total whenever total >= 3), so they never
-    # compete with each other for the same sequence.
+    # content-bearing units when there are enough of them to go around,
+    # rather than being satisfiable by an empty unit. train always gets
+    # >=1; val gets >=1 once there are 2+ units; test gets >=1 once there
+    # are 3+ -- these sum to at most `total` by construction (1+1+1 <=
+    # total whenever total >= 3), so they never compete with each other
+    # for the same unit.
     min_order = ["train", "val", "test"]
     min_n = {
         "train": 1 if total >= 1 else 0,
@@ -312,24 +318,28 @@ def assign_splits(
     }
 
     counts = {"train": 0, "val": 0, "test": 0}
-    assignment: dict[int, SplitName] = {}
-    remaining = list(ordered)
+    unit_split: dict[GroupingKey, SplitName] = {}
+    remaining = list(ordered_units)
 
     for name in min_order:
         while counts[name] < min_n[name] and remaining:
-            sequence_id = remaining.pop(0)
+            unit = remaining.pop(0)
             counts[name] += 1
-            assignment[sequence_id] = SplitName(name)
+            unit_split[unit] = SplitName(name)
 
     # Deal the rest, largest-content-first, to whichever split is
     # currently furthest below its (possibly fractional) target share --
     # a largest-remainder-style apportionment that spreads any remaining
     # content across all three splits instead of block-filling train.
-    for sequence_id in remaining:
+    for unit in remaining:
         chosen = max(counts, key=lambda name: targets[name] - counts[name])
         counts[chosen] += 1
-        assignment[sequence_id] = SplitName(chosen)
+        unit_split[unit] = SplitName(chosen)
 
+    assignment: dict[int, SplitName] = {}
+    for unit, members in sequences_by_unit.items():
+        for sequence_id in members:
+            assignment[sequence_id] = unit_split[unit]
     return assignment
 
 
@@ -402,8 +412,9 @@ def create_dataset(session: Session, payload, user) -> Dataset:
     for sequence_id in sequence_by_frame.values():
         frame_counts_by_sequence[sequence_id] = frame_counts_by_sequence.get(sequence_id, 0) + 1
 
+    grouping_keys = grouping_keys_for_sequences(session, payload.sequence_ids)
     split_by_sequence = assign_splits(
-        payload.sequence_ids, payload.split_config, frame_counts_by_sequence
+        payload.sequence_ids, payload.split_config, frame_counts_by_sequence, grouping_keys
     )
 
     for item in composition:
