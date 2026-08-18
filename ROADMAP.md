@@ -924,17 +924,17 @@ excluding a class made its row vanish from the DOM entirely (no way back
 short of discarding every other exclusion made in the session, per the
 prior phase's "no undo" finding).
 
-**The per-keystroke bug's actual cause:** the limit `<input>` was a
-controlled field whose `value` came straight from the debounced,
-server-echoed `report.classes[i].limit` — every keystroke fired a
-recompute request, and the *previous* request's stale response could win
-the race and overwrite the field mid-type, snapping a user's `10` back to
-whatever the last-committed single digit had produced. Fixed by giving
-each limit field its own local input state, only reconciled from the
-server once the debounced request settles and the user isn't actively
-typing — the field now free-types to any digit sequence and reconciles
-after the user stops, rather than re-rendering from the network on every
-key.
+**The per-keystroke bug's actual cause:** the limit `<input>` was bound
+directly to local `classLimits` state, and the change handler applied
+that value as the real cap on every keystroke — so typing `10` applied a
+cap of `1` the instant the first digit landed, then `10` a moment later,
+with the intermediate `1` already having taken effect (e.g. re-triggering
+a recompute against a limit the user never intended to set). There was no
+server round-trip or race involved. Fixed by giving each limit field its
+own local input state, only reconciled from the server once the debounced
+request settles and the user isn't actively typing — the field now
+free-types to any digit sequence and reconciles after the user stops,
+rather than committing a cap on every key.
 
 **Excluded classes now stay visible, greyed, not hidden.** `compute_balance`
 (`backend/app/datasets/service.py`) was changed to report every class in

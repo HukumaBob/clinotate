@@ -42,6 +42,16 @@ function LimitInput({
         setText(raw);
         onChange(raw === "" ? null : Number(raw));
       }}
+      onBlur={() => {
+        // A field left empty means "no cap" -- but with no stored limit,
+        // `value` never changes, so the sync effect above never fires to
+        // restore it. Snap back to the resting value on blur instead, once
+        // the user has finished (not mid-typing, or this would reintroduce
+        // the per-keystroke snap-back bug this component exists to avoid).
+        if (text === "") {
+          setText(String(value));
+        }
+      }}
     />
   );
 }
@@ -166,10 +176,22 @@ export function BalancePanel({
             ) : (
               <span className="w-32 truncate text-left text-gray-100">{entry.name}</span>
             )}
-            <div className="h-3 flex-1 rounded bg-gray-800">
+            <div className="relative h-3 flex-1 rounded bg-gray-800">
+              {/* Track: how big this class could be, uncapped. */}
               <div
-                className={`h-3 rounded ${isExcluded ? "bg-gray-600" : "bg-blue-600"}`}
+                data-testid={`bar-track-${entry.label_id}`}
+                className="h-3 rounded bg-gray-800"
                 style={{ width: `${(entry.max_instances / maxInstances) * 100}%` }}
+              />
+              {/* Fill: how much of it is actually in the dataset right now
+                  (i.e. respects the cap). An excluded row has 0 instances,
+                  so the fill naturally collapses to nothing, leaving only
+                  the greyed track -- present in the picture, absent from
+                  the dataset. */}
+              <div
+                data-testid={`bar-fill-${entry.label_id}`}
+                className={`absolute inset-y-0 left-0 h-3 rounded ${isExcluded ? "bg-gray-600" : "bg-blue-600"}`}
+                style={{ width: `${(entry.instances / maxInstances) * 100}%` }}
               />
             </div>
             <span className="w-24 text-right text-xs text-gray-400">

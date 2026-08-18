@@ -249,4 +249,44 @@ describe("BalancePanel", () => {
     expect(screen.getByTestId("counts-heading")).toHaveTextContent(/instances/i);
     expect(screen.getByTestId("counts-heading")).toHaveTextContent(/frames/i);
   });
+
+  it("renders a capped class's fill narrower than its track, reflecting instances vs max_instances", () => {
+    renderPanel({
+      report: {
+        ...REPORT,
+        classes: [
+          { label_id: 1, name: "polyp", instances: 3, frames: 3, max_instances: 45, max_frames: 40 },
+          { label_id: 2, name: "foam", instances: 2, frames: 2, max_instances: 2, max_frames: 2 },
+        ],
+      },
+    });
+
+    const track = screen.getByTestId("bar-track-1");
+    const fill = screen.getByTestId("bar-fill-1");
+    // Track is sized off max_instances (45 of the 45 maxInstances -> 100%).
+    expect(track).toHaveStyle({ width: "100%" });
+    // Fill is sized off instances (3 of 45 -> ~6.7%), not max_instances.
+    expect(fill.style.width).not.toBe(track.style.width);
+    const fillPct = parseFloat(fill.style.width);
+    expect(fillPct).toBeCloseTo((3 / 45) * 100, 1);
+  });
+
+  it("resets a cleared uncapped limit field back to the maximum on blur", async () => {
+    const props = renderPanel({
+      report: {
+        ...REPORT,
+        classes: [
+          { label_id: 1, name: "polyp", instances: 45, frames: 40, max_instances: 45, max_frames: 40 },
+        ],
+      },
+      classLimits: {},
+    });
+
+    const input = screen.getByLabelText(/limit polyp/i);
+    await userEvent.clear(input);
+    expect(input).toHaveValue(null);
+    await userEvent.click(document.body); // blur
+    expect(input).toHaveValue(45);
+    expect(props.onChangeLimit).toHaveBeenCalledWith(1, null);
+  });
 });
