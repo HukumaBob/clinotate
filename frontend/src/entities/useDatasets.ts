@@ -54,6 +54,20 @@ export function useExportDataset() {
   });
 }
 
+export function useExportDownload(datasetId: number, jobId: number | null) {
+  return useQuery({
+    queryKey: ["dataset-export-download", datasetId, jobId],
+    enabled: jobId !== null,
+    queryFn: async () => {
+      const result = await apiClient.GET("/datasets/{dataset_id}/export/{job_id}/download", {
+        params: { path: { dataset_id: datasetId, job_id: jobId as number } },
+      });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+  });
+}
+
 export function useDeleteDataset() {
   const queryClient = useQueryClient();
   return useMutation({

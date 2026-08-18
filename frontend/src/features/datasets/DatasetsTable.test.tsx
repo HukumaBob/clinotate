@@ -29,6 +29,7 @@ const DATASETS: DatasetRead[] = [
 function renderTable(overrides: {
   onExport?: (dataset: DatasetRead) => void;
   exportJobs?: Record<number, Partial<JobRead>>;
+  downloadUrls?: Record<number, string>;
 } = {}) {
   render(
     <DatasetsTable
@@ -37,6 +38,7 @@ function renderTable(overrides: {
       onShowMetrics={vi.fn()}
       onExport={overrides.onExport ?? vi.fn()}
       exportJobs={overrides.exportJobs}
+      downloadUrls={overrides.downloadUrls}
     />,
   );
 }
@@ -59,8 +61,16 @@ describe("DatasetsTable export action", () => {
   it("offers a download link when an export job has succeeded", () => {
     renderTable({
       exportJobs: { 1: { status: "succeeded", progress: 100, result_ref: "datasets/1/export-x.zip" } },
+      downloadUrls: { 1: "https://minio.example.com/datasets/1/export-x.zip?X-Amz-Signature=abc" },
     });
-    expect(screen.getByTestId("export-download-1")).toBeInTheDocument();
+    const link = screen.getByTestId("export-download-1");
+    expect(link).toBeInTheDocument();
+    // The anchor must point at the presigned URL, not the raw storage key --
+    // result_ref alone is not a fetchable link.
+    expect(link).toHaveAttribute(
+      "href",
+      "https://minio.example.com/datasets/1/export-x.zip?X-Amz-Signature=abc",
+    );
   });
 
   it("reports a failed export instead of silently doing nothing", () => {

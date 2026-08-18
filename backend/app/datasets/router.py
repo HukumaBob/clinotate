@@ -10,6 +10,7 @@ from app.datasets.schemas import (
     BalanceRequest,
     DatasetCreate,
     DatasetRead,
+    ExportDownloadRead,
     ExportRequest,
 )
 from app.datasets.service import compute_balance, create_dataset
@@ -17,6 +18,7 @@ from app.db import get_session
 from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
 from app.media.models import Frame
+from app.storage import StorageService, get_storage_service
 from app.taxonomy.hierarchy import GroupingRules
 from app.worker.export_task import dataset_export
 
@@ -174,6 +176,30 @@ def export_dataset(
     dataset_export.delay(job.id)
 
     return job
+
+
+@router.get("/{dataset_id}/export/{job_id}/download", response_model=ExportDownloadRead)
+def download_export(
+    dataset_id: int,
+    job_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> dict:
+    job = session.get(Job, job_id)
+    if (
+        job is None
+        or job.job_type != JobType.DATASET_EXPORT
+        or job.payload.get("dataset_id") != dataset_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export job not found")
+
+    if job.status != JobStatus.SUCCEEDED or not job.result_ref:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Export job has not succeeded",
+        )
+
+    return {"download_url": storage.url_for(job.result_ref)}
 
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -54,6 +54,24 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+const DATASETS = [
+  {
+    id: 1,
+    name: "colono-detection",
+    task_type: "detection",
+    taxonomy_version: 1,
+    split_config: { train: 70, val: 20, test: 10 },
+    grouping_overrides: {},
+    excluded_label_ids: [],
+    class_limits: {},
+    balance_metrics: { severity: "moderate_imbalance" },
+    created_at: "2026-08-16T10:00:00Z",
+    item_count: 66,
+    split_counts: { train: 40, val: 20, test: 6 },
+    items: [],
+  },
+];
+
 describe("DatasetsPage", () => {
   beforeEach(() => {
     vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
@@ -325,5 +343,70 @@ describe("DatasetsPage", () => {
 
     const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
     expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({ 1: 10 });
+  });
+
+  it("starts an export job when the export action is used and reflects it in the row", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences") return { data: SEQUENCES };
+      if (path === "/datasets") return { data: DATASETS };
+      if (path === "/taxonomy/procedures") return { data: [] };
+      if (path === "/taxonomy/tree") return { data: TREE };
+      if (path === "/jobs/{job_id}") {
+        return {
+          data: {
+            id: 42,
+            job_type: "dataset_export",
+            status: "running",
+            progress: 10,
+            vram_used_bytes: null,
+            vram_total_bytes: null,
+            payload: { dataset_id: 1 },
+            result_ref: null,
+            error: null,
+            created_by_id: 1,
+            started_at: "2026-08-18T00:00:00Z",
+            finished_at: null,
+          },
+        };
+      }
+      return { data: [] };
+    });
+    vi.mocked(apiClient.POST).mockImplementation(async (path: string) => {
+      if (path === "/datasets/{dataset_id}/export") {
+        return {
+          data: {
+            id: 42,
+            job_type: "dataset_export",
+            status: "pending",
+            progress: 0,
+            vram_used_bytes: null,
+            vram_total_bytes: null,
+            payload: { dataset_id: 1 },
+            result_ref: null,
+            error: null,
+            created_by_id: 1,
+            started_at: null,
+            finished_at: null,
+          },
+        };
+      }
+      return { data: BALANCE };
+    });
+
+    render(<DatasetsPage />, { wrapper });
+
+    await userEvent.click(await screen.findByRole("button", { name: /export/i }));
+
+    await waitFor(() => {
+      const exportCalls = vi
+        .mocked(apiClient.POST)
+        .mock.calls.filter(([p]) => p === "/datasets/{dataset_id}/export");
+      expect(exportCalls.length).toBeGreaterThan(0);
+      expect(exportCalls.at(-1)?.[1]?.params?.path?.dataset_id).toBe(1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("export-progress-1")).toBeInTheDocument();
+    });
   });
 });

@@ -3123,6 +3123,62 @@
         }
       }
     },
+    "/datasets/{dataset_id}/export/{job_id}/download": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Download Export",
+        "operationId": "download_export_datasets__dataset_id__export__job_id__download_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportDownloadRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/jobs/sam3/predict": {
       "post": {
         "tags": [
@@ -4234,6 +4290,19 @@
         },
         "type": "object",
         "title": "EvaluationTypeUpdate"
+      },
+      "ExportDownloadRead": {
+        "properties": {
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "download_url"
+        ],
+        "title": "ExportDownloadRead"
       },
       "ExportRequest": {
         "properties": {

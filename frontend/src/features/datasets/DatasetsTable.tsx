@@ -11,6 +11,7 @@ interface DatasetsTableProps {
   onShowMetrics: (dataset: DatasetRead) => void;
   onExport: (dataset: DatasetRead) => void;
   exportJobs?: Record<number, Partial<JobRead>>;
+  downloadUrls?: Record<number, string>;
 }
 
 export function DatasetsTable({
@@ -19,6 +20,7 @@ export function DatasetsTable({
   onShowMetrics,
   onExport,
   exportJobs,
+  downloadUrls,
 }: DatasetsTableProps) {
   const [armed, setArmed] = useState<number | null>(null);
 
@@ -71,14 +73,15 @@ export function DatasetsTable({
                   );
                 }
                 if (job?.status === "succeeded" && job.result_ref) {
+                  const downloadUrl = downloadUrls?.[dataset.id];
                   return (
                     <a
                       data-testid={`export-download-${dataset.id}`}
-                      className="mr-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"
-                      href={job.result_ref}
-                      download
+                      className="mr-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                      href={downloadUrl ?? "#"}
+                      aria-disabled={downloadUrl ? undefined : true}
                     >
-                      Download
+                      {downloadUrl ? "Download" : "Preparing…"}
                     </a>
                   );
                 }

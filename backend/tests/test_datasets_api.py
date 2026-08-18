@@ -133,6 +133,153 @@ def test_split_config_with_a_negative_value_is_rejected():
     assert response.status_code == 422
 
 
+def test_export_download_returns_a_presigned_url_for_a_succeeded_job():
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+
+    headers = _register_and_login("ds-api9@example.com")
+    created = client.post(
+        "/datasets",
+        json={
+            "name": "ds-api9-dataset", "task_type": "detection", "sequence_ids": [],
+            "split_config": {"train": 70, "val": 20}, "grouping_overrides": {},
+            "excluded_label_ids": [], "threshold": 10,
+        },
+        headers=headers,
+    ).json()
+
+    session = SessionLocal()
+    try:
+        user_id = client.get("/auth/me", headers=headers).json()["id"]
+        job = Job(
+            job_type=JobType.DATASET_EXPORT,
+            status=JobStatus.SUCCEEDED,
+            payload={"dataset_id": created["id"], "include_images": True},
+            result_ref=f"datasets/{created['id']}/export-x.zip",
+            created_by_id=user_id,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+    finally:
+        session.close()
+
+    response = client.get(f"/datasets/{created['id']}/export/{job_id}/download", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "download_url" in body
+    assert body["download_url"]
+
+    client.delete(f"/datasets/{created['id']}", headers=headers)
+
+
+def test_export_download_404s_for_a_job_belonging_to_another_dataset():
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+
+    headers = _register_and_login("ds-api10@example.com")
+    dataset_a = client.post(
+        "/datasets",
+        json={
+            "name": "ds-api10-dataset-a", "task_type": "detection", "sequence_ids": [],
+            "split_config": {"train": 70, "val": 20}, "grouping_overrides": {},
+            "excluded_label_ids": [], "threshold": 10,
+        },
+        headers=headers,
+    ).json()
+    dataset_b = client.post(
+        "/datasets",
+        json={
+            "name": "ds-api10-dataset-b", "task_type": "detection", "sequence_ids": [],
+            "split_config": {"train": 70, "val": 20}, "grouping_overrides": {},
+            "excluded_label_ids": [], "threshold": 10,
+        },
+        headers=headers,
+    ).json()
+
+    session = SessionLocal()
+    try:
+        user_id = client.get("/auth/me", headers=headers).json()["id"]
+        job = Job(
+            job_type=JobType.DATASET_EXPORT,
+            status=JobStatus.SUCCEEDED,
+            payload={"dataset_id": dataset_a["id"], "include_images": True},
+            result_ref=f"datasets/{dataset_a['id']}/export-x.zip",
+            created_by_id=user_id,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+    finally:
+        session.close()
+
+    # Job belongs to dataset_a; requesting it via dataset_b must 404.
+    response = client.get(f"/datasets/{dataset_b['id']}/export/{job_id}/download", headers=headers)
+    assert response.status_code == 404
+
+    client.delete(f"/datasets/{dataset_a['id']}", headers=headers)
+    client.delete(f"/datasets/{dataset_b['id']}", headers=headers)
+
+
+def test_export_download_404s_for_an_unknown_job():
+    headers = _register_and_login("ds-api11@example.com")
+    created = client.post(
+        "/datasets",
+        json={
+            "name": "ds-api11-dataset", "task_type": "detection", "sequence_ids": [],
+            "split_config": {"train": 70, "val": 20}, "grouping_overrides": {},
+            "excluded_label_ids": [], "threshold": 10,
+        },
+        headers=headers,
+    ).json()
+
+    response = client.get(f"/datasets/{created['id']}/export/99999999/download", headers=headers)
+    assert response.status_code == 404
+
+    client.delete(f"/datasets/{created['id']}", headers=headers)
+
+
+def test_export_download_rejects_a_job_that_has_not_succeeded():
+    from app.db import SessionLocal
+    from app.jobs.models import Job, JobStatus, JobType
+
+    headers = _register_and_login("ds-api12@example.com")
+    created = client.post(
+        "/datasets",
+        json={
+            "name": "ds-api12-dataset", "task_type": "detection", "sequence_ids": [],
+            "split_config": {"train": 70, "val": 20}, "grouping_overrides": {},
+            "excluded_label_ids": [], "threshold": 10,
+        },
+        headers=headers,
+    ).json()
+
+    session = SessionLocal()
+    try:
+        user_id = client.get("/auth/me", headers=headers).json()["id"]
+        job = Job(
+            job_type=JobType.DATASET_EXPORT,
+            status=JobStatus.RUNNING,
+            payload={"dataset_id": created["id"], "include_images": True},
+            result_ref=None,
+            created_by_id=user_id,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+    finally:
+        session.close()
+
+    response = client.get(f"/datasets/{created['id']}/export/{job_id}/download", headers=headers)
+    assert response.status_code == 409
+
+    client.delete(f"/datasets/{created['id']}", headers=headers)
+
+
 def test_created_dataset_taxonomy_version_matches_its_included_annotations():
     headers = _register_and_login("ds-api8@example.com")
     sequences = client.get("/media/sequences", params={"page": 1, "page_size": 50}, headers=headers).json()

@@ -9,6 +9,7 @@ import {
   useDatasets,
   useDeleteDataset,
   useExportDataset,
+  useExportDownload,
 } from "../../entities/useDatasets";
 import type { components } from "../../shared/api/generated/schema";
 import { BalancePanel } from "./BalancePanel";
@@ -47,6 +48,30 @@ function ExportJobPoller({
   return null;
 }
 
+// Fetches the presigned download URL for one succeeded export job. Kept
+// separate from ExportJobPoller so the download URL is only requested once
+// the job has actually succeeded, rather than on every progress poll.
+function ExportDownloadFetcher({
+  datasetId,
+  jobId,
+  onResolved,
+}: {
+  datasetId: number;
+  jobId: number;
+  onResolved: (url: string) => void;
+}) {
+  const downloadQuery = useExportDownload(datasetId, jobId);
+
+  useEffect(() => {
+    if (downloadQuery.data?.download_url) {
+      onResolved(downloadQuery.data.download_url);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [downloadQuery.data]);
+
+  return null;
+}
+
 export function DatasetsPage() {
   const [selectedSequenceIds, setSelectedSequenceIds] = useState<Set<number>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
@@ -55,6 +80,7 @@ export function DatasetsPage() {
   const [metricsDataset, setMetricsDataset] = useState<DatasetRead | null>(null);
   const [exportJobIds, setExportJobIds] = useState<Record<number, number>>({});
   const [exportJobs, setExportJobs] = useState<Record<number, Partial<JobRead>>>({});
+  const [downloadUrls, setDownloadUrls] = useState<Record<number, string>>({});
   const [taskType, setTaskType] = useState<TaskType>("classification");
   const [threshold, setThreshold] = useState(10);
   const [name, setName] = useState("");
@@ -417,6 +443,7 @@ export function DatasetsPage() {
               onShowMetrics={(dataset) => setMetricsDataset(dataset)}
               onExport={handleExport}
               exportJobs={exportJobs}
+              downloadUrls={downloadUrls}
             />
             {Object.entries(exportJobIds).map(([datasetId, jobId]) => (
               <ExportJobPoller
@@ -427,6 +454,23 @@ export function DatasetsPage() {
                 }
               />
             ))}
+            {Object.entries(exportJobIds)
+              .filter(
+                ([datasetId, jobId]) =>
+                  exportJobs[Number(datasetId)]?.id === jobId &&
+                  exportJobs[Number(datasetId)]?.status === "succeeded" &&
+                  !downloadUrls[Number(datasetId)],
+              )
+              .map(([datasetId, jobId]) => (
+                <ExportDownloadFetcher
+                  key={`download-${jobId}`}
+                  datasetId={Number(datasetId)}
+                  jobId={jobId}
+                  onResolved={(url) =>
+                    setDownloadUrls((current) => ({ ...current, [Number(datasetId)]: url }))
+                  }
+                />
+              ))}
           </div>
         </div>
 

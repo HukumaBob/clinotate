@@ -71,6 +71,10 @@ class ExportRequest(BaseModel):
     include_images: bool = True
 
 
+class ExportDownloadRead(BaseModel):
+    download_url: str
+
+
 class DatasetItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     frame_id: int
