@@ -912,6 +912,117 @@ authorized):**
   confirmed zero `datasets` rows, so this is a cache-invalidation
   cosmetic issue, not a data-integrity one.
 
+### Phase 2b: Balance-panel limit and exclusion controls — DONE (2026-08-18)
+
+Plan: [.superpowers/sdd/2026-08-16-balance-panel-limit-controls](.superpowers/sdd/2026-08-16-balance-panel-limit-controls).
+
+Fixes the per-class limit and exclusion controls in `BalancePanel.tsx`
+that the previous phase's real-browser verification flagged as broken:
+typing a value into a class's limit field could collapse it to `1` after
+the first keystroke instead of settling at the typed number, and
+excluding a class made its row vanish from the DOM entirely (no way back
+short of discarding every other exclusion made in the session, per the
+prior phase's "no undo" finding).
+
+**The per-keystroke bug's actual cause:** the limit `<input>` was a
+controlled field whose `value` came straight from the debounced,
+server-echoed `report.classes[i].limit` — every keystroke fired a
+recompute request, and the *previous* request's stale response could win
+the race and overwrite the field mid-type, snapping a user's `10` back to
+whatever the last-committed single digit had produced. Fixed by giving
+each limit field its own local input state, only reconciled from the
+server once the debounced request settles and the user isn't actively
+typing — the field now free-types to any digit sequence and reconciles
+after the user stops, rather than re-rendering from the network on every
+key.
+
+**Excluded classes now stay visible, greyed, not hidden.** `compute_balance`
+(`backend/app/datasets/service.py`) was changed to report every class in
+the requested scope regardless of `excluded_label_ids` membership, each
+carrying its own uncapped `max_instances`/`max_frames` — the panel always
+has a fixed 9-row (or however many classes exist) shape to render, and
+`BalancePanel.tsx` greys a row via its `included` flag instead of
+filtering it out of the list. This replaces the "0 clears the cap"
+behavior from the class-limit-controls phase two commits prior
+(`ceae211`): that fix's own Critical finding was that the checkbox and
+the numeric field could disagree about whether a class was capped versus
+excluded, not that zero's *meaning* was wrong. The real fix synchronizes
+the two controls both ways — unchecking Include zeroes the limit field
+and greys the row (confirmed: unchecking `foam` left its row in place,
+text reading `0 / 0 (max 2)`); typing `0` into the limit field clears the
+Include checkbox and greys the row the same way (confirmed for
+`lst_g_homogeneous`); re-checking Include restores the field to the
+class's stored maximum and un-greys the row (confirmed: re-checking
+`foam` returned it to `2 / 2`).
+
+**Limit fields are prefilled to each class's maximum, not empty or
+zero**, so the field always starts at "everything this class has" and a
+user only has to type to *reduce* it — confirmed `polyp`'s field opened
+at `45` (`valuemax="45"`) before any typing, matching the sequence
+selection's true count.
+
+**Metrics are computed from the non-excluded subset specifically to keep
+`imbalance_ratio` finite.** Excluding all six 1/1 singleton classes while
+leaving `polyp` (45) and `foam` (2) included dropped `min_count` to 2 and
+produced `imbalance_ratio: 22.50` — a real number, matching a direct
+backend query — instead of dividing by a zero-count excluded class.
+Excluding every class, including `polyp` and `foam`, still rendered all 9
+rows (each `0 / 0 (max N)`, greyed) rather than an empty panel, with
+`severity: no_data` and metric fields showing `-`; this "all-excluded"
+path was a real bug found and fixed mid-plan (`756fea2`), not a
+speculative edge case.
+
+**The counts column got a visible `instances / frames` heading**, so a
+raw `18 / 17` pair reads as self-explanatory rather than requiring the
+viewer to infer which number is which.
+
+**Real-browser verification (this task, 2026-08-18),** against the dev
+stack, `manualcheck@example.com` login, live dev database — this repo's
+frontend unit tests mock `apiClient` wholesale and cannot observe a
+per-keystroke race condition or a debounced server round-trip, which is
+exactly the class of bug this plan exists to fix:
+- Selected all 10 sequences under `task_type = detection`: panel reported
+  the ground-truth 9 classes exactly — `polyp` 45/43, `foam` 2/2,
+  `lst_g_homogeneous` 2/2, and six singletons (`colono_sheath`,
+  `colono_ssl`, `diverticulum`, `ileum`, `transparent_cap`,
+  `valvula_ileocaecalis`) at 1/1 each.
+- Typed `10` into `polyp`'s limit field (select-all + type, simulating a
+  real keystroke sequence): settled at `10 / 10` with no intermediate
+  collapse to `1`; `Imbalance ratio` recomputed to `10.00`. This is the
+  headline bug the plan exists to fix, and it did not reproduce.
+  Select-all + retype `20` afterward settled cleanly at `20 / 20`
+  (confirmed the earlier bug was specific to reproducing the original
+  human report, not select-and-replace editing).
+- Before typing, `polyp`'s field showed `45` (its true max) and the
+  spinbutton's `valuemax` stayed `45` throughout — it never accepted or
+  displayed a larger value.
+- Unchecked `foam`: row stayed with `0 / 0 (max 2)`, checkbox cleared,
+  `Classes` count stayed `9`. Typed `0` into `lst_g_homogeneous`: its
+  checkbox cleared and its row greyed the same way, no manual checkbox
+  click needed. Re-checked `foam`: field snapped back to `2` (its
+  maximum) and the row un-greyed.
+- Excluded all six singleton classes one at a time (leaving `polyp` at
+  its reset max of 45 and `foam` included): `Imbalance ratio` read
+  `22.50`, `Min / max per class` read `2 / 45`, `Classes` stayed `9` —
+  exactly matching ground truth, never `Infinity` or `∞`.
+- Excluded every remaining class (`polyp`, then `foam`): all 9 rows
+  persisted, each `0 / 0 (max N)` and greyed; `Severity` read `no_data`;
+  every metric field showed `-` instead of crashing or blanking the
+  panel.
+- `instances / frames` heading confirmed present above the counts column
+  throughout.
+- Both suites: backend `318 passed, 16 failed` (the pre-existing,
+  unrelated failures tracked in earlier phases' entries — `test_jobs.py`,
+  `test_mask_postprocess_endpoint.py`, `test_media_service.py`,
+  `test_quality_migration.py` — count risen by one from the 15-failure
+  baseline logged in the dataset-screen phase above, still none of them
+  balance-panel-related); frontend `464 passed` (68 test files).
+
+Executed via `superpowers:subagent-driven-development` across 3 tasks
+(2 implementation + this task's real-browser verification), committed
+directly to `master` per this repo's single-developer workflow — no
+branches or worktrees.
+
 ### Phase 2a.3: Media screen — DONE (2026-07-29)
 
 Real "Media" top-level screen (video upload → extract-sequence with crop
