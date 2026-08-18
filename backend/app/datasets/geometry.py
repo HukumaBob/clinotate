@@ -12,6 +12,9 @@ class MaskGeometry:
     SAM prompt that produced the mask, not the resulting shape -- so every
     label file is derived from the raster. Extracting once and reusing the
     result is what keeps a multi-format export from decoding each mask twice.
+
+    All three fields (bbox, polygon, area_px) describe the largest contour only,
+    not the whole mask. area_px counts non-zero pixels in that contour.
     """
 
     bbox: tuple[int, int, int, int]
@@ -31,13 +34,13 @@ def decode_mask(data: bytes) -> np.ndarray:
 def extract_geometry(mask: np.ndarray) -> MaskGeometry:
     """Bounding box, outer polygon and pixel area of a mask's largest blob.
 
-    Raises on an empty mask rather than emitting a degenerate shape: a label
-    file with a zero-area box trains a detector on nothing, and silently
+    Raises on an empty mask, a mask with <3-point polygon, or other degenerate
+    shapes that cannot be expressed in label formats (YOLO-segmentation, COCO).
+    A label file with invalid geometry trains a detector on nothing; silently
     writing one would hide a real annotation defect.
     """
     binary = (mask > 0).astype(np.uint8)
-    area_px = int(binary.sum())
-    if area_px == 0:
+    if int(binary.sum()) == 0:
         raise ValueError("mask has no non-zero pixels")
 
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -52,5 +55,14 @@ def extract_geometry(mask: np.ndarray) -> MaskGeometry:
     epsilon = 0.002 * cv2.arcLength(largest, True)
     simplified = cv2.approxPolyDP(largest, epsilon, True)
     polygon = [(int(point[0][0]), int(point[0][1])) for point in simplified]
+
+    if len(polygon) < 3:
+        raise ValueError(f"contour simplified to {len(polygon)} points (need ≥3 for valid polygon)")
+
+    # Compute area_px by counting non-zero pixels in the largest contour only.
+    # Create a mask of just this contour to count pixels inside it.
+    contour_mask = np.zeros_like(binary)
+    cv2.drawContours(contour_mask, [largest], 0, 1, -1)
+    area_px = int(contour_mask.sum())
 
     return MaskGeometry(bbox=(x, y, w, h), polygon=polygon, area_px=area_px)

@@ -17,7 +17,7 @@ def test_a_rectangular_mask_yields_its_bounding_box():
     assert geometry.bbox == (10, 20, 30, 40)
 
 
-def test_area_counts_non_zero_pixels():
+def test_area_counts_non_zero_pixels_in_the_largest_contour():
     geometry = extract_geometry(_rect_mask(w=30, h=40))
     assert geometry.area_px == 30 * 40
 
@@ -43,12 +43,35 @@ def test_an_all_zero_mask_raises_rather_than_returning_an_empty_shape():
         extract_geometry(np.zeros((50, 50), dtype=np.uint8))
 
 
-def test_two_disjoint_blobs_report_the_largest_contour():
+def test_a_single_pixel_mask_raises_due_to_insufficient_polygon_points():
+    mask = np.zeros((50, 50), dtype=np.uint8)
+    mask[25, 25] = 255
+    with pytest.raises(ValueError, match="contour simplified to 1 points"):
+        extract_geometry(mask)
+
+
+def test_a_thin_line_raises_due_to_insufficient_polygon_points():
+    mask = np.zeros((50, 50), dtype=np.uint8)
+    mask[25, 10:20] = 255  # 1-pixel-wide horizontal line
+    with pytest.raises(ValueError, match="contour simplified to 2 points"):
+        extract_geometry(mask)
+
+
+def test_a_2x2_blob_succeeds_with_4_point_polygon():
+    mask = np.zeros((50, 50), dtype=np.uint8)
+    mask[25:27, 25:27] = 255  # 2×2 blob
+    geometry = extract_geometry(mask)
+    assert len(geometry.polygon) == 4
+    assert geometry.area_px == 4
+
+
+def test_two_disjoint_blobs_area_px_reflects_the_largest_blob_only():
     mask = np.zeros((100, 100), dtype=np.uint8)
-    mask[10:20, 10:20] = 255   # small blob
-    mask[50:80, 50:90] = 255   # large blob
+    mask[10:20, 10:20] = 255   # small blob: 10×10 = 100 pixels
+    mask[50:80, 50:90] = 255   # large blob: 30×40 = 1200 pixels
     geometry = extract_geometry(mask)
     assert geometry.bbox == (50, 50, 40, 30)
+    assert geometry.area_px == 1200  # area of largest blob only, not sum of both
 
 
 def test_decode_mask_round_trips_a_png():
