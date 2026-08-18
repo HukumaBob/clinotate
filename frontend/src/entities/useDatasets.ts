@@ -41,6 +41,19 @@ export function useCreateDataset() {
   });
 }
 
+export function useExportDataset() {
+  return useMutation({
+    mutationFn: async (datasetId: number) => {
+      const result = await apiClient.POST("/datasets/{dataset_id}/export", {
+        params: { path: { dataset_id: datasetId } },
+        body: { include_images: true },
+      });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+  });
+}
+
 export function useDeleteDataset() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { useJob } from "../../entities/useJobs";
 import { useSequencesList } from "../../entities/useSequencesList";
 import { useTagsTree } from "../../entities/useTaxonomy";
 import {
@@ -7,6 +8,7 @@ import {
   useDatasetBalance,
   useDatasets,
   useDeleteDataset,
+  useExportDataset,
 } from "../../entities/useDatasets";
 import type { components } from "../../shared/api/generated/schema";
 import { BalancePanel } from "./BalancePanel";
@@ -15,9 +17,35 @@ import { DatasetsTable } from "./DatasetsTable";
 
 type TaskType = components["schemas"]["TaskType"];
 type DatasetRead = components["schemas"]["DatasetRead"];
+type JobRead = components["schemas"]["JobRead"];
 
 const TASK_TYPES: TaskType[] = ["classification", "detection", "segmentation"];
 const DEBOUNCE_MS = 300;
+
+// Polls one export job's status and reports every update up to the page,
+// which keeps the per-dataset job state (progress/result/error) so the
+// table can render it. Unmounted once the export job list no longer
+// references the dataset (job removed from exportJobIds).
+function ExportJobPoller({
+  jobId,
+  onUpdate,
+}: {
+  jobId: number;
+  onUpdate: (job: JobRead) => void;
+}) {
+  const jobQuery = useJob(jobId);
+
+  useEffect(() => {
+    if (jobQuery.data) {
+      onUpdate(jobQuery.data);
+    }
+    // onUpdate is expected to be referentially stable enough per dataset id;
+    // including it would re-fire on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobQuery.data]);
+
+  return null;
+}
 
 export function DatasetsPage() {
   const [selectedSequenceIds, setSelectedSequenceIds] = useState<Set<number>>(new Set());
@@ -25,6 +53,8 @@ export function DatasetsPage() {
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [classLimits, setClassLimits] = useState<Record<number, number>>({});
   const [metricsDataset, setMetricsDataset] = useState<DatasetRead | null>(null);
+  const [exportJobIds, setExportJobIds] = useState<Record<number, number>>({});
+  const [exportJobs, setExportJobs] = useState<Record<number, Partial<JobRead>>>({});
   const [taskType, setTaskType] = useState<TaskType>("classification");
   const [threshold, setThreshold] = useState(10);
   const [name, setName] = useState("");
@@ -46,6 +76,7 @@ export function DatasetsPage() {
   const treeQuery = useTagsTree(null);
   const createDataset = useCreateDataset();
   const deleteDataset = useDeleteDataset();
+  const exportDataset = useExportDataset();
 
   const sequences = sequencesQuery.data?.items ?? [];
   const datasets = datasetsQuery.data ?? [];
@@ -197,6 +228,16 @@ export function DatasetsPage() {
         next.delete(labelId);
       }
       return next;
+    });
+  }
+
+  function handleExport(dataset: DatasetRead) {
+    exportDataset.mutate(dataset.id, {
+      onSuccess: (job) => {
+        if (!job) return;
+        setExportJobIds((current) => ({ ...current, [dataset.id]: job.id }));
+        setExportJobs((current) => ({ ...current, [dataset.id]: job }));
+      },
     });
   }
 
@@ -374,7 +415,18 @@ export function DatasetsPage() {
               datasets={datasets}
               onDelete={(datasetId) => deleteDataset.mutate(datasetId)}
               onShowMetrics={(dataset) => setMetricsDataset(dataset)}
+              onExport={handleExport}
+              exportJobs={exportJobs}
             />
+            {Object.entries(exportJobIds).map(([datasetId, jobId]) => (
+              <ExportJobPoller
+                key={jobId}
+                jobId={jobId}
+                onUpdate={(job) =>
+                  setExportJobs((current) => ({ ...current, [Number(datasetId)]: job }))
+                }
+              />
+            ))}
           </div>
         </div>
 

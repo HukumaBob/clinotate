@@ -3,14 +3,23 @@ import { useState } from "react";
 import type { components } from "../../shared/api/generated/schema";
 
 type DatasetRead = components["schemas"]["DatasetRead"];
+type JobRead = components["schemas"]["JobRead"];
 
 interface DatasetsTableProps {
   datasets: DatasetRead[];
   onDelete: (datasetId: number) => void;
   onShowMetrics: (dataset: DatasetRead) => void;
+  onExport: (dataset: DatasetRead) => void;
+  exportJobs?: Record<number, Partial<JobRead>>;
 }
 
-export function DatasetsTable({ datasets, onDelete, onShowMetrics }: DatasetsTableProps) {
+export function DatasetsTable({
+  datasets,
+  onDelete,
+  onShowMetrics,
+  onExport,
+  exportJobs,
+}: DatasetsTableProps) {
   const [armed, setArmed] = useState<number | null>(null);
 
   if (datasets.length === 0) {
@@ -49,6 +58,56 @@ export function DatasetsTable({ datasets, onDelete, onShowMetrics }: DatasetsTab
               >
                 Metrics
               </button>
+              {(() => {
+                const job = exportJobs?.[dataset.id];
+                if (job?.status === "running" || job?.status === "pending") {
+                  return (
+                    <span
+                      data-testid={`export-progress-${dataset.id}`}
+                      className="mr-2 text-xs text-gray-400"
+                    >
+                      Exporting… {job.progress ?? 0}%
+                    </span>
+                  );
+                }
+                if (job?.status === "succeeded" && job.result_ref) {
+                  return (
+                    <a
+                      data-testid={`export-download-${dataset.id}`}
+                      className="mr-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"
+                      href={job.result_ref}
+                      download
+                    >
+                      Download
+                    </a>
+                  );
+                }
+                if (job?.status === "failed") {
+                  return (
+                    <span className="mr-2 inline-flex items-center gap-2">
+                      <span data-testid={`export-error-${dataset.id}`} className="text-xs text-red-400">
+                        {job.error ?? "Export failed"}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"
+                        onClick={() => onExport(dataset)}
+                      >
+                        Export
+                      </button>
+                    </span>
+                  );
+                }
+                return (
+                  <button
+                    type="button"
+                    className="mr-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"
+                    onClick={() => onExport(dataset)}
+                  >
+                    Export
+                  </button>
+                );
+              })()}
               {armed === dataset.id ? (
                 <button
                   type="button"
