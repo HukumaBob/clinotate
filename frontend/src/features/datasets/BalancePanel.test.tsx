@@ -269,6 +269,12 @@ describe("BalancePanel", () => {
     expect(fill.style.width).not.toBe(track.style.width);
     const fillPct = parseFloat(fill.style.width);
     expect(fillPct).toBeCloseTo((3 / 45) * 100, 1);
+
+    // The track must read as its own layer against the wrapper it sits in
+    // -- otherwise "how big this class could be" is invisible and only the
+    // fill shows, defeating the point of the two-layer bar.
+    const wrapper = track.parentElement as HTMLElement;
+    expect(track.className).not.toBe(wrapper.className);
   });
 
   it("resets a cleared uncapped limit field back to the maximum on blur", async () => {

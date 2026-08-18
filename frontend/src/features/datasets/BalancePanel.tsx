@@ -180,7 +180,7 @@ export function BalancePanel({
               {/* Track: how big this class could be, uncapped. */}
               <div
                 data-testid={`bar-track-${entry.label_id}`}
-                className="h-3 rounded bg-gray-800"
+                className="h-3 rounded bg-gray-700"
                 style={{ width: `${(entry.max_instances / maxInstances) * 100}%` }}
               />
               {/* Fill: how much of it is actually in the dataset right now
