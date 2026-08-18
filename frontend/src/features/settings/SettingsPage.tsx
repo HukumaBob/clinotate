@@ -8,6 +8,7 @@ export function SettingsPage() {
   const updateSettings = useUpdateSettings();
   const [maxTrackRangeFrames, setMaxTrackRangeFrames] = useState<number | "">("");
   const [maskPostprocessStrength, setMaskPostprocessStrength] = useState<number | "">("");
+  const [minMaskAreaFraction, setMinMaskAreaFraction] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
   const hasInitializedField = useRef(false);
 
@@ -20,6 +21,7 @@ export function SettingsPage() {
       hasInitializedField.current = true;
       setMaxTrackRangeFrames(settingsQuery.data.max_track_range_frames);
       setMaskPostprocessStrength(settingsQuery.data.mask_postprocess_strength);
+      setMinMaskAreaFraction(settingsQuery.data.min_mask_area_fraction);
     }
   }, [settingsQuery.data]);
 
@@ -34,10 +36,11 @@ export function SettingsPage() {
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (maxTrackRangeFrames === "" || maskPostprocessStrength === "") return;
+    if (maxTrackRangeFrames === "" || maskPostprocessStrength === "" || minMaskAreaFraction === "")
+      return;
     setError(null);
     updateSettings.mutate(
-      { maxTrackRangeFrames, maskPostprocessStrength },
+      { maxTrackRangeFrames, maskPostprocessStrength, minMaskAreaFraction },
       {
         onError: (mutationError: unknown) => {
           setError(errorDetail(mutationError, "Save failed"));
@@ -88,9 +91,31 @@ export function SettingsPage() {
             cleanup entirely.
           </p>
 
+          <h2 className="mb-3 mt-4 text-sm font-medium text-gray-300">Dataset export</h2>
+          <label className="flex flex-col gap-1 text-sm text-gray-300">
+            Minimum mask area (fraction of frame)
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.0001}
+              value={minMaskAreaFraction}
+              onChange={(event) =>
+                setMinMaskAreaFraction(event.target.value === "" ? "" : Number(event.target.value))
+              }
+              className="w-32 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100"
+            />
+          </label>
+          <p className="text-xs text-gray-500">
+            Masks smaller than this fraction of their frame&apos;s area are dropped from dataset
+            exports as noise.
+          </p>
+
           <button
             type="submit"
-            disabled={maxTrackRangeFrames === "" || maskPostprocessStrength === ""}
+            disabled={
+              maxTrackRangeFrames === "" || maskPostprocessStrength === "" || minMaskAreaFraction === ""
+            }
             className="mt-2 w-fit rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Save

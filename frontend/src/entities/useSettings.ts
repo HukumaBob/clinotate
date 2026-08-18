@@ -19,14 +19,17 @@ export function useUpdateSettings() {
     mutationFn: async ({
       maxTrackRangeFrames,
       maskPostprocessStrength,
+      minMaskAreaFraction,
     }: {
       maxTrackRangeFrames: number;
       maskPostprocessStrength: number;
+      minMaskAreaFraction: number;
     }) => {
       const result = await apiClient.PATCH("/settings", {
         body: {
           max_track_range_frames: maxTrackRangeFrames,
           mask_postprocess_strength: maskPostprocessStrength,
+          min_mask_area_fraction: minMaskAreaFraction,
         },
       });
       if (result.error) throw result.error;

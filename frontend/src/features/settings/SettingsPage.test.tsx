@@ -127,4 +127,39 @@ describe("SettingsPage", () => {
       }),
     );
   });
+
+  it("saves the minimum mask area fraction along with the other settings", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: {
+        max_track_range_frames: 10,
+        mask_postprocess_strength: 0.3,
+        min_mask_area_fraction: 0.0005,
+      },
+      error: undefined,
+    } as never);
+    vi.mocked(apiClient.PATCH).mockResolvedValue({
+      data: {
+        max_track_range_frames: 10,
+        mask_postprocess_strength: 0.3,
+        min_mask_area_fraction: 0.002,
+      },
+      error: undefined,
+    } as never);
+
+    render(<SettingsPage />, { wrapper });
+
+    const input = await screen.findByLabelText(/minimum mask area/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, "0.002");
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => {
+      expect(apiClient.PATCH).toHaveBeenCalledWith(
+        "/settings",
+        expect.objectContaining({
+          body: expect.objectContaining({ min_mask_area_fraction: 0.002 }),
+        }),
+      );
+    });
+  });
 });

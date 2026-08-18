@@ -22,5 +22,9 @@ def patch_settings(
     session: Session = Depends(get_session),
 ) -> SettingsRead:
     return update_settings(
-        session, payload.max_track_range_frames, payload.mask_postprocess_strength, current_user
+        session,
+        payload.max_track_range_frames,
+        payload.mask_postprocess_strength,
+        payload.min_mask_area_fraction,
+        current_user,
     )

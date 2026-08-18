@@ -24,12 +24,17 @@ def require_admin(user: User) -> None:
 
 
 def update_settings(
-    session: Session, max_track_range_frames: int, mask_postprocess_strength: float, user: User
+    session: Session,
+    max_track_range_frames: int,
+    mask_postprocess_strength: float,
+    min_mask_area_fraction: float,
+    user: User,
 ) -> PlatformSettings:
     require_admin(user)
     settings_row = get_platform_settings(session)
     settings_row.max_track_range_frames = max_track_range_frames
     settings_row.mask_postprocess_strength = mask_postprocess_strength
+    settings_row.min_mask_area_fraction = min_mask_area_fraction
     session.commit()
     session.refresh(settings_row)
     return settings_row

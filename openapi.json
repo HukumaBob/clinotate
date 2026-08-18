@@ -5467,12 +5467,17 @@
           "mask_postprocess_strength": {
             "type": "number",
             "title": "Mask Postprocess Strength"
+          },
+          "min_mask_area_fraction": {
+            "type": "number",
+            "title": "Min Mask Area Fraction"
           }
         },
         "type": "object",
         "required": [
           "max_track_range_frames",
-          "mask_postprocess_strength"
+          "mask_postprocess_strength",
+          "min_mask_area_fraction"
         ],
         "title": "SettingsRead"
       },
@@ -5488,12 +5493,19 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Mask Postprocess Strength"
+          },
+          "min_mask_area_fraction": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Mask Area Fraction"
           }
         },
         "type": "object",
         "required": [
           "max_track_range_frames",
-          "mask_postprocess_strength"
+          "mask_postprocess_strength",
+          "min_mask_area_fraction"
         ],
         "title": "SettingsUpdate"
       },
