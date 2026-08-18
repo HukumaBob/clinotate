@@ -1023,6 +1023,137 @@ Executed via `superpowers:subagent-driven-development` across 3 tasks
 directly to `master` per this repo's single-developer workflow — no
 branches or worktrees.
 
+### Phase 2b: Dataset export to YOLO and COCO — DONE (2026-08-18)
+
+Plan: [.superpowers/sdd/2026-08-18-dataset-export](.superpowers/sdd/2026-08-18-dataset-export).
+Design: `docs/superpowers/specs/2026-08-18-dataset-export-design.md`.
+
+Turns a saved `Dataset` into a downloadable archive: both a YOLO layout
+(`data.yaml` + `images/<split>/` + `labels/<split>/`) and a COCO document
+(`annotations.json`) from one extraction pass, zipped together and stored
+via `StorageService` like every other binary artifact in this codebase.
+Runs as a `Job` (`job_type=dataset_export`) on the CPU-only transcode
+worker's `video_transcode` queue — not the GPU `ml-worker` — since export
+is pure I/O and geometry math, no inference. 6 tasks, subagent-driven
+development, task-scoped review + this final real-archive verification.
+
+**Geometry is derived from the stored raster mask at export time, not read
+from the database.** `Annotation` rows carry a `storage_key` pointing at a
+PNG mask; bounding boxes, polygon contours, and pixel area (for the
+mask-area threshold below) don't exist as columns anywhere; they're always
+a function of that raster. `app/datasets/geometry.py`'s `decode_mask`/
+`extract_geometry` do this once per annotation and the result feeds both
+serializers, so YOLO's box and COCO's polygon are guaranteed to agree
+they're both looking at the same pixels.
+
+**The `<sequence_id>_<index>` archive naming (`archive_name()` in
+`app/datasets/export.py`) is load-bearing, not cosmetic.** Frames are
+stored as `frames/<sequence_id>/<index>.png`; across the real corpus, 1109
+frames share only 488 distinct basenames — naming archive entries by
+basename alone would silently overwrite more than half the dataset and
+leave label files pointing at the wrong pixels. Verified against real data
+this task (below), not just asserted by the docstring.
+
+**A configurable mask-area threshold (`PlatformSettings.min_mask_area_fraction`,
+default `0.0005`) drops noise-sized masks from an entry without dropping
+the frame** — unless the frame was explicitly marked `no_findings_reviewed`,
+filtering a tiny mask is not the same claim as "this frame is confirmed
+empty," so a frame that loses its only entry to the threshold leaves the
+dataset entirely rather than becoming a silent negative.
+
+**Findings collect across the whole walk instead of raising on first
+defect.** A missing mask, an invalid/degenerate mask, a multi-label
+classification frame, or a mask below threshold each becomes a `Finding`
+(kind, frame_id, annotation_id, detail) appended to a list that keeps
+walking every remaining `DatasetItem` — so a multi-gigabyte export surfaces
+every defect in one pass instead of one re-run per defect. Findings ride
+along in the finished `Job.payload`, not a separate table.
+
+**COCO's `info` block carries the provenance a downstream consumer needs to
+answer "was this export computed with the settings I think it was":**
+`taxonomy_version`, `class_map` (class name → source `label_id`s it was
+derived from — a class can merge more than one label), `class_limits`,
+`excluded_label_ids`, `split_config`, `exported_at`. This project had never
+written COCO before this plan; getting `info` right mattered because there
+was no prior implementation to copy from.
+
+**The archive is assembled by streaming into a `zipfile.ZipFile` opened
+against a real file, never building the payload in memory first** — the
+whole reason Task 6 (this one) exists is that the project's own tests use
+a fake in-memory storage class and had never produced a real zip, so this
+property was previously unverified.
+
+**Real-archive verification (this task, 2026-08-18), against the dev
+stack, `manualcheck@example.com` login, live dev database — the project's
+own tests cannot produce a real zip or validate COCO against anything but
+its own assumptions, which is exactly what this task exists to check:**
+- **Scale guard test** (`backend/tests/test_dataset_export_scale.py`,
+  new): a thousand 64 KB `writestr` entries (~64 MB of payload) streamed to
+  a real `zipfile.ZipFile` on disk. Measured peak RSS growth: **0.625 MB**
+  (compressed archive size 205,802 bytes), against a 32 MB threshold —
+  confirms streaming, not in-memory assembly. Passed.
+- **Real export via the API**, dataset 106 (`33333`, `task_type=detection`,
+  sequence 2094): `POST /datasets/106/export` created `Job` 1518, which sat
+  `pending` forever — the already-running transcode worker process turned
+  out to be stale, registered with `video_transcode` only and no
+  `dataset_export` task (`celery inspect registered` confirmed it), so its
+  message was silently swallowed exactly the way CLAUDE.md's queue warning
+  describes for the *other* worker. Restarted it with the documented
+  `-Q video_transcode` flags; the new process registered both tasks. A
+  fresh export (`Job` 1520) then ran end to end in real time: `pending` →
+  `succeeded`, **progress 100**, `result_ref =
+  datasets/106/export-20260818T184032050563.zip`, `findings: []`.
+- **Archive contents** (34 images/labels, all landed in `train` — small
+  corpus, 70/20/10 split rounds that way): `data.yaml` (`nc: 2`, `names:
+  {0: pedunculated_polyp_0_Ip, 1: sessile_polyp_0_Is}`), `annotations.json`
+  (34 images, 36 annotations, 2 categories, `info.taxonomy_version` and
+  `info.class_map` both present and truthy). Image and label stems matched
+  1:1 (34/34, `diff` clean). Every one of the 36 label lines' first integer
+  indexed correctly into `data.yaml`'s `names` (checked programmatically,
+  0 bad).
+- **COCO validated against a real consumer, `pycocotools`** (not installed
+  in the project — pulled transiently via `uv run --with pycocotools`,
+  nothing added to `pyproject.toml`): `COCO(annotations.json)` loaded
+  without error, built its image/annotation index, and correctly resolved
+  a sample image's annotations (bbox, segmentation polygon, area) by
+  `image_id`. This is the first real external-library validation COCO
+  output from this codebase has ever had.
+- **Collision case**, checked on real data: the corpus actually has **10**
+  sequences sharing `frame_index = 0` (the brief's plan document estimated
+  9; querying `frames` directly found 10). Dataset 106 alone only spanned
+  one of them, so a second, throwaway dataset (id 211, deleted after the
+  check, sequences 2074/2094/2323/2957) was created to force the collision
+  into one archive. Result: `images/val/2074_0.png` (id 12820, caecum,
+  244×236) and `images/test/2957_0.png` (id 18736, caecum, 720×576) both
+  appear as distinct entries in the same zip and as distinct `image_id`s
+  in `annotations.json` — confirming `archive_name()`'s
+  `<sequence_id>_<index>` scheme prevents the basename collision it exists
+  to prevent, on the real corpus, not a synthetic one.
+- **Real-browser click-through**: logged in as `manualcheck@example.com`,
+  opened `/datasets`, clicked **Export** on dataset 105 (`22222`); the
+  button became a **Download** link pointing at
+  `datasets/105/export-20260818T184406937713.zip` once the job finished —
+  confirming the UI's poll-to-completion wiring, not just the API.
+- Both suites: backend **353 passed, 16 failed** (all 16 pre-existing and
+  unrelated — `test_jobs.py`, `test_mask_postprocess_endpoint.py`,
+  `test_media_service.py`, `test_quality_migration.py`, same set tracked in
+  the balance-panel phase above); frontend **472 passed** (69 test files).
+- The three pre-existing datasets (104 `11111`, 105 `22222`, 106 `33333`)
+  were used read-only or exported-from; the only dataset created during
+  this verification (211) was deleted afterward.
+
+**Deferred, deliberately (per the plan's own scope note):** training (the
+Train screen, with its own `ModelVersion` model already sketched in the
+design spec); incremental export (every export rebuilds from scratch —
+fine at this corpus size, would need versioned archives/deltas at
+gigabyte scale, not worth guessing at before the pain is real); archive
+cleanup (old exports accumulate in object storage with no retention
+policy — nobody has needed one yet); repairing annotations during export
+(the findings report achieves the same practical outcome — fix everything
+in one batch — while keeping the decision with the user, since a silent
+correction during export would produce a dataset diverging from what the
+annotation UI shows).
+
 ### Phase 2a.3: Media screen — DONE (2026-07-29)
 
 Real "Media" top-level screen (video upload → extract-sequence with crop
