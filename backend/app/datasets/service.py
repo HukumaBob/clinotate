@@ -409,45 +409,49 @@ def compute_balance(
         )
     negative_frames = sum(1 for item in composition if item.is_negative)
 
-    annotation_ids = [aid for item in composition for aid in item.annotation_ids]
-    if not annotation_ids:
+    # Uncapped, unexcluded counts, for the panel's grey bars and limit maxima.
+    # Reuses collect_frames rather than a bespoke query so both passes resolve
+    # classes through exactly the same path. This pass also decides whether
+    # there is anything to report at all: excluding every class in the
+    # selection must still surface those classes (with instances=0 and a real
+    # max_instances), so the "nothing here" short-circuit below is keyed off
+    # the unrestricted result, not the effective (possibly-empty) one.
+    unrestricted = collect_frames(
+        session, sequence_ids, task_type, set(), tree, rules, None
+    )
+    unrestricted_ids = [aid for item in unrestricted for aid in item.annotation_ids]
+
+    if not unrestricted_ids:
         return BalanceReport(
             classes=[], total_frames=len(composition), negative_frames=negative_frames,
             below_threshold=[], threshold=threshold,
             metrics=compute_imbalance_metrics({}),
         )
 
+    unrestricted_rows = (
+        session.query(Annotation.id, Annotation.frame_id, Annotation.label_id)
+        .filter(Annotation.id.in_(unrestricted_ids))
+        .all()
+    )
+    max_instances: dict[int, int] = {}
+    max_frames_by_class: dict[int, set[int]] = {}
+    names: dict[int, str | None] = {}
+    for row in unrestricted_rows:
+        class_id = resolve_class(row.label_id, tree, rules)
+        max_instances[class_id] = max_instances.get(class_id, 0) + 1
+        max_frames_by_class.setdefault(class_id, set()).add(row.frame_id)
+        names.setdefault(class_id, None)
+
+    annotation_ids = [aid for item in composition for aid in item.annotation_ids]
     rows = (
         session.query(Annotation.id, Annotation.frame_id, Annotation.label_id)
         .filter(Annotation.id.in_(annotation_ids))
         .all()
-    )
+    ) if annotation_ids else []
 
     resolved_ids = {row.label_id: resolve_class(row.label_id, tree, rules) for row in rows}
-    names = {
-        label.id: label.name
-        for label in session.query(Label).filter(Label.id.in_(set(resolved_ids.values()))).all()
-    }
-
-    # Uncapped, unexcluded counts, for the panel's grey bars and limit maxima.
-    # Reuses collect_frames rather than a bespoke query so both passes resolve
-    # classes through exactly the same path.
-    unrestricted = collect_frames(
-        session, sequence_ids, task_type, set(), tree, rules, None
-    )
-    unrestricted_ids = [aid for item in unrestricted for aid in item.annotation_ids]
-    max_instances: dict[int, int] = {}
-    max_frames_by_class: dict[int, set[int]] = {}
-    if unrestricted_ids:
-        for row in (
-            session.query(Annotation.id, Annotation.frame_id, Annotation.label_id)
-            .filter(Annotation.id.in_(unrestricted_ids))
-            .all()
-        ):
-            class_id = resolve_class(row.label_id, tree, rules)
-            max_instances[class_id] = max_instances.get(class_id, 0) + 1
-            max_frames_by_class.setdefault(class_id, set()).add(row.frame_id)
-            names.setdefault(class_id, None)
+    for class_id in resolved_ids.values():
+        names.setdefault(class_id, None)
 
     missing_names = [cid for cid, value in names.items() if value is None]
     if missing_names:

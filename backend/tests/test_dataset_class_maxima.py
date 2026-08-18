@@ -164,6 +164,70 @@ def test_an_excluded_class_is_absent_from_below_threshold():
         session.close()
 
 
+def test_excluding_every_class_still_reports_all_classes_greyed_with_their_max():
+    session = SessionLocal()
+    try:
+        category, region, sequence, frames, user_id = _island(session, "allexcl")
+        polyp = _label(session, category, region, "mx-allexcl-polyp")
+        rare = _label(session, category, region, "mx-allexcl-rare")
+        for frame in frames[:4]:
+            _annotate(session, frame, polyp, user_id)
+        _annotate(session, frames[4], rare, user_id)
+        _annotate(session, frames[5], rare, user_id)
+
+        report = compute_balance(
+            session, [sequence.id], TaskType.DETECTION, GroupingRules(), {polyp.id, rare.id}
+        )
+
+        names = {c.name for c in report.classes}
+        assert names == {"mx-allexcl-polyp", "mx-allexcl-rare"}
+        for entry in report.classes:
+            assert entry.instances == 0
+        polyp_entry = next(c for c in report.classes if c.name == "mx-allexcl-polyp")
+        rare_entry = next(c for c in report.classes if c.name == "mx-allexcl-rare")
+        assert polyp_entry.max_instances == 4
+        assert rare_entry.max_instances == 2
+        assert report.metrics["severity"] == "no_data"
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_a_selection_with_no_annotations_at_all_still_returns_no_classes():
+    session = SessionLocal()
+    try:
+        category, region, sequence, frames, user_id = _island(session, "noanno")
+
+        report = compute_balance(session, [sequence.id], TaskType.DETECTION, GroupingRules(), set())
+
+        assert report.classes == []
+        assert report.metrics["severity"] == "no_data"
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_total_frames_in_the_all_excluded_case_reflects_the_effective_composition():
+    session = SessionLocal()
+    try:
+        category, region, sequence, frames, user_id = _island(session, "allexcltot")
+        polyp = _label(session, category, region, "mx-allexcltot-polyp")
+        for frame in frames[:3]:
+            _annotate(session, frame, polyp, user_id)
+
+        report = compute_balance(
+            session, [sequence.id], TaskType.DETECTION, GroupingRules(), {polyp.id}
+        )
+
+        # No annotated frame survives exclusion, and none of these frames are
+        # flagged no_findings_reviewed, so the effective composition is empty.
+        assert report.total_frames == 0
+        assert report.negative_frames == 0
+    finally:
+        session.rollback()
+        session.close()
+
+
 def test_total_frames_reflects_the_effective_composition_not_the_uncapped_one():
     session = SessionLocal()
     try:
