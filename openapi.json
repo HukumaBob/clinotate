@@ -3897,6 +3897,16 @@
           "frames": {
             "type": "integer",
             "title": "Frames"
+          },
+          "max_instances": {
+            "type": "integer",
+            "title": "Max Instances",
+            "default": 0
+          },
+          "max_frames": {
+            "type": "integer",
+            "title": "Max Frames",
+            "default": 0
           }
         },
         "type": "object",

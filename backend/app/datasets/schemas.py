@@ -24,6 +24,8 @@ class ClassCountRead(BaseModel):
     name: str
     instances: int
     frames: int
+    max_instances: int = 0
+    max_frames: int = 0
 
 
 class RecommendationRead(BaseModel):

@@ -219,6 +219,11 @@ class ClassCount:
     name: str
     instances: int
     frames: int
+    # Uncapped, unexcluded size of this class in the current selection.
+    # Presentation-only: the panel pre-fills a limit input with max_instances
+    # and greys an excluded row while still showing how much it holds.
+    max_instances: int = 0
+    max_frames: int = 0
 
 
 @dataclass
@@ -424,6 +429,31 @@ def compute_balance(
         for label in session.query(Label).filter(Label.id.in_(set(resolved_ids.values()))).all()
     }
 
+    # Uncapped, unexcluded counts, for the panel's grey bars and limit maxima.
+    # Reuses collect_frames rather than a bespoke query so both passes resolve
+    # classes through exactly the same path.
+    unrestricted = collect_frames(
+        session, sequence_ids, task_type, set(), tree, rules, None
+    )
+    unrestricted_ids = [aid for item in unrestricted for aid in item.annotation_ids]
+    max_instances: dict[int, int] = {}
+    max_frames_by_class: dict[int, set[int]] = {}
+    if unrestricted_ids:
+        for row in (
+            session.query(Annotation.id, Annotation.frame_id, Annotation.label_id)
+            .filter(Annotation.id.in_(unrestricted_ids))
+            .all()
+        ):
+            class_id = resolve_class(row.label_id, tree, rules)
+            max_instances[class_id] = max_instances.get(class_id, 0) + 1
+            max_frames_by_class.setdefault(class_id, set()).add(row.frame_id)
+            names.setdefault(class_id, None)
+
+    missing_names = [cid for cid, value in names.items() if value is None]
+    if missing_names:
+        for label in session.query(Label).filter(Label.id.in_(missing_names)).all():
+            names[label.id] = label.name
+
     frame_ids_in_rows = {row.frame_id for row in rows}
     sequence_by_frame = dict(
         session.query(Frame.id, Frame.sequence_id).filter(Frame.id.in_(frame_ids_in_rows)).all()
@@ -450,19 +480,27 @@ def compute_balance(
         if instances[class_id] > 0
     }
 
+    all_class_ids = set(instances) | set(max_instances)
     classes = [
         ClassCount(
             label_id=class_id,
-            name=names.get(class_id, f"label-{class_id}"),
-            instances=count,
-            frames=len(frames_by_class[class_id]),
+            name=names.get(class_id) or f"label-{class_id}",
+            instances=instances.get(class_id, 0),
+            frames=len(frames_by_class.get(class_id, set())),
+            max_instances=max_instances.get(class_id, 0),
+            max_frames=len(max_frames_by_class.get(class_id, set())),
         )
-        for class_id, count in instances.items()
+        for class_id in all_class_ids
     ]
-    classes.sort(key=lambda c: (-c.instances, c.name))
+    classes.sort(key=lambda c: (-c.max_instances, c.name))
 
-    below = [c.name for c in classes if c.instances < threshold]
-    metrics = compute_imbalance_metrics({c.name: c.instances for c in classes})
+    # Metrics, the under-threshold list and the recommendations all describe the
+    # dataset that would actually be built, so they see only classes that still
+    # contribute. Feeding a zero-instance row to compute_imbalance_metrics would
+    # make min_count 0 and imbalance_ratio literally inf.
+    effective = [c for c in classes if c.instances > 0]
+    below = [c.name for c in effective if c.instances < threshold]
+    metrics = compute_imbalance_metrics({c.name: c.instances for c in effective})
 
     report = BalanceReport(
         classes=classes,
@@ -472,7 +510,17 @@ def compute_balance(
         threshold=threshold,
         metrics=metrics,
     )
-    report.recommendations = build_recommendations(report, concentration)
+    report.recommendations = build_recommendations(
+        BalanceReport(
+            classes=effective,
+            total_frames=report.total_frames,
+            negative_frames=report.negative_frames,
+            below_threshold=below,
+            threshold=threshold,
+            metrics=metrics,
+        ),
+        concentration,
+    )
     return report
 
 
@@ -634,7 +682,8 @@ def create_dataset(session: Session, payload, user) -> Dataset:
             "metrics": report.metrics,
             "classes": [
                 {"label_id": c.label_id, "name": c.name,
-                 "instances": c.instances, "frames": c.frames}
+                 "instances": c.instances, "frames": c.frames,
+                 "max_instances": c.max_instances, "max_frames": c.max_frames}
                 for c in report.classes
             ],
             "below_threshold": report.below_threshold,

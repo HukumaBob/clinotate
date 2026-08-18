@@ -85,7 +85,9 @@ def dataset_balance(payload: BalanceRequest, session: Session = Depends(get_sess
     )
     return {
         "classes": [
-            {"label_id": c.label_id, "name": c.name, "instances": c.instances, "frames": c.frames}
+            {"label_id": c.label_id, "name": c.name, "instances": c.instances,
+             "frames": c.frames, "max_instances": c.max_instances,
+             "max_frames": c.max_frames}
             for c in report.classes
         ],
         "total_frames": report.total_frames,
