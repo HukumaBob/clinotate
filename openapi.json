@@ -3066,6 +3066,63 @@
         }
       }
     },
+    "/datasets/{dataset_id}/export": {
+      "post": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Export Dataset",
+        "operationId": "export_dataset_datasets__dataset_id__export_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/jobs/sam3/predict": {
       "post": {
         "tags": [
@@ -4178,6 +4235,17 @@
         "type": "object",
         "title": "EvaluationTypeUpdate"
       },
+      "ExportRequest": {
+        "properties": {
+          "include_images": {
+            "type": "boolean",
+            "title": "Include Images",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ExportRequest"
+      },
       "FindSimilarRequest": {
         "properties": {
           "percent": {
@@ -4434,7 +4502,8 @@
           "sam2_track",
           "video_transcode",
           "rank_quality",
-          "find_similar"
+          "find_similar",
+          "dataset_export"
         ],
         "title": "JobType"
       },

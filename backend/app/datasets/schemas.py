@@ -67,6 +67,10 @@ class DatasetCreate(BaseModel):
         return value
 
 
+class ExportRequest(BaseModel):
+    include_images: bool = True
+
+
 class DatasetItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     frame_id: int

@@ -10,11 +10,15 @@ from app.datasets.schemas import (
     BalanceRequest,
     DatasetCreate,
     DatasetRead,
+    ExportRequest,
 )
 from app.datasets.service import compute_balance, create_dataset
 from app.db import get_session
+from app.jobs.models import Job, JobStatus, JobType
+from app.jobs.schemas import JobRead
 from app.media.models import Frame
 from app.taxonomy.hierarchy import GroupingRules
+from app.worker.export_task import dataset_export
 
 router = APIRouter(prefix="/datasets", tags=["datasets"], dependencies=[Depends(get_current_user)])
 
@@ -144,6 +148,32 @@ def get_dataset(dataset_id: int, session: Session = Depends(get_session)) -> dic
     if dataset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
     return _serialize_one(session, dataset, include_items=True)
+
+
+@router.post("/{dataset_id}/export", response_model=JobRead, status_code=status.HTTP_202_ACCEPTED)
+def export_dataset(
+    dataset_id: int,
+    payload: ExportRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Job:
+    dataset = session.get(Dataset, dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+
+    job = Job(
+        job_type=JobType.DATASET_EXPORT,
+        status=JobStatus.PENDING,
+        payload={"dataset_id": dataset_id, "include_images": payload.include_images},
+        created_by_id=current_user.id,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    dataset_export.delay(job.id)
+
+    return job
 
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -15,6 +15,7 @@ class JobType(str, enum.Enum):
     VIDEO_TRANSCODE = "video_transcode"
     RANK_QUALITY = "rank_quality"
     FIND_SIMILAR = "find_similar"
+    DATASET_EXPORT = "dataset_export"
 
 
 class JobStatus(str, enum.Enum):

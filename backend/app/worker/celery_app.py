@@ -24,7 +24,14 @@ celery_app.conf.accept_content = ["json"]
 # task registered, so a message landing there first is silently dropped.
 # This worker must be started with `-Q video_transcode` to consume it.
 celery_app.conf.task_default_queue = "video_transcode"
-celery_app.conf.task_routes = {"video_transcode": {"queue": "video_transcode"}}
+celery_app.conf.task_routes = {
+    "video_transcode": {"queue": "video_transcode"},
+    # Export is CPU-only, so it shares the transcode worker rather than
+    # needing a process of its own. Routed explicitly rather than relying
+    # on task_default_queue: a queue-name mismatch is this project's known
+    # cause of silently dropped messages.
+    "dataset_export": {"queue": "video_transcode"},
+}
 
 # tasks.py's @celery_app.task-decorated transcode_video is registered by
 # importing it here, mirroring ml-worker/app/celery_app.py's own comment
@@ -32,3 +39,4 @@ celery_app.conf.task_routes = {"video_transcode": {"queue": "video_transcode"}}
 # worker process see the task at startup.
 from app import worker  # noqa: E402,F401
 from app.worker import tasks  # noqa: E402,F401
+from app.worker import export_task  # noqa: E402,F401
