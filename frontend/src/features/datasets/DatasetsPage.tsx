@@ -93,13 +93,6 @@ export function DatasetsPage() {
     return parentById;
   }, [treeQuery.data]);
 
-  const excludedLabels = useMemo(() => {
-    return Array.from(excluded).map((id) => ({
-      id,
-      name: labelNamesById.get(id) ?? `label ${id}`,
-    }));
-  }, [excluded, labelNamesById]);
-
   // Debounce the balance request so a click storm doesn't fire a request per click.
   const [debouncedRequest, setDebouncedRequest] = useState({
     sequence_ids: [] as number[],
@@ -151,28 +144,57 @@ export function DatasetsPage() {
   }
 
   function toggleExclude(labelId: number) {
+    const isCurrentlyExcluded = excluded.has(labelId);
     setExcluded((current) => {
       const next = new Set(current);
-      if (next.has(labelId)) {
+      if (isCurrentlyExcluded) {
         next.delete(labelId);
       } else {
         next.add(labelId);
       }
       return next;
     });
+    setClassLimits((current) => {
+      const next = { ...current };
+      if (isCurrentlyExcluded) {
+        // Re-including: drop the cap so the field falls back to showing
+        // the class's maximum again.
+        delete next[labelId];
+      } else {
+        // Excluding: 0 and the checkbox are one state.
+        next[labelId] = 0;
+      }
+      return next;
+    });
   }
 
   function changeLimit(labelId: number, limit: number | null) {
+    // A negative or non-finite value is ignored outright -- it can only
+    // reach here via a raw change event (e.g. a spinner or paste), since
+    // the input's own min/max already keep normal typing in range.
+    if (limit !== null && (!Number.isFinite(limit) || limit < 0)) {
+      return;
+    }
+
     setClassLimits((current) => {
       const next = { ...current };
-      // A cap of 0 (or negative, or non-finite) is treated as "clear the
-      // cap" -- excluding a class entirely is what the exclude checkbox is
-      // for, and a stored 0 would silently drop the class from the report
-      // while its checkbox still shows it as included.
-      if (limit === null || !Number.isFinite(limit) || limit < 1) {
+      if (limit === null) {
+        // Cleared field: drop the cap and leave `excluded` untouched.
         delete next[labelId];
       } else {
         next[labelId] = limit;
+      }
+      return next;
+    });
+
+    // 0 and the exclude checkbox are one state: a limit of exactly 0 means
+    // "exclude this class", so keep `excluded` in step with the typed value.
+    setExcluded((current) => {
+      const next = new Set(current);
+      if (limit === 0) {
+        next.add(labelId);
+      } else if (limit !== null) {
+        next.delete(labelId);
       }
       return next;
     });
@@ -365,7 +387,6 @@ export function DatasetsPage() {
               onToggleCollapse={toggleCollapse}
               onToggleExclude={toggleExclude}
               collapsibleLabelIds={collapsibleLabelIds}
-              excludedLabels={excludedLabels}
               parentLabelIdByChildId={parentLabelIdByChildId}
               labelNamesById={labelNamesById}
               classLimits={classLimits}

@@ -24,22 +24,15 @@ const SEQUENCES = {
 };
 
 const BALANCE = {
-  classes: [{ label_id: 1, name: "polyp", instances: 35, frames: 33 }],
+  classes: [
+    { label_id: 1, name: "polyp", instances: 35, frames: 33, max_instances: 35, max_frames: 33 },
+  ],
   total_frames: 33,
   negative_frames: 0,
   below_threshold: [],
   threshold: 10,
   metrics: { severity: "moderate_imbalance" },
   recommendations: [],
-};
-
-const BALANCE_WITHOUT_POLYP = {
-  classes: [],
-  total_frames: 33,
-  negative_frames: 0,
-  below_threshold: [],
-  threshold: 10,
-  metrics: { severity: "no_data" },
 };
 
 const TREE = [
@@ -164,7 +157,11 @@ describe("DatasetsPage", () => {
     vi.mocked(apiClient.POST).mockImplementation(async (path: string, options?: { body?: { excluded_label_ids?: number[] } }) => {
       if (path === "/datasets/balance") {
         const excludedIds = options?.body?.excluded_label_ids ?? [];
-        return { data: excludedIds.includes(1) ? BALANCE_WITHOUT_POLYP : BALANCE };
+        return {
+          data: excludedIds.includes(1)
+            ? { ...BALANCE, classes: [{ ...BALANCE.classes[0], instances: 0, frames: 0 }] }
+            : BALANCE,
+        };
       }
       return { data: BALANCE };
     });
@@ -176,16 +173,15 @@ describe("DatasetsPage", () => {
     await userEvent.click(screen.getByTestId("exclude-1"));
 
     await waitFor(() => {
-      const section = screen.getByTestId("excluded-classes");
-      expect(section).toHaveTextContent("polyp");
+      expect(screen.getByTestId("exclude-1")).not.toBeChecked();
+      expect(screen.getByTestId("class-row-1")).toHaveTextContent("polyp");
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "Re-include polyp" }));
+    await userEvent.click(screen.getByTestId("exclude-1"));
 
     await waitFor(() => {
-      expect(screen.queryByTestId("excluded-classes")).not.toBeInTheDocument();
+      expect(screen.getByTestId("exclude-1")).toBeChecked();
     });
-    expect(await screen.findByTestId("exclude-1")).toBeInTheDocument();
   });
 
   it("sends a class limit in the balance request", async () => {
@@ -202,7 +198,10 @@ describe("DatasetsPage", () => {
     });
   });
 
-  it("treats a limit of 0 as clearing the cap, not as a real limit", async () => {
+  it("treats a limit of 0 as excluding the class, not clearing the cap", async () => {
+    // 0 and the exclude checkbox are one state (Task 2): typing 0 now
+    // excludes the class and sends class_limits: {1: 0}, superseding the
+    // older behavior where 0 was equivalent to no cap at all.
     render(<DatasetsPage />, { wrapper });
     await userEvent.click(await screen.findByLabelText(/select seq-a/i));
 
@@ -212,10 +211,11 @@ describe("DatasetsPage", () => {
 
     // Wait past the debounce window for real, then assert on the settled
     // request -- a waitFor() here can resolve early against a stale
-    // pre-keystroke request whose class_limits happens to also be {}.
+    // pre-keystroke request whose class_limits happens to also match.
     await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_WAIT_MS));
     const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
-    expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({});
+    expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({ 1: 0 });
+    expect(calls.at(-1)?.[1]?.body?.excluded_label_ids).toContain(1);
   });
 
   it("treats a negative limit as clearing the cap", async () => {
@@ -288,5 +288,42 @@ describe("DatasetsPage", () => {
     expect(row).toHaveTextContent("12");
     expect(row).toHaveTextContent("3");
     expect(row).toHaveTextContent("7");
+  });
+
+  it("unchecks the include checkbox when a limit of 0 is entered", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+
+    const limitInput = await screen.findByLabelText(/limit polyp/i);
+    fireEvent.change(limitInput, { target: { value: "0" } });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/include polyp/i)).not.toBeChecked();
+    });
+  });
+
+  it("puts 0 in the limit field when the include checkbox is cleared", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+
+    await userEvent.click(await screen.findByLabelText(/include polyp/i));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/limit polyp/i)).toHaveValue(0);
+    });
+  });
+
+  it("sends the typed limit, not an intermediate keystroke", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+
+    const limitInput = await screen.findByLabelText(/limit polyp/i);
+    fireEvent.change(limitInput, { target: { value: "1" } });
+    fireEvent.change(limitInput, { target: { value: "10" } });
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const calls = vi.mocked(apiClient.POST).mock.calls.filter(([p]) => p === "/datasets/balance");
+    expect(calls.at(-1)?.[1]?.body?.class_limits).toEqual({ 1: 10 });
   });
 });

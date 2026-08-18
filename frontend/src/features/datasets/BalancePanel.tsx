@@ -1,6 +1,50 @@
+import { useEffect, useState } from "react";
+
 import type { components } from "../../shared/api/generated/schema";
 
 type BalanceReportRead = components["schemas"]["BalanceReportRead"];
+
+/** A number input whose displayed text tracks local edits while the user is
+ * typing, rather than snapping to the committed value on every keystroke.
+ * `value` re-syncs the field only when it changes for a reason other than
+ * this input's own `onChange` (e.g. the checkbox clearing the cap) --
+ * without that, a controlled value of `classLimits[id] ?? max` would revert
+ * an emptied field straight back to the max between keystrokes, corrupting
+ * anything typed next (e.g. clearing then typing "0" would land as the
+ * digits of the old max plus "0"). */
+function LimitInput({
+  value,
+  max,
+  ariaLabel,
+  onChange,
+}: {
+  value: number;
+  max: number;
+  ariaLabel: string;
+  onChange: (limit: number | null) => void;
+}) {
+  const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  return (
+    <input
+      type="number"
+      min={0}
+      max={max}
+      aria-label={ariaLabel}
+      className="w-16 rounded border border-gray-700 bg-gray-950 px-1 py-0.5 text-right text-xs text-gray-100"
+      value={text}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setText(raw);
+        onChange(raw === "" ? null : Number(raw));
+      }}
+    />
+  );
+}
 
 interface BalancePanelProps {
   report: BalanceReportRead;
@@ -13,10 +57,6 @@ interface BalancePanelProps {
    * don't pass it keep the old behavior. The report itself (ClassCountRead)
    * carries no parent/child signal, so this must come from the caller. */
   collapsibleLabelIds?: Set<number>;
-  /** Classes currently excluded from the dataset. Once a class is excluded,
-   * the backend drops it from report.classes, so this is the only remaining
-   * way to show the user it exists and let them restore it. */
-  excludedLabels?: { id: number; name: string }[];
   /** Maps a child label id to its parent's label id, built from the full
    * taxonomy tree. Once a group is expanded, the report returns its leaf
    * children instead of the parent row -- none of which are parents
@@ -42,13 +82,12 @@ export function BalancePanel({
   onToggleCollapse,
   onToggleExclude,
   collapsibleLabelIds,
-  excludedLabels = [],
   parentLabelIdByChildId,
   labelNamesById,
   classLimits = {},
   onChangeLimit,
 }: BalancePanelProps) {
-  const maxInstances = Math.max(1, ...report.classes.map((c) => c.instances));
+  const maxInstances = Math.max(1, ...report.classes.map((c) => c.max_instances));
   const totalInstances = report.classes.reduce((sum, entry) => sum + entry.instances, 0);
 
   function formatNumber(value: unknown, digits: number): string {
@@ -77,17 +116,25 @@ export function BalancePanel({
         <span data-testid="negative-frames">Negatives: {report.negative_frames}</span>
       </div>
 
+      <div data-testid="counts-heading" className="flex items-center gap-2 text-xs text-gray-400">
+        <span className="w-6" />
+        <span className="w-32" />
+        <span className="flex-1" />
+        <span className="w-24 text-right">instances / frames</span>
+      </div>
+
       <ul className="flex flex-col gap-1">
         {report.classes.map((entry) => {
           const isParent = collapsibleLabelIds === undefined || collapsibleLabelIds.has(entry.label_id);
           const parentId = parentLabelIdByChildId?.get(entry.label_id);
           const isExpandedChild = !isParent && parentId !== undefined;
+          const isExcluded = excluded.has(entry.label_id);
 
           return (
           <li
             key={entry.label_id}
             data-testid={`class-row-${entry.label_id}`}
-            className="flex items-center gap-2"
+            className={`flex items-center gap-2${isExcluded ? " opacity-50" : ""}`}
           >
             <input
               type="checkbox"
@@ -121,54 +168,27 @@ export function BalancePanel({
             )}
             <div className="h-3 flex-1 rounded bg-gray-800">
               <div
-                className="h-3 rounded bg-blue-600"
-                style={{ width: `${(entry.instances / maxInstances) * 100}%` }}
+                className={`h-3 rounded ${isExcluded ? "bg-gray-600" : "bg-blue-600"}`}
+                style={{ width: `${(entry.max_instances / maxInstances) * 100}%` }}
               />
             </div>
             <span className="w-24 text-right text-xs text-gray-400">
-              {entry.instances} / {entry.frames}
+              {isExcluded
+                ? `0 / 0 (max ${entry.max_instances})`
+                : `${entry.instances} / ${entry.frames}`}
             </span>
             {onChangeLimit && (
-              <input
-                type="number"
-                min={1}
-                data-testid={`limit-${entry.label_id}`}
-                aria-label={`Limit ${entry.name}`}
-                className="w-16 rounded border border-gray-700 bg-gray-950 px-1 py-0.5 text-right text-xs text-gray-100"
-                value={classLimits[entry.label_id] ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  onChangeLimit(entry.label_id, raw === "" ? null : Number(raw));
-                }}
+              <LimitInput
+                value={classLimits[entry.label_id] ?? entry.max_instances}
+                max={entry.max_instances}
+                ariaLabel={`Limit ${entry.name}`}
+                onChange={(limit) => onChangeLimit(entry.label_id, limit)}
               />
             )}
           </li>
           );
         })}
       </ul>
-
-      {excludedLabels.length > 0 && (
-        <div
-          data-testid="excluded-classes"
-          className="rounded border border-gray-800 bg-gray-900 p-2"
-        >
-          <div className="mb-1 text-xs font-semibold text-gray-400">Excluded classes</div>
-          <ul className="flex flex-col gap-1">
-            {excludedLabels.map((label) => (
-              <li key={label.id} className="flex items-center justify-between gap-2">
-                <span className="truncate text-gray-300">{label.name}</span>
-                <button
-                  type="button"
-                  className="text-xs text-blue-400 hover:text-blue-300"
-                  onClick={() => onToggleExclude(label.id)}
-                >
-                  Re-include {label.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       <div data-testid="key-metrics" className="rounded border border-gray-800 bg-gray-900 p-3">
         <h3 className="mb-2 text-xs uppercase tracking-wide text-gray-400">Key metrics</h3>

@@ -6,8 +6,8 @@ import { BalancePanel } from "./BalancePanel";
 
 const REPORT = {
   classes: [
-    { label_id: 1, name: "polyp", instances: 35, frames: 33 },
-    { label_id: 2, name: "ileum", instances: 1, frames: 1 },
+    { label_id: 1, name: "polyp", instances: 35, frames: 33, max_instances: 35, max_frames: 33 },
+    { label_id: 2, name: "ileum", instances: 1, frames: 1, max_instances: 1, max_frames: 1 },
   ],
   total_frames: 34,
   negative_frames: 0,
@@ -24,6 +24,7 @@ function renderPanel(overrides = {}) {
     excluded: new Set<number>(),
     onToggleCollapse: vi.fn(),
     onToggleExclude: vi.fn(),
+    onChangeLimit: vi.fn(),
     ...overrides,
   };
   render(<BalancePanel {...props} />);
@@ -117,27 +118,14 @@ describe("BalancePanel", () => {
     expect(screen.getByTestId("collapse-1")).toHaveAccessibleName("Expand polyp");
   });
 
-  it("shows excluded classes with a control to restore them", async () => {
-    const props = renderPanel({ excludedLabels: [{ id: 3, name: "cecum" }] });
-    const section = screen.getByTestId("excluded-classes");
-    expect(section).toHaveTextContent("cecum");
-    await userEvent.click(screen.getByRole("button", { name: "Re-include cecum" }));
-    expect(props.onToggleExclude).toHaveBeenCalledWith(3);
-  });
-
-  it("renders no excluded-classes section when nothing is excluded", () => {
-    renderPanel({ excludedLabels: [] });
-    expect(screen.queryByTestId("excluded-classes")).not.toBeInTheDocument();
-  });
-
   it("lets a leaf row re-collapse its expanded parent group", async () => {
     // After expanding "polyp" (label_id 1), the report returns its leaf
     // children instead -- none of which are parents themselves, so without
     // parentLabelIdByChildId there is no surviving control to re-collapse.
     const leafReport = {
       classes: [
-        { label_id: 10, name: "colon_adenoma", instances: 8, frames: 8 },
-        { label_id: 11, name: "foam", instances: 2, frames: 2 },
+        { label_id: 10, name: "colon_adenoma", instances: 8, frames: 8, max_instances: 8, max_frames: 8 },
+        { label_id: 11, name: "foam", instances: 2, frames: 2, max_instances: 2, max_frames: 2 },
       ],
       total_frames: 10,
       negative_frames: 0,
@@ -209,5 +197,56 @@ describe("BalancePanel", () => {
     const summary = screen.getByTestId("below-threshold-summary");
     const metrics = screen.getByTestId("key-metrics");
     expect(summary.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps an excluded class on the chart, greyed, with its size still visible", () => {
+    renderPanel({
+      report: {
+        ...REPORT,
+        classes: [
+          { label_id: 1, name: "polyp", instances: 35, frames: 33, max_instances: 35, max_frames: 33 },
+          { label_id: 2, name: "foam", instances: 0, frames: 0, max_instances: 2, max_frames: 2 },
+        ],
+      },
+      excluded: new Set([2]),
+    });
+
+    const row = screen.getByTestId("class-row-2");
+    expect(row).toBeInTheDocument();
+    expect(row).toHaveTextContent("2");
+    expect(row.className).toMatch(/opacity|text-gray-5|text-gray-6/);
+  });
+
+  it("pre-fills each limit input with the class's maximum", () => {
+    renderPanel({
+      report: {
+        ...REPORT,
+        classes: [
+          { label_id: 1, name: "polyp", instances: 35, frames: 33, max_instances: 35, max_frames: 33 },
+        ],
+      },
+    });
+
+    expect(screen.getByLabelText(/limit polyp/i)).toHaveValue(35);
+  });
+
+  it("does not accept a limit above the class maximum", () => {
+    renderPanel({
+      report: {
+        ...REPORT,
+        classes: [
+          { label_id: 1, name: "polyp", instances: 35, frames: 33, max_instances: 35, max_frames: 33 },
+        ],
+      },
+    });
+
+    const input = screen.getByLabelText(/limit polyp/i);
+    expect(input).toHaveAttribute("max", "35");
+  });
+
+  it("labels the two-number column so instances and frames are distinguishable", () => {
+    renderPanel();
+    expect(screen.getByTestId("counts-heading")).toHaveTextContent(/instances/i);
+    expect(screen.getByTestId("counts-heading")).toHaveTextContent(/frames/i);
   });
 });
