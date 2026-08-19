@@ -1338,3 +1338,43 @@ pin holds, no version drift on the CUDA pair, container reaches Celery
   reports and commit messages instead.
 - On phase completion, change its heading to `— DONE (YYYY-MM-DD)` and add
   a one-line summary + the deviation log, following the Phase 1 example.
+
+### Phase 2b: Train screen — DESIGN STARTED 2026-08-18, NOT IMPLEMENTED
+
+Brainstorming began on the Train screen and the `training` module. No spec
+file was written and no code exists yet; this entry records the decisions
+already made so the next session does not re-litigate them.
+
+**Decided:**
+
+- **The training log is raw, not parsed.** The reference platform trained
+  with four different stacks — Ultralytics for YOLO plus hand-written
+  PyTorch loops for RT-DETRv2, DINOv2 and ConvNeXt (see
+  `medical_segmentation/utils/` in the sibling `segmentation` project).
+  There is no common output format to parse, so a structured parser would
+  have to be rewritten per trainer, while raw lines work for all of them.
+  The user chose raw log explicitly for this reason.
+- **One working YOLO trainer, behind a `TrainingAdapter` interface.** The
+  interface is designed with the hand-rolled PyTorch loops in mind, not
+  only Ultralytics — an Ultralytics-shaped interface would not fit them.
+  No stub second adapter: proving the interface on a trainer that cannot
+  run is paying now for what can be checked later.
+- **Training runs as a `Job`,** like every other long operation here.
+  Note `ml-worker` runs `--pool=solo` (one task at a time, since CUDA
+  cannot be re-initialised in a forked child), which suits single-GPU
+  training, and `ultralytics` is not yet among its dependencies.
+
+**Open, to settle when the spec is written:** how raw log lines reach the
+screen from a separate GPU container (the reference used an in-process
+thread and a stdout-capturing queue, which does not apply here), and
+whether `ModelVersion` or a thin `InferenceRun` covers the Results screen's
+history table — the latter question predates this work and is logged in
+this file's earlier Phase 2b domain map.
+
+**Known risk, accepted by the user.** The RTX 2070 in this dev host has
+hard-rebooted during SAM2 track jobs, and the root cause remains open (see
+`docs/superpowers/plans/2026-08-08-sam2-gpu-oom-host-crash-prevention.md`
+and the ROADMAP entries around it). The user's call was to proceed anyway,
+on the grounds that the reference platform trained successfully on this
+same machine — so the hardware is not the suspect, and further driver-level
+investigation was explicitly ruled out as already attempted and costly.
