@@ -30,6 +30,11 @@ export function TrainPage() {
   // interval on every append. The log itself can reach megabytes over an
   // hour-long run, so each tick only fetches the tail past this offset.
   const logOffsetRef = useRef(0);
+  // Id of the run the log offset/text currently belong to, so refreshRuns
+  // can tell "switched to a different run" (reset) apart from "re-fetched
+  // the same run" (must not reset, or the whole log gets appended again
+  // on top of what is already in state).
+  const activeRunIdRef = useRef<number | null>(null);
 
   const refreshDatasets = useCallback(async () => {
     const { data } = await apiClient.GET("/datasets");
@@ -55,8 +60,16 @@ export function TrainPage() {
     setActiveRun(chosen);
     // A freshly chosen run starts its log tail from scratch; switching
     // between runs must not carry over a stale offset from a previous one.
-    logOffsetRef.current = 0;
-    setLogText("");
+    // But if this call re-resolves to the SAME run that is already being
+    // polled (not just today's call paths, but any future one -- e.g. a
+    // manual refresh while a run is active), resetting here would append
+    // the whole multi-megabyte log a second time on top of what is
+    // already in state. Only reset when the run id actually changes.
+    if (chosen?.id !== activeRunIdRef.current) {
+      activeRunIdRef.current = chosen?.id ?? null;
+      logOffsetRef.current = 0;
+      setLogText("");
+    }
     return chosen;
   }, []);
 
