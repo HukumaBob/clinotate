@@ -301,3 +301,78 @@ def test_created_dataset_taxonomy_version_matches_its_included_annotations():
     assert created["taxonomy_version"] == 1
 
     client.delete(f"/datasets/{created['id']}", headers=headers)
+
+
+def test_list_datasets_reports_exported_true_only_for_a_succeeded_export_job():
+    # Uses `import app.db as db_module` (not `from app.db import
+    # SessionLocal`) so conftest's autouse fixture -- which repoints
+    # `db_module.SessionLocal` at the test database by patching the module
+    # attribute -- is actually observed. A name imported directly binds at
+    # collection time, before that patch runs, and would hit the real dev
+    # database instead.
+    import app.db as db_module
+    from app.jobs.models import Job, JobStatus, JobType
+
+    headers = _register_and_login("ds-api10@example.com")
+    user_id = client.get("/auth/me", headers=headers).json()["id"]
+
+    exported_dataset = client.post(
+        "/datasets",
+        json={
+            "name": "ds-api10-exported", "task_type": "detection", "sequence_ids": [],
+            "split_config": {"train": 70, "val": 20}, "grouping_overrides": {},
+            "excluded_label_ids": [], "threshold": 10,
+        },
+        headers=headers,
+    ).json()
+    unexported_dataset = client.post(
+        "/datasets",
+        json={
+            "name": "ds-api10-unexported", "task_type": "detection", "sequence_ids": [],
+            "split_config": {"train": 70, "val": 20}, "grouping_overrides": {},
+            "excluded_label_ids": [], "threshold": 10,
+        },
+        headers=headers,
+    ).json()
+    # A failed export job for the "unexported" dataset must not count.
+    failed_export_dataset = unexported_dataset
+
+    job_ids: list[int] = []
+    session = db_module.SessionLocal()
+    try:
+        succeeded_job = Job(
+            job_type=JobType.DATASET_EXPORT,
+            status=JobStatus.SUCCEEDED,
+            payload={"dataset_id": exported_dataset["id"], "include_images": True},
+            result_ref=f"datasets/{exported_dataset['id']}/export-x.zip",
+            created_by_id=user_id,
+        )
+        failed_job = Job(
+            job_type=JobType.DATASET_EXPORT,
+            status=JobStatus.FAILED,
+            payload={"dataset_id": failed_export_dataset["id"], "include_images": True},
+            result_ref=None,
+            created_by_id=user_id,
+        )
+        session.add_all([succeeded_job, failed_job])
+        session.commit()
+        session.refresh(succeeded_job)
+        session.refresh(failed_job)
+        job_ids = [succeeded_job.id, failed_job.id]
+    finally:
+        session.close()
+
+    try:
+        body = client.get("/datasets", headers=headers).json()
+        by_id = {d["id"]: d for d in body}
+        assert by_id[exported_dataset["id"]]["exported"] is True
+        assert by_id[unexported_dataset["id"]]["exported"] is False
+    finally:
+        session = db_module.SessionLocal()
+        try:
+            session.query(Job).filter(Job.id.in_(job_ids)).delete(synchronize_session=False)
+            session.commit()
+        finally:
+            session.close()
+        client.delete(f"/datasets/{exported_dataset['id']}", headers=headers)
+        client.delete(f"/datasets/{unexported_dataset['id']}", headers=headers)

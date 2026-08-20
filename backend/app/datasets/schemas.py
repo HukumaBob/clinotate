@@ -95,4 +95,5 @@ class DatasetRead(BaseModel):
     created_at: datetime
     item_count: int
     split_counts: dict[str, int]
+    exported: bool = False
     items: list[DatasetItemRead] = Field(default_factory=list)

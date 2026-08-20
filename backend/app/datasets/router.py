@@ -29,7 +29,24 @@ def _empty_split_counts() -> dict:
     return {"train": 0, "val": 0, "test": 0}
 
 
-def _serialize_summary(dataset: Dataset, split_counts: dict) -> dict:
+def _dataset_has_succeeded_export(session: Session, dataset_id: int) -> bool:
+    """Single-dataset version of the exported check, used where an extra
+    per-dataset query is unavoidable anyway (create, and the detail
+    endpoint)."""
+    return (
+        session.query(Job.id)
+        .filter(
+            Job.job_type == JobType.DATASET_EXPORT,
+            Job.status == JobStatus.SUCCEEDED,
+            Job.result_ref.isnot(None),
+            Job.payload["dataset_id"].as_integer() == dataset_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def _serialize_summary(dataset: Dataset, split_counts: dict, exported: bool = False) -> dict:
     """Shared summary fields for both the list and detail representations."""
     return {
         "id": dataset.id,
@@ -44,6 +61,7 @@ def _serialize_summary(dataset: Dataset, split_counts: dict) -> dict:
         "created_at": dataset.created_at,
         "item_count": sum(split_counts.values()),
         "split_counts": split_counts,
+        "exported": exported,
         "items": [],
     }
 
@@ -57,7 +75,8 @@ def _serialize_one(session: Session, dataset: Dataset, include_items: bool) -> d
     for item in items:
         split_counts[item.split.value] += 1
 
-    result = _serialize_summary(dataset, split_counts)
+    exported = _dataset_has_succeeded_export(session, dataset.id)
+    result = _serialize_summary(dataset, split_counts, exported)
 
     if include_items and items:
         sequence_by_frame = dict(
@@ -138,8 +157,29 @@ def list_datasets(session: Session = Depends(get_session)) -> list[dict]:
     for dataset_id, split, count in rows:
         split_counts_by_dataset[dataset_id][split.value] = count
 
+    # Same shape as the split-counts query above: one grouped query for
+    # every dataset's exported flag instead of a per-dataset Job lookup
+    # (N+1). A dataset counts as exported when a DATASET_EXPORT job
+    # succeeded for it with a stored result_ref.
+    exported_dataset_ids = {
+        dataset_id
+        for (dataset_id,) in session.query(Job.payload["dataset_id"].as_integer())
+        .filter(
+            Job.job_type == JobType.DATASET_EXPORT,
+            Job.status == JobStatus.SUCCEEDED,
+            Job.result_ref.isnot(None),
+            Job.payload["dataset_id"].as_integer().in_(dataset_ids),
+        )
+        .distinct()
+        .all()
+    }
+
     return [
-        _serialize_summary(dataset, split_counts_by_dataset[dataset.id])
+        _serialize_summary(
+            dataset,
+            split_counts_by_dataset[dataset.id],
+            dataset.id in exported_dataset_ids,
+        )
         for dataset in datasets
     ]
 

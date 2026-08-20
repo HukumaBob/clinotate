@@ -4571,6 +4571,11 @@
             "type": "object",
             "title": "Split Counts"
           },
+          "exported": {
+            "type": "boolean",
+            "title": "Exported",
+            "default": false
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/DatasetItemRead"
