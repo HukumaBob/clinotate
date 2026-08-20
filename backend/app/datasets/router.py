@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -22,6 +24,8 @@ from app.storage import StorageService, get_storage_service
 from app.taxonomy.hierarchy import GroupingRules
 from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 from app.worker.export_task import dataset_export
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/datasets", tags=["datasets"], dependencies=[Depends(get_current_user)])
 
@@ -244,7 +248,11 @@ def download_export(
 
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_dataset(dataset_id: int, session: Session = Depends(get_session)) -> None:
+def delete_dataset(
+    dataset_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> None:
     """Delete a dataset, and with it any training runs that left nothing behind.
 
     `training_runs.dataset_id` is a real foreign key, so a dataset that was
@@ -303,6 +311,27 @@ def delete_dataset(dataset_id: int, session: Session = Depends(get_session)) -> 
         session.query(TrainingRun).filter(TrainingRun.dataset_id == dataset_id).delete(
             synchronize_session=False
         )
+
+    # Every export uploaded an archive under datasets/<id>/; nothing else
+    # ever removes them, and once this row is gone they are unreachable
+    # through the UI. Delete the objects before the rows that name them, so
+    # a storage failure leaves a recoverable dataset rather than orphaned
+    # bytes -- the same order delete_model_version uses for weights.
+    export_jobs = (
+        session.query(Job)
+        .filter(Job.job_type == JobType.DATASET_EXPORT, Job.result_ref.is_not(None))
+        .all()
+    )
+    for export_job in export_jobs:
+        if export_job.payload.get("dataset_id") != dataset_id:
+            continue
+        try:
+            storage.delete(export_job.result_ref)
+        except Exception:  # noqa: BLE001 -- a missing object must not block the delete
+            logger.warning(
+                "delete_dataset: could not remove export archive %s", export_job.result_ref
+            )
+        session.delete(export_job)
 
     session.query(DatasetItem).filter(DatasetItem.dataset_id == dataset_id).delete()
     session.delete(dataset)

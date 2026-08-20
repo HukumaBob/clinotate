@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.datasets.models import Dataset, TaskType
 from app.jobs.models import Job, JobStatus, JobType
 from app.main import app
+from app.storage import get_storage_service
 from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 
 
@@ -308,3 +309,53 @@ def test_deleting_a_dataset_with_an_active_run_is_refused():
         session.commit()
     finally:
         session.close()
+
+
+def test_deleting_a_dataset_removes_its_export_archives():
+    """Export archives outlive their dataset unless the delete removes them.
+
+    Each export uploads a zip under datasets/<id>/, and nothing ever
+    deleted them: 174 MB of archives belonging to datasets that no longer
+    existed had accumulated in object storage, unreachable through the UI
+    because the dataset row they hang off is gone.
+    """
+    headers = _register_and_login("del-dataset-archive@example.com")
+    deleted_keys: list[str] = []
+
+    class _RecordingStorage:
+        def delete(self, key: str) -> None:
+            deleted_keys.append(key)
+
+        def url_for(self, key: str) -> str:
+            return f"http://example/{key}"
+
+    session = _session()
+    try:
+        user_id = session.execute(sa.text("SELECT id FROM users ORDER BY id DESC LIMIT 1")).scalar()
+        dataset = _make_dataset(session, user_id)
+        for suffix in ("a", "b"):
+            session.add(
+                Job(
+                    job_type=JobType.DATASET_EXPORT,
+                    status=JobStatus.SUCCEEDED,
+                    payload={"dataset_id": dataset.id},
+                    result_ref=f"datasets/{dataset.id}/export-{suffix}.zip",
+                    created_by_id=user_id,
+                )
+            )
+        session.commit()
+        dataset_id = dataset.id
+    finally:
+        session.close()
+
+    app.dependency_overrides[get_storage_service] = lambda: _RecordingStorage()
+    try:
+        response = client.delete(f"/datasets/{dataset_id}", headers=headers)
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+
+    assert response.status_code == 204
+    assert sorted(deleted_keys) == [
+        f"datasets/{dataset_id}/export-a.zip",
+        f"datasets/{dataset_id}/export-b.zip",
+    ]
