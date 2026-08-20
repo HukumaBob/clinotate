@@ -16,6 +16,7 @@ class JobType(str, enum.Enum):
     RANK_QUALITY = "rank_quality"
     FIND_SIMILAR = "find_similar"
     DATASET_EXPORT = "dataset_export"
+    MODEL_TRAIN = "model_train"
 
 
 class JobStatus(str, enum.Enum):
