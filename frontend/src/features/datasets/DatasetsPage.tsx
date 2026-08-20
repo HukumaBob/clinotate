@@ -87,6 +87,7 @@ export function DatasetsPage() {
   const [trainPercent, setTrainPercent] = useState(70);
   const [valPercent, setValPercent] = useState(20);
   const [search, setSearch] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const testPercent = Math.max(0, 100 - trainPercent - valPercent);
 
@@ -437,9 +438,30 @@ export function DatasetsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
+            {deleteError && (
+              <div
+                role="alert"
+                className="mb-3 rounded border border-red-800 bg-red-950 px-3 py-2 text-sm text-red-300"
+              >
+                {deleteError}
+              </div>
+            )}
             <DatasetsTable
               datasets={datasets}
-              onDelete={(datasetId) => deleteDataset.mutate(datasetId)}
+              onDelete={(datasetId) => {
+                // A refused delete (409: the dataset still owns model
+                // weights, or a run is training on it right now) has to say
+                // why. Without this the button silently does nothing, which
+                // reads as a broken UI rather than a deliberate refusal.
+                setDeleteError(null);
+                deleteDataset.mutate(datasetId, {
+                  onError: (error) => {
+                    setDeleteError(
+                      (error as { detail?: string }).detail ?? "Failed to delete the dataset.",
+                    );
+                  },
+                });
+              }}
               onShowMetrics={(dataset) => setMetricsDataset(dataset)}
               onExport={handleExport}
               exportJobs={exportJobs}

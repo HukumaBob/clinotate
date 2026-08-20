@@ -84,6 +84,34 @@ describe("DatasetsPage", () => {
     vi.mocked(apiClient.POST).mockResolvedValue({ data: BALANCE });
   });
 
+  it("surfaces the server's reason when a delete is refused", async () => {
+    // A dataset that trained a model still in the catalogue cannot be
+    // deleted: the ModelVersion is the only record of where those weights
+    // came from. The server answers 409 explaining exactly that, and the
+    // page has to say so -- silently doing nothing reads as a broken button.
+    const user = userEvent.setup();
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences") return { data: SEQUENCES };
+      if (path === "/datasets") return { data: DATASETS };
+      if (path === "/taxonomy/procedures") return { data: [] };
+      if (path === "/taxonomy/tree") return { data: TREE };
+      return { data: [] };
+    });
+    vi.mocked(apiClient.DELETE).mockResolvedValue({
+      error: {
+        detail:
+          "This dataset trained 1 model version(s) that still exist: yolo11n-run196. Delete them first.",
+      },
+    });
+
+    render(<DatasetsPage />, { wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^delete$/i }));
+    await user.click(await screen.findByRole("button", { name: /^confirm$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/yolo11n-run196/);
+  });
+
   it("lists selectable sequences", async () => {
     render(<DatasetsPage />, { wrapper });
     expect(await screen.findByText("seq-a")).toBeInTheDocument();
