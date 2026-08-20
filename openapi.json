@@ -3480,6 +3480,377 @@
         ]
       }
     },
+    "/training/runs": {
+      "post": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Create Run",
+        "operationId": "create_run_training_runs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainingRunCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingRunRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "List Runs",
+        "operationId": "list_runs_training_runs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TrainingRunStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrainingRunRead"
+                  },
+                  "title": "Response List Runs Training Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Get Run",
+        "operationId": "get_run_training_runs__run_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingRunRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/runs/{run_id}/log": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Read Log",
+        "operationId": "read_log_training_runs__run_id__log_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingLogRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/runs/{run_id}/stop": {
+      "post": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Stop Run",
+        "operationId": "stop_run_training_runs__run_id__stop_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingRunRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/models": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "List Models",
+        "operationId": "list_models_training_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelVersionRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Models Training Models Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/training/models/{version_id}/download": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Download Model",
+        "operationId": "download_model_training_models__version_id__download_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelDownloadRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/models/{version_id}": {
+      "delete": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Delete Model",
+        "operationId": "delete_model_training_models__version_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -4572,7 +4943,8 @@
           "video_transcode",
           "rank_quality",
           "find_similar",
-          "dataset_export"
+          "dataset_export",
+          "model_train"
         ],
         "title": "JobType"
       },
@@ -4865,6 +5237,63 @@
           "page_size"
         ],
         "title": "MediaLibraryPage"
+      },
+      "ModelDownloadRead": {
+        "properties": {
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "download_url"
+        ],
+        "title": "ModelDownloadRead"
+      },
+      "ModelVersionRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "training_run_id": {
+            "type": "integer",
+            "title": "Training Run Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "task_type": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "training_run_id",
+          "name",
+          "task_type",
+          "metrics",
+          "is_active",
+          "created_at"
+        ],
+        "title": "ModelVersionRead"
       },
       "ProcedureCreate": {
         "properties": {
@@ -5735,6 +6164,206 @@
           "access_token"
         ],
         "title": "TokenResponse"
+      },
+      "TrainingLogRead": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TrainingRunStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "offset",
+          "status"
+        ],
+        "title": "TrainingLogRead",
+        "description": "The log tail past a caller-supplied offset. Never bundled into\nTrainingRunRead: over an hour log_text grows to megabytes, and the\nstatus is polled every two seconds."
+      },
+      "TrainingRunCreate": {
+        "properties": {
+          "dataset_id": {
+            "type": "integer",
+            "title": "Dataset Id"
+          },
+          "base_model": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Base Model"
+          },
+          "epochs": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Epochs"
+          },
+          "batch": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Batch"
+          },
+          "imgsz": {
+            "type": "integer",
+            "maximum": 4096.0,
+            "minimum": 32.0,
+            "title": "Imgsz",
+            "default": 640
+          },
+          "advanced": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Advanced"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "base_model",
+          "epochs",
+          "batch"
+        ],
+        "title": "TrainingRunCreate"
+      },
+      "TrainingRunRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "dataset_id": {
+            "type": "integer",
+            "title": "Dataset Id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "adapter": {
+            "type": "string",
+            "title": "Adapter"
+          },
+          "base_model": {
+            "type": "string",
+            "title": "Base Model"
+          },
+          "task_type": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TrainingRunStatus"
+          },
+          "stop_requested": {
+            "type": "boolean",
+            "title": "Stop Requested"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          },
+          "current_epoch": {
+            "type": "integer",
+            "title": "Current Epoch"
+          },
+          "total_epochs": {
+            "type": "integer",
+            "title": "Total Epochs"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "dataset_id",
+          "job_id",
+          "adapter",
+          "base_model",
+          "task_type",
+          "config",
+          "status",
+          "stop_requested",
+          "metrics",
+          "current_epoch",
+          "total_epochs",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "TrainingRunRead"
+      },
+      "TrainingRunStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed",
+          "stopped"
+        ],
+        "title": "TrainingRunStatus",
+        "description": "Deliberately parallel to JobStatus rather than reusing it: a run can\nend as STOPPED, which is neither success nor failure, and widening an\nenum shared by every job type to serve one of them is worse than a\nneighbouring enum."
       },
       "UserLogin": {
         "properties": {

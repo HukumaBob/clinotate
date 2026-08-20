@@ -8,6 +8,7 @@ from app.jobs.router import router as jobs_router
 from app.media.router import router as media_router
 from app.settings.router import router as settings_router
 from app.taxonomy.router import router as taxonomy_router
+from app.training.router import router as training_router
 
 app = FastAPI(title="Endoscopy Annotation Platform API")
 app.add_middleware(
@@ -24,6 +25,7 @@ app.include_router(annotation_router)
 app.include_router(datasets_router)
 app.include_router(jobs_router)
 app.include_router(settings_router)
+app.include_router(training_router)
 
 
 @app.get("/health")
