@@ -7,7 +7,7 @@ const NAV_ITEMS = [
   { label: "Media", path: "/media" },
   { label: "Sequences", path: "/sequences" },
   { label: "Dataset", path: "/datasets" },
-  { label: "Train", path: null },
+  { label: "Train", path: "/train" },
   { label: "Results", path: null },
 ] as const;
 

@@ -9,6 +9,7 @@ import { DatasetsPage } from "../features/datasets/DatasetsPage";
 import { MediaPage } from "../features/media/MediaPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TagsPage } from "../features/tags/TagsPage";
+import { TrainPage } from "../features/training/TrainPage";
 import { AppLayout } from "./AppLayout";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -33,6 +34,7 @@ export function App() {
           <Route path="/sequences" element={<SequencesPage />} />
           <Route path="/sequences/:sequenceId" element={<SequenceGridPage />} />
           <Route path="/datasets" element={<DatasetsPage />} />
+          <Route path="/train" element={<TrainPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />

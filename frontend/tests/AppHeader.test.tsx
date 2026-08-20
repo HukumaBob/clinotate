@@ -62,12 +62,10 @@ describe("AppHeader", () => {
     expect(sequencesLink).toHaveAttribute("href", "/sequences");
   });
 
-  it("does not render the remaining two items as links", () => {
+  it("does not render the remaining item as a link", () => {
     renderHeader();
 
-    for (const label of ["Train", "Results"]) {
-      expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
-    }
+    expect(screen.queryByRole("link", { name: "Results" })).not.toBeInTheDocument();
   });
 
   it("renders Dataset as a real link to /datasets", () => {
@@ -75,6 +73,13 @@ describe("AppHeader", () => {
 
     const datasetsLink = screen.getByRole("link", { name: "Dataset" });
     expect(datasetsLink).toHaveAttribute("href", "/datasets");
+  });
+
+  it("renders Train as a real link to /train", () => {
+    renderHeader();
+
+    const trainLink = screen.getByRole("link", { name: "Train" });
+    expect(trainLink).toHaveAttribute("href", "/train");
   });
 
   it("shows the current user's email when authenticated", () => {
