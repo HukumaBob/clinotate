@@ -87,7 +87,7 @@ export function DatasetsPage() {
   const [trainPercent, setTrainPercent] = useState(70);
   const [valPercent, setValPercent] = useState(20);
   const [search, setSearch] = useState("");
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const testPercent = Math.max(0, 100 - trainPercent - valPercent);
 
@@ -259,28 +259,44 @@ export function DatasetsPage() {
   }
 
   function handleExport(dataset: DatasetRead) {
+    setActionError(null);
     exportDataset.mutate(dataset.id, {
       onSuccess: (job) => {
         if (!job) return;
         setExportJobIds((current) => ({ ...current, [dataset.id]: job.id }));
         setExportJobs((current) => ({ ...current, [dataset.id]: job }));
       },
+      onError: (error) => {
+        setActionError(
+          (error as { detail?: string }).detail ?? "Failed to start the export.",
+        );
+      },
     });
   }
 
   async function handleSave() {
     if (!name.trim()) return;
-    await createDataset.mutateAsync({
-      name: name.trim(),
-      task_type: taskType,
-      sequence_ids: Array.from(selectedSequenceIds),
-      split_config: { train: trainPercent, val: valPercent, test: testPercent },
-      grouping_overrides: { expand: Array.from(collapsed) },
-      excluded_label_ids: Array.from(excluded),
-      class_limits: classLimits,
-      threshold,
-    });
-    setName("");
+    setActionError(null);
+    try {
+      await createDataset.mutateAsync({
+        name: name.trim(),
+        task_type: taskType,
+        sequence_ids: Array.from(selectedSequenceIds),
+        split_config: { train: trainPercent, val: valPercent, test: testPercent },
+        grouping_overrides: { expand: Array.from(collapsed) },
+        excluded_label_ids: Array.from(excluded),
+        class_limits: classLimits,
+        threshold,
+      });
+      setName("");
+    } catch (error) {
+      // mutateAsync rejects on a failed save; without this the await
+      // aborts handleSave and the user sees the name field simply sit
+      // there, with no clue the server refused.
+      setActionError(
+        (error as { detail?: string }).detail ?? "Failed to save the dataset.",
+      );
+    }
   }
 
   const splitExceeds100 = trainPercent + valPercent > 100;
@@ -438,12 +454,12 @@ export function DatasetsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
-            {deleteError && (
+            {actionError && (
               <div
                 role="alert"
                 className="mb-3 rounded border border-red-800 bg-red-950 px-3 py-2 text-sm text-red-300"
               >
-                {deleteError}
+                {actionError}
               </div>
             )}
             <DatasetsTable
@@ -453,10 +469,10 @@ export function DatasetsPage() {
                 // weights, or a run is training on it right now) has to say
                 // why. Without this the button silently does nothing, which
                 // reads as a broken UI rather than a deliberate refusal.
-                setDeleteError(null);
+                setActionError(null);
                 deleteDataset.mutate(datasetId, {
                   onError: (error) => {
-                    setDeleteError(
+                    setActionError(
                       (error as { detail?: string }).detail ?? "Failed to delete the dataset.",
                     );
                   },

@@ -112,6 +112,47 @@ describe("DatasetsPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/yolo11n-run196/);
   });
 
+  it("surfaces the server's reason when an export is refused", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences") return { data: SEQUENCES };
+      if (path === "/datasets") return { data: DATASETS };
+      if (path === "/taxonomy/procedures") return { data: [] };
+      if (path === "/taxonomy/tree") return { data: TREE };
+      return { data: [] };
+    });
+    vi.mocked(apiClient.POST).mockImplementation(async (path: string) => {
+      if (path === "/datasets/{dataset_id}/export") {
+        return { error: { detail: "Dataset has no frames to export." } };
+      }
+      return { data: BALANCE };
+    });
+
+    render(<DatasetsPage />, { wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^export$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no frames to export/i);
+  });
+
+  it("surfaces the server's reason when saving a dataset fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiClient.POST).mockImplementation(async (path: string) => {
+      if (path === "/datasets") {
+        return { error: { detail: "A dataset with this name already exists." } };
+      }
+      return { data: BALANCE };
+    });
+
+    render(<DatasetsPage />, { wrapper });
+
+    await user.click(await screen.findByLabelText(/seq-a/i));
+    await user.type(screen.getByLabelText(/^name$/i), "duplicate");
+    await user.click(screen.getByRole("button", { name: /save dataset/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/already exists/i);
+  });
+
   it("lists selectable sequences", async () => {
     render(<DatasetsPage />, { wrapper });
     expect(await screen.findByText("seq-a")).toBeInTheDocument();
