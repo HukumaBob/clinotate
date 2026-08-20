@@ -41,6 +41,15 @@ services:
     build:
       context: ./ml-worker
     restart: unless-stopped
+    # PyTorch's multi-process DataLoader passes tensors between workers
+    # through /dev/shm, and Docker's 64MB default is far too small for it:
+    # YOLO training died on the very first epoch with
+    # `RuntimeError: unable to write to file </torch_...>: No space left on
+    # device` and `DataLoader worker killed by signal: Bus error`, while the
+    # host still had 107GB of actual disk free. The SAM2/SAM3 adapters never
+    # hit this because they run no multi-process DataLoader -- model training
+    # is the first workload here that does.
+    shm_size: "2gb"
     volumes:
       # Persists the downloaded SAM-3 checkpoint (~3GB) and other HF cache
       # entries across container restarts -- this service now restarts
