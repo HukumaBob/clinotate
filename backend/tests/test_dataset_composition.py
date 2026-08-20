@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
 from app.datasets.models import TaskType
 from app.datasets.service import collect_frames, scope_for_task
-from app.db import SessionLocal
+import app.db as db_module
 from app.media.models import Frame, Sequence
 from app.taxonomy.hierarchy import GroupingRules, build_label_tree
 from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label, Procedure
@@ -61,7 +61,7 @@ def test_scope_for_task_maps_each_task_type():
 
 
 def test_annotated_frame_is_included_with_its_annotation_ids():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, category, region, _, sequence, frames, user_id = _fixture(session, "inc")
         polyp = _label(session, category, region, "ds-inc-polyp")
@@ -79,7 +79,7 @@ def test_annotated_frame_is_included_with_its_annotation_ids():
 
 
 def test_unannotated_frame_without_the_flag_is_omitted():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, category, region, _, sequence, frames, user_id = _fixture(session, "omit")
         polyp = _label(session, category, region, "ds-omit-polyp")
@@ -94,7 +94,7 @@ def test_unannotated_frame_without_the_flag_is_omitted():
 
 
 def test_no_findings_reviewed_frame_is_included_as_a_negative():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, _, _, _, sequence, frames, _ = _fixture(session, "neg")
         frames[1].no_findings_reviewed = True
@@ -111,7 +111,7 @@ def test_no_findings_reviewed_frame_is_included_as_a_negative():
 
 
 def test_task_type_filters_by_annotation_scope():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, category, region, frame_et, sequence, frames, user_id = _fixture(session, "scope")
         mask_label = _label(session, category, region, "ds-scope-mask")
@@ -132,7 +132,7 @@ def test_task_type_filters_by_annotation_scope():
 def test_a_frame_carrying_both_scopes_contributes_only_the_matching_annotations():
     # No frame mixes scopes in the dev data today, but marking an annotated
     # frame low_quality is legitimate, so the filter must work per annotation.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, category, region, frame_et, sequence, frames, user_id = _fixture(session, "mixed")
         mask_label = _label(session, category, region, "ds-mixed-mask")
@@ -152,7 +152,7 @@ def test_a_frame_carrying_both_scopes_contributes_only_the_matching_annotations(
 def test_frame_whose_annotations_are_all_excluded_drops_out_and_is_not_a_negative():
     # "We chose not to train the ileum class" does not mean "this frame is empty".
     # Turning it into a negative would manufacture a false negative.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, category, region, _, sequence, frames, user_id = _fixture(session, "excl")
         rare = _label(session, category, region, "ds-excl-rare")
@@ -172,7 +172,7 @@ def test_excluding_a_collapsed_parent_id_removes_its_leaf_children_annotations()
     # collect_frames must resolve each annotation's label through the same
     # shared resolve_class before testing exclusion, or unchecking the parent
     # is a silent no-op while the raw annotations stay in the dataset.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, category, region, _, sequence, frames, user_id = _fixture(session, "parentexcl")
         parent = Label(
@@ -213,7 +213,7 @@ def test_excluding_a_collapsed_parent_id_removes_its_leaf_children_annotations()
 def test_collect_frames_without_tree_falls_back_to_raw_id_matching():
     # Callers that don't pass tree/rules (or existing tests) must keep the
     # old, raw-annotation-label-id-only behavior.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, category, region, _, sequence, frames, user_id = _fixture(session, "notree")
         leaf = _label(session, category, region, "ds-notree-leaf")
@@ -228,7 +228,7 @@ def test_collect_frames_without_tree_falls_back_to_raw_id_matching():
 
 
 def test_an_excluded_frame_that_is_also_flagged_stays_as_a_negative():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         _, category, region, _, sequence, frames, user_id = _fixture(session, "exclneg")
         rare = _label(session, category, region, "ds-exclneg-rare")

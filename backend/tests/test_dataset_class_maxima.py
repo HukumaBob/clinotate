@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
 from app.datasets.models import TaskType
 from app.datasets.service import compute_balance
-from app.db import SessionLocal
+import app.db as db_module
 from app.media.models import Frame, Sequence
 from app.taxonomy.hierarchy import GroupingRules
 from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label, Procedure
@@ -55,7 +55,7 @@ def _annotate(session, frame, label, user_id):
 
 
 def test_an_unrestricted_class_reports_max_equal_to_its_actual_counts():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "plain")
         polyp = _label(session, category, region, "mx-plain-polyp")
@@ -75,7 +75,7 @@ def test_an_unrestricted_class_reports_max_equal_to_its_actual_counts():
 
 
 def test_an_excluded_class_still_appears_with_zero_instances_and_its_real_max():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "excl")
         polyp = _label(session, category, region, "mx-excl-polyp")
@@ -100,7 +100,7 @@ def test_an_excluded_class_still_appears_with_zero_instances_and_its_real_max():
 
 
 def test_a_capped_class_reports_the_cap_and_its_uncapped_max():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "cap")
         polyp = _label(session, category, region, "mx-cap-polyp")
@@ -123,7 +123,7 @@ def test_a_capped_class_reports_the_cap_and_its_uncapped_max():
 def test_excluding_a_class_does_not_make_imbalance_ratio_infinite():
     # The specific regression zero-instance rows invite: compute_imbalance_metrics
     # divides by the smallest class, so a 0 would make min_count 0 and the ratio inf.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "inf")
         polyp = _label(session, category, region, "mx-inf-polyp")
@@ -144,7 +144,7 @@ def test_excluding_a_class_does_not_make_imbalance_ratio_infinite():
 
 
 def test_an_excluded_class_is_absent_from_below_threshold():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "belowthr")
         polyp = _label(session, category, region, "mx-belowthr-polyp")
@@ -165,7 +165,7 @@ def test_an_excluded_class_is_absent_from_below_threshold():
 
 
 def test_excluding_every_class_still_reports_all_classes_greyed_with_their_max():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "allexcl")
         polyp = _label(session, category, region, "mx-allexcl-polyp")
@@ -194,7 +194,7 @@ def test_excluding_every_class_still_reports_all_classes_greyed_with_their_max()
 
 
 def test_a_selection_with_no_annotations_at_all_still_returns_no_classes():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "noanno")
 
@@ -208,7 +208,7 @@ def test_a_selection_with_no_annotations_at_all_still_returns_no_classes():
 
 
 def test_total_frames_in_the_all_excluded_case_reflects_the_effective_composition():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "allexcltot")
         polyp = _label(session, category, region, "mx-allexcltot-polyp")
@@ -229,7 +229,7 @@ def test_total_frames_in_the_all_excluded_case_reflects_the_effective_compositio
 
 
 def test_total_frames_reflects_the_effective_composition_not_the_uncapped_one():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _island(session, "totals")
         polyp = _label(session, category, region, "mx-totals-polyp")

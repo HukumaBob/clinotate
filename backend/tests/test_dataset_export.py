@@ -13,7 +13,7 @@ from app.datasets.export import (
     write_yolo_label,
 )
 from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
-from app.db import SessionLocal
+import app.db as db_module
 from app.media.models import Frame, Sequence, Video
 from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label, Procedure
 
@@ -105,7 +105,7 @@ def _dataset(session, user_id, task_type, items):
 def test_archive_names_disambiguate_frames_from_different_sequences():
     # Real corpus: 1109 frames share only 488 basenames. Naming by basename
     # would silently overwrite more than half the dataset.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence_a, user_id = _island(session, "namea")
         _, _, sequence_b, _ = _island(session, "nameb")
@@ -135,7 +135,7 @@ def test_archive_names_disambiguate_frames_from_different_sequences():
 
 
 def test_a_missing_mask_file_is_an_error_finding():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "missing")
         polyp = _label(session, category, region, "ex-missing-polyp")
@@ -155,7 +155,7 @@ def test_a_missing_mask_file_is_an_error_finding():
 
 
 def test_every_defect_is_reported_not_just_the_first():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "allfind")
         polyp = _label(session, category, region, "ex-allfind-polyp")
@@ -177,7 +177,7 @@ def test_every_defect_is_reported_not_just_the_first():
 
 
 def test_a_mask_below_the_threshold_is_filtered_and_reported():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "tiny")
         polyp = _label(session, category, region, "ex-tiny-polyp")
@@ -201,7 +201,7 @@ def test_a_mask_below_the_threshold_is_filtered_and_reported():
 
 def test_a_frame_whose_only_mask_was_filtered_does_not_become_a_negative():
     # Discarding a noisy mask is not a claim that the frame is empty.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "notneg")
         polyp = _label(session, category, region, "ex-notneg-polyp")
@@ -223,7 +223,7 @@ def test_a_frame_whose_only_mask_was_filtered_does_not_become_a_negative():
 
 
 def test_a_multi_label_classification_frame_is_an_error_finding():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, frame_scope, sequence, user_id = _island(
             session, "multi", scope=AnnotationScope.FRAME)
@@ -246,7 +246,7 @@ def test_a_multi_label_classification_frame_is_an_error_finding():
 
 
 def test_a_negative_frame_yields_an_empty_yolo_label():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "neg")
         storage = _FakeStorage()
@@ -267,7 +267,7 @@ def test_a_negative_frame_yields_an_empty_yolo_label():
 
 
 def test_detection_labels_are_normalized_into_zero_to_one():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "norm")
         polyp = _label(session, category, region, "ex-norm-polyp")
@@ -296,7 +296,7 @@ def test_detection_labels_are_normalized_into_zero_to_one():
 
 
 def test_segmentation_labels_are_polygons_normalized_into_zero_to_one():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "seg")
         polyp = _label(session, category, region, "ex-seg-polyp")
@@ -322,7 +322,7 @@ def test_segmentation_labels_are_polygons_normalized_into_zero_to_one():
 
 
 def test_coco_carries_provenance_and_matches_the_class_map():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "coco")
         polyp = _label(session, category, region, "ex-coco-polyp")
@@ -353,7 +353,7 @@ def test_coco_carries_provenance_and_matches_the_class_map():
 
 
 def test_a_negative_frame_appears_in_coco_images_with_no_annotation():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, user_id = _island(session, "coconeg")
         storage = _FakeStorage()
@@ -384,7 +384,7 @@ def test_children_of_a_collapsed_parent_export_as_one_class():
     those classes had between 1 and 4 annotations -- unlearnable, and
     dragging the averaged mAP down with them.
     """
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, evaluation_type, sequence, user_id = _island(session, "collapse")
         parent = _label(session, category, evaluation_type, "ex-collapse-polyp")

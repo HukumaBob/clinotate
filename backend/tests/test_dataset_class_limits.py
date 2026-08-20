@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
 from app.datasets.models import TaskType
 from app.datasets.service import collect_frames
-from app.db import SessionLocal
+import app.db as db_module
 from app.media.models import Frame, Sequence, Video
 from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label, Procedure
 
@@ -73,7 +73,7 @@ def _instances(composition):
 
 
 def test_a_limit_caps_the_number_of_instances():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequences, user_id = _island(session, "cap")
         common = _label(session, category, region, "cl-cap-common")
@@ -95,7 +95,7 @@ def test_a_limit_caps_the_number_of_instances():
 
 
 def test_a_limit_spreads_across_grouping_units():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequences, user_id = _island(session, "spread")
         common = _label(session, category, region, "cl-spread-common")
@@ -127,7 +127,7 @@ def test_a_limit_spreads_across_grouping_units():
 
 
 def test_capping_is_reproducible():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequences, user_id = _island(session, "repro")
         common = _label(session, category, region, "cl-repro-common")
@@ -152,7 +152,7 @@ def test_capping_is_reproducible():
 
 
 def test_a_limit_at_or_above_the_total_is_a_no_op():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequences, user_id = _island(session, "noop")
         common = _label(session, category, region, "cl-noop-common")
@@ -175,7 +175,7 @@ def test_a_limit_at_or_above_the_total_is_a_no_op():
 def test_a_frame_whose_annotations_are_all_capped_away_drops_out_and_is_not_a_negative():
     # Capping is a bookkeeping decision, not a claim the frame is empty --
     # the same rule exclusions already follow.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequences, user_id = _island(session, "drop")
         common = _label(session, category, region, "cl-drop-common")
@@ -197,7 +197,7 @@ def test_a_frame_whose_annotations_are_all_capped_away_drops_out_and_is_not_a_ne
 
 def test_capping_a_collapsed_parent_caps_its_children():
     # Limits key on RESOLVED class ids, like exclusions do.
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequences, user_id = _island(session, "parent")
         polyp = _label(session, category, region, "cl-parent-polyp", is_abstract=True)

@@ -57,7 +57,7 @@ import sqlalchemy as sa
 from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
 from app.datasets.models import TaskType
 from app.datasets.service import compute_balance
-from app.db import SessionLocal
+import app.db as db_module
 from app.media.models import Frame, Sequence
 from app.taxonomy.hierarchy import GroupingRules
 from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label, Procedure
@@ -109,7 +109,7 @@ def _annotate(session, frame, label, user_id):
 
 
 def test_two_annotations_of_one_class_on_one_frame_count_as_two_instances_one_frame():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _fixture(session, "dup")
         adenoma = _label(session, category, region, "bal-dup-adenoma")
@@ -127,7 +127,7 @@ def test_two_annotations_of_one_class_on_one_frame_count_as_two_instances_one_fr
 
 
 def test_collapsing_a_parent_merges_its_children_into_one_class():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _fixture(session, "grp")
         polyp = _label(session, category, region, "bal-grp-polyp", is_abstract=True)
@@ -153,7 +153,7 @@ def test_collapsing_a_parent_merges_its_children_into_one_class():
 
 
 def test_below_threshold_lists_classes_under_the_limit():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _fixture(session, "thr")
         common = _label(session, category, region, "bal-thr-common")
@@ -175,7 +175,7 @@ def test_below_threshold_lists_classes_under_the_limit():
 
 
 def test_negatives_are_counted_separately_and_form_no_class():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         category, region, sequence, frames, user_id = _fixture(session, "negcount")
         polyp = _label(session, category, region, "bal-negcount-polyp")

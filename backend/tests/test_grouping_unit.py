@@ -2,7 +2,7 @@ import app.main  # noqa: F401 -- registers every model on Base.metadata for crea
 import sqlalchemy as sa
 
 from app.datasets.service import grouping_key, grouping_keys_for_sequences
-from app.db import SessionLocal
+import app.db as db_module
 from app.media.models import Sequence, Video
 
 
@@ -21,7 +21,7 @@ def test_a_videoless_sequence_never_collides_with_a_video_key():
 
 
 def test_grouping_keys_for_sequences_maps_every_requested_id():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         video = Video(title="gk-video", storage_key="gk/v.mp4", checksum="gk-checksum",
                       fps=25.0, duration_seconds=1.0)
@@ -46,7 +46,7 @@ def test_grouping_keys_for_sequences_maps_every_requested_id():
 
 
 def test_grouping_keys_for_sequences_handles_an_empty_request():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         assert grouping_keys_for_sequences(session, []) == {}
     finally:

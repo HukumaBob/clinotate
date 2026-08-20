@@ -1,10 +1,10 @@
 import app.main  # noqa: F401 -- registers every model on Base.metadata for create_all
 from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
-from app.db import SessionLocal
+import app.db as db_module
 
 
 def test_dataset_round_trips_its_jsonb_fields():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         user_id = session.execute(
             __import__("sqlalchemy").text("SELECT id FROM users ORDER BY id LIMIT 1")
@@ -35,7 +35,7 @@ def test_dataset_round_trips_its_jsonb_fields():
 
 
 def test_dataset_item_records_its_frame_split_and_annotations():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         import sqlalchemy as sa
 

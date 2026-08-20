@@ -1,4 +1,4 @@
-from app.db import SessionLocal
+import app.db as db_module
 from app.taxonomy.models import Category, EvaluationType, Label, Procedure
 from app.taxonomy.models import AnnotationScope
 import app.main  # noqa: F401 -- registers every model on Base.metadata for test_engine's create_all/drop_all
@@ -35,7 +35,7 @@ def _make_label(session, name, procedure_name="hier-proc", scope=AnnotationScope
 
 
 def test_label_defaults_to_no_parent_and_not_abstract():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         label = _make_label(session, "hier-plain")
         session.commit()
@@ -48,7 +48,7 @@ def test_label_defaults_to_no_parent_and_not_abstract():
 
 
 def test_label_can_reference_a_parent_label():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         parent = _make_label(session, "hier-parent")
         child = _make_label(session, "hier-child")
@@ -70,7 +70,7 @@ from app.taxonomy.hierarchy import HierarchyError, validate_parent_assignment
 
 
 def test_parent_from_a_different_procedure_is_rejected():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         child = _make_label(session, "hier-child-proc-a", procedure_name="hier-proc-a")
         parent = _make_label(session, "hier-parent-proc-b", procedure_name="hier-proc-b")
@@ -82,7 +82,7 @@ def test_parent_from_a_different_procedure_is_rejected():
 
 
 def test_parent_with_a_different_annotation_scope_is_rejected():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         child = _make_label(session, "hier-region-child", scope=AnnotationScope.REGION)
         parent = _make_label(session, "hier-frame-parent", scope=AnnotationScope.FRAME)
@@ -94,7 +94,7 @@ def test_parent_with_a_different_annotation_scope_is_rejected():
 
 
 def test_direct_self_parent_is_rejected():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         label = _make_label(session, "hier-self")
         with pytest.raises(HierarchyError):
@@ -105,7 +105,7 @@ def test_direct_self_parent_is_rejected():
 
 
 def test_indirect_cycle_is_rejected():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         grandparent = _make_label(session, "hier-gp")
         parent = _make_label(session, "hier-p")
@@ -122,7 +122,7 @@ def test_indirect_cycle_is_rejected():
 
 
 def test_unknown_parent_is_rejected():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         label = _make_label(session, "hier-orphan")
         with pytest.raises(HierarchyError):
@@ -133,7 +133,7 @@ def test_unknown_parent_is_rejected():
 
 
 def test_valid_parent_assignment_passes():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         parent = _make_label(session, "hier-ok-parent")
         child = _make_label(session, "hier-ok-child")
@@ -144,7 +144,7 @@ def test_valid_parent_assignment_passes():
 
 
 def test_clearing_the_parent_is_always_allowed():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         label = _make_label(session, "hier-clear")
         assert validate_parent_assignment(session, label, None) is None

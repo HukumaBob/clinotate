@@ -2,7 +2,7 @@ import app.main  # noqa: F401
 import sqlalchemy as sa
 
 from app.datasets.models import TaskType
-from app.db import SessionLocal
+import app.db as db_module
 from app.jobs.models import JobType
 from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 
@@ -12,7 +12,7 @@ def test_model_train_job_type_exists():
 
 
 def test_training_run_defaults():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         user_id = session.execute(sa.text("SELECT id FROM users ORDER BY id LIMIT 1")).scalar()
         dataset_id = session.execute(sa.text("SELECT id FROM datasets ORDER BY id LIMIT 1")).scalar()
@@ -49,7 +49,7 @@ def test_training_run_defaults():
 
 
 def test_model_version_links_to_run():
-    session = SessionLocal()
+    session = db_module.SessionLocal()
     try:
         user_id = session.execute(sa.text("SELECT id FROM users ORDER BY id LIMIT 1")).scalar()
         dataset_id = session.execute(sa.text("SELECT id FROM datasets ORDER BY id LIMIT 1")).scalar()
