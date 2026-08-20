@@ -12,6 +12,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pyiqa>=0.1.13",
     "opencv-python-headless>=4.10.0",
+    "ultralytics>=8.3.0",
     # sam3's model_builder.py imports pkg_resources at module load time, but
     # setuptools>=81 no longer bundles pkg_resources by default (it was split
     # out and the compatibility shim was removed) -- an unpinned resolve can
@@ -26,6 +27,25 @@ dev = [
     "pillow>=11.0.0",
     "pytest>=9.1.1",
 ]
+
+[tool.uv]
+# torch/torchvision are NOT installed via `uv sync` at all -- the Dockerfile
+# installs them explicitly, pinned to the matched cu126 pair
+# (torch==2.7.1/torchvision==0.22.1), in a separate `uv pip install` step
+# that runs immediately after `uv sync --frozen --no-install-project` (see
+# Dockerfile's comment on that RUN line for the full rationale: an
+# unconstrained resolve pulls in a mismatched pair whose compiled ops don't
+# register against each other). `ultralytics` declares its own unbounded
+# torch/torchvision dependency, and without a constraint here `uv lock`
+# resolves them to whatever's newest (confirmed empirically: torch 2.13.0 +
+# a matching cu13 wheel stack), which `uv sync` would then install and the
+# Dockerfile's later pinned install would only partially undo. Constraining
+# the lock resolution to the exact installed pair keeps the lockfile
+# consistent with what's actually on disk in the image without forcing
+# `uv sync` to install torch itself (constraints bound a version if the
+# package is pulled in by something else; they don't add it as a
+# dependency).
+constraint-dependencies = ["torch==2.7.1", "torchvision==0.22.1"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
