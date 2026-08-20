@@ -1339,7 +1339,7 @@ pin holds, no version drift on the CUDA pair, container reaches Celery
 - On phase completion, change its heading to `— DONE (YYYY-MM-DD)` and add
   a one-line summary + the deviation log, following the Phase 1 example.
 
-### Phase 2b: Train screen — DESIGN STARTED 2026-08-18, NOT IMPLEMENTED
+### Phase 2b: Train screen — DONE (2026-08-20)
 
 Brainstorming began on the Train screen and the `training` module. No spec
 file was written and no code exists yet; this entry records the decisions
@@ -1378,3 +1378,93 @@ and the ROADMAP entries around it). The user's call was to proceed anyway,
 on the grounds that the reference platform trained successfully on this
 same machine — so the hardware is not the suspect, and further driver-level
 investigation was explicitly ruled out as already attempted and costly.
+
+**Implemented 2026-08-20**, spec
+[2026-08-19-train-screen-design.md](docs/superpowers/specs/2026-08-19-train-screen-design.md),
+plan [2026-08-19-train-screen.md](docs/superpowers/plans/2026-08-19-train-screen.md),
+15 commits from `566ee3b` to `6ee0da6`. A dataset can now be trained into a
+`ModelVersion` from `/train`, watching the trainer's raw log stream as it
+runs. Verified end to end against the real stack: three successful runs on a
+real exported dataset (10, 50 and 100 epochs), weights landing in MinIO as
+valid `.pt` archives.
+
+**The three open questions the design entry left, and how they were settled:**
+
+- **Raw log delivery.** `TrainingRun.log_text`, a Postgres column the worker
+  appends to in chunks (~2s / ~20 lines), served by its own offset endpoint
+  rather than riding along with every status poll. Redis was rejected because
+  history would need a database copy anyway; object storage because an object
+  cannot be appended to.
+- **`ModelVersion` vs. a thin run record.** Both: `TrainingRun` is the
+  process (config, log, status, including failed attempts) and `ModelVersion`
+  the artifact, created only on SUCCEEDED or STOPPED. A run that dies
+  mid-epoch belongs in the history while having no weights at all, so folding
+  them together would make every consumer filter NULLs to learn what a row is.
+- **Where training runs.** Inside the existing `ml-worker` solo queue, not a
+  new container. Real parallelism would put two consumers on one 8 GB card
+  sized for one, and this host has already hard-rebooted under GPU pressure.
+  Annotation jobs therefore queue behind a run — a visible cost, unlike a
+  host reset. Stop is consequently cooperative, polled at epoch boundaries,
+  and the UI says so in words.
+
+**Deviation log:**
+
+- **`ml-worker` had no shared memory for training.** The first real run died
+  on its first epoch with `No space left on device` while the host had 107 GB
+  free: Docker defaults `/dev/shm` to 64 MB, and PyTorch's multi-process
+  DataLoader passes tensors through it. SAM2/SAM3 never hit this because they
+  run no multi-process DataLoader. Fixed with `shm_size: "2gb"` (`6ee0da6`).
+  The failure path itself behaved correctly — the run was marked FAILED, the
+  error stored, and all 12402 characters of log survived.
+- **The image did not contain the training code.** Discovered when the
+  container was recreated: `model_train` and the YOLO adapter existed only
+  inside the running container, put there by `docker cp` during testing, and
+  vanished on recreate. Rebuilt so the code lives in the image. Worth
+  remembering — `docker cp` is the right tool for running ml-worker tests, and
+  the wrong one for believing a feature is deployed.
+- **`torch` in the running container had drifted** to 2.13.0+cu130 while
+  `ml-worker/Dockerfile:26` pins 2.7.1+cu126. The rebuild corrected it;
+  `[tool.uv] constraint-dependencies` was added so `ultralytics` cannot drag
+  torch forward on a future lock. Verified afterwards that the matched pair
+  holds and `torchvision::nms` executes — the exact failure the pin guards.
+- **Ultralytics' `LOGGER` bypassed the log capture entirely.** Its handler
+  binds to the real `sys.stdout` object at import, so `redirect_stdout` (which
+  rebinds only the name) never reached it: epoch summaries and warnings
+  vanished while `print()` rows were captured. Found in review, reproduced,
+  fixed by attaching a forwarding handler for the run's duration (`97a6ff1`).
+- **Tests were writing to the real `endoscopy` database.**
+  `from app.db import SessionLocal` binds the name at import, bypassing
+  conftest's patching of `app.db`'s module attributes. Fixed for this plan's
+  three test files; 10 older files still use the early-binding form and were
+  left alone as out of scope. 35 orphaned MODEL_TRAIN job rows from before the
+  fix remain in the dev database.
+- **A leaked PENDING run row broke the active-run guard.** Because that guard
+  is global by design (one training run at a time on a solo worker), a test
+  row left behind would block a real user's next run, not merely the suite.
+  Fixed in `d212951`.
+- **Delete on the model versions table gained an arm/confirm step**, matching
+  `DatasetsTable`'s existing pattern — deleting a version irreversibly removes
+  its weights from storage, and two tables in one product behaving differently
+  on a destructive action is itself a defect. The plan's test asserting a
+  single-click delete was amended accordingly.
+- **The log auto-scroll was fighting the reader.** It jumped to the bottom on
+  every update, so a user inspecting an earlier epoch during a multi-hour run
+  would be yanked away on the next poll. Replaced with stick-to-bottom-only-
+  if-already-at-bottom (`1782ec4`).
+- **`DatasetRead` gained an `exported` flag** (one grouped query, no N+1), so
+  the config form can disable datasets that have no export archive. `GET
+  /jobs` has no list endpoint, so deriving it client-side was impossible.
+
+**Known limitation, not fixed:** if the worker process dies mid-run — which
+this host does under GPU pressure — the `TrainingRun` stays RUNNING forever.
+No stuck-job reconciliation exists anywhere in `tasks.py`, so this is a
+pre-existing gap the training feature inherits rather than introduces.
+
+**On the GPU risk.** Training completed three times without incident. The host
+did hard-reboot once during this work, but while the user was running SAM2,
+not training, and the journal ended on an ordinary cron line with no NVRM Xid,
+no OOM and no shutdown sequence — an abrupt power loss or full kernel hang,
+not a logged driver fault. One new data point for that open issue: `ollama`
+runs here as a systemd service holding the same RTX 2070, so VRAM has three
+consumers while `WORKER_VRAM_FRACTION = 0.8` was sized assuming only the
+desktop shares the card.
