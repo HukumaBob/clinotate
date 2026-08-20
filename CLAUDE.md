@@ -148,6 +148,24 @@ Backend tests need a second database, created once:
 docker compose exec postgres psql -U endoscopy -c "CREATE DATABASE endoscopy_test;"
 ```
 
+**Tests must never write to the real `endoscopy` database.** Use
+`import app.db as db_module` + `db_module.SessionLocal()` — never
+`from app.db import SessionLocal`, which binds the name at import time and
+bypasses conftest's patching of `app.db`'s module attributes, silently
+sending the test at the user's real data. Nine test files did exactly that
+and littered production with `hier-*`, `test-polyp-label`,
+`rank-quality-test-sequence` and `test/`-keyed frames until it was fixed in
+`1f42e1e`. Two files keep the old form deliberately
+(`test_polyp_grouping_seed.py`, `test_quality_migration.py`): they assert
+against the seeded taxonomy in a real environment and only read.
+
+If you do create rows in the real database, clean them up in the same
+session, unprompted — sweeping every table, not just the obvious ones
+(`procedures`, `categories`, `evaluation_types`, `labels`, `sequences`,
+`videos`, `frames`, `datasets`, `annotations`, `jobs`, `training_runs`,
+`model_versions`, plus MinIO prefixes). Back up to the scratchpad first and
+delete by precise predicate.
+
 Several backend test suites hit the real dev database via `TestClient`
 (not an isolated fixture) with fixed or timestamp-based emails/titles — if
 rerunning locally produces unexpected 409s or duplicate-row assertion
