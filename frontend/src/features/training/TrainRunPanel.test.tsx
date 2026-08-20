@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../shared/api/generated/schema";
-import { TrainRunPanel } from "./TrainRunPanel";
+import { shouldStickToBottom, TrainRunPanel } from "./TrainRunPanel";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
 
@@ -89,5 +89,34 @@ describe("TrainRunPanel", () => {
 
     expect(screen.queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
     expect(screen.getByText(/CUDA out of memory/)).toBeInTheDocument();
+  });
+});
+
+describe("shouldStickToBottom", () => {
+  it("returns true when scrolled exactly to the bottom", () => {
+    // scrollTop + clientHeight === scrollHeight
+    expect(shouldStickToBottom(400, 100, 500)).toBe(true);
+  });
+
+  it("returns false when scrolled up well beyond the tolerance", () => {
+    // 200px of content still below the visible area
+    expect(shouldStickToBottom(200, 100, 500)).toBe(false);
+  });
+
+  it("returns true when within the tolerance of the bottom", () => {
+    // 10px short of the bottom, tolerance is 24px by default
+    expect(shouldStickToBottom(390, 100, 500)).toBe(true);
+  });
+
+  it("returns true for the jsdom zero-height case", () => {
+    // jsdom never lays out real dimensions, so all three values default
+    // to 0; distanceFromBottom is 0, which must count as "at the bottom"
+    // rather than crash or misclassify.
+    expect(shouldStickToBottom(0, 0, 0)).toBe(true);
+  });
+
+  it("honors an explicit tolerance override", () => {
+    expect(shouldStickToBottom(350, 100, 500, 5)).toBe(false);
+    expect(shouldStickToBottom(350, 100, 500, 60)).toBe(true);
   });
 });
