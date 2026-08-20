@@ -37,7 +37,14 @@ def test_training_run_defaults():
         assert run.current_epoch == 0
         assert run.metrics == {}
     finally:
+        # session.commit() above already persisted `run` -- a bare
+        # rollback() here is a no-op on a committed row and leaks it into
+        # the shared dev database. create_training_run's "only one active
+        # run" guard is global, so a leaked PENDING row here would block a
+        # real user's next training attempt. Delete what this test created.
         session.rollback()
+        session.query(TrainingRun).filter(TrainingRun.id == run.id).delete()
+        session.commit()
         session.close()
 
 
@@ -73,5 +80,11 @@ def test_model_version_links_to_run():
         assert version.is_active is False
         assert version.training_run_id == run.id
     finally:
+        # Same no-op-rollback-after-commit issue as test_training_run_defaults:
+        # both `version` and `run` were committed above and must be deleted
+        # explicitly, in FK order (ModelVersion references TrainingRun).
         session.rollback()
+        session.query(ModelVersion).filter(ModelVersion.id == version.id).delete()
+        session.query(TrainingRun).filter(TrainingRun.id == run.id).delete()
+        session.commit()
         session.close()
