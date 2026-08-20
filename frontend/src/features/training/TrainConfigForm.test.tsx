@@ -10,6 +10,34 @@ const datasets = [
 ];
 
 describe("TrainConfigForm", () => {
+  it("preselects the first exported dataset once datasets arrive after mount", async () => {
+    // The datasets prop starts empty on every real page load: TrainPage
+    // renders this form immediately and fills `datasets` only when the
+    // async /datasets fetch resolves. A useState initializer runs once, so
+    // a default computed at mount would stay empty forever and force the
+    // user to pick a dataset by hand on every visit.
+    const { rerender } = render(
+      <TrainConfigForm datasets={[]} disabled={false} onSubmit={vi.fn()} />,
+    );
+
+    rerender(<TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()} />);
+
+    expect(await screen.findByLabelText(/dataset/i)).toHaveValue("1");
+  });
+
+  it("keeps a manual choice when the datasets list is refreshed", async () => {
+    const user = userEvent.setup();
+    const withTwoExported = [...datasets, { id: 3, name: "second", exported: true }];
+    const { rerender } = render(
+      <TrainConfigForm datasets={withTwoExported} disabled={false} onSubmit={vi.fn()} />,
+    );
+
+    await user.selectOptions(screen.getByLabelText(/dataset/i), "3");
+    rerender(<TrainConfigForm datasets={withTwoExported} disabled={false} onSubmit={vi.fn()} />);
+
+    expect(screen.getByLabelText(/dataset/i)).toHaveValue("3");
+  });
+
   it("marks datasets without an export as unselectable", () => {
     render(<TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()} />);
 

@@ -210,6 +210,10 @@ def test_create_run_refuses_a_second_active_run(monkeypatch):
         _cleanup(session, dataset.id)
         if dataset_b is not None:
             _cleanup(session, dataset_b.id, user_id)
+        else:
+            # dataset_b carries the user_id cleanup when it exists; without it
+            # the User row this test created would outlive the test.
+            _cleanup(session, dataset.id, user_id)
         session.close()
 
 

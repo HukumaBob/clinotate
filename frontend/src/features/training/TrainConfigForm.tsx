@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export interface DatasetOption {
   id: number;
@@ -26,6 +26,18 @@ export function TrainConfigForm({ datasets, disabled, onSubmit }: TrainConfigFor
   const firstExported = datasets.find((dataset) => dataset.exported);
 
   const [datasetId, setDatasetId] = useState<number | "">(firstExported?.id ?? "");
+
+  // TrainPage renders this form before its /datasets fetch resolves, so on a
+  // real page load `datasets` is still empty when the useState initializer
+  // above runs -- and an initializer runs only once. Without this effect the
+  // field stays empty even after the datasets arrive, making the user pick a
+  // dataset by hand on every visit. Only fills an *unset* field, so a manual
+  // choice survives any later refresh of the list.
+  useEffect(() => {
+    if (datasetId === "" && firstExported) {
+      setDatasetId(firstExported.id);
+    }
+  }, [datasetId, firstExported]);
   const [baseModel, setBaseModel] = useState(BASE_MODELS[0]);
   const [epochs, setEpochs] = useState(50);
   const [batch, setBatch] = useState(8);
