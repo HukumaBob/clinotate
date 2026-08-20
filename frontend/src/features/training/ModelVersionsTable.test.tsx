@@ -33,6 +33,46 @@ const twoVersions: ModelVersionRead[] = [
 ];
 
 describe("ModelVersionsTable", () => {
+  it("shows a classification model's accuracy instead of a blank mAP50", () => {
+    // mAP50 is a detection metric; a classifier never produces one.
+    // Ultralytics reports metrics/accuracy_top1 instead, and showing a dash
+    // for it would hide the only score the model actually has.
+    render(
+      <ModelVersionsTable
+        versions={[
+          {
+            ...versions[0],
+            task_type: "classification" as const,
+            metrics: { "metrics/accuracy_top1": 0.9231, "metrics/accuracy_top5": 1 },
+          },
+        ]}
+        onDownload={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("0.923")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+
+  it("labels the score column per task so mAP50 and accuracy are not confused", () => {
+    render(
+      <ModelVersionsTable
+        versions={[
+          {
+            ...versions[0],
+            task_type: "classification" as const,
+            metrics: { "metrics/accuracy_top1": 0.5 },
+          },
+        ]}
+        onDownload={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/top-1/i)).toBeInTheDocument();
+  });
+
   it("shows an empty state with no versions", () => {
     render(<ModelVersionsTable versions={[]} onDownload={vi.fn()} onDelete={vi.fn()} />);
 

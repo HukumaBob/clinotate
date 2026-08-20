@@ -168,6 +168,18 @@ def dataset_export(job_id: int) -> None:
             if wanted[name] and name not in populated
         ]
 
+        # A single-class dataset trains a model that cannot be wrong: it
+        # answers that one class every time and scores a perfect accuracy,
+        # which reads as success rather than as an absent task. Ultralytics
+        # only hints at it with `found N images in 1 classes` deep in the
+        # training log, after the epochs have already been spent.
+        if len(class_names_by_id) < 2:
+            only = next(iter(class_names_by_id.values()), "none")
+            warnings.append(
+                f"the dataset has one class ({only}); a model trained on it "
+                "cannot distinguish anything -- add a second class"
+            )
+
         warning_findings = [f for f in findings if f.kind not in _ERROR_FINDING_KINDS]
         job.payload = {
             **job.payload,

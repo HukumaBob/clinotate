@@ -10,12 +10,22 @@ interface ModelVersionsTableProps {
   onDelete: (id: number) => void;
 }
 
-function formatMap50(metrics: Record<string, unknown>): string {
-  const value = metrics["metrics/mAP50(B)"] ?? metrics["mAP50"];
-  if (typeof value !== "number") {
-    return "—";
-  }
-  return value.toFixed(3);
+/** The headline score, which differs by task: mAP50 measures how well
+ * predicted boxes overlap real ones and does not exist for a classifier,
+ * whose score is top-1 accuracy instead. Showing a dash for a classifier
+ * would hide the only number it produces. Keys are Ultralytics' own. */
+function headlineScore(
+  taskType: string,
+  metrics: Record<string, unknown>,
+): { label: string; value: string } {
+  const isClassification = taskType === "classification";
+  const raw = isClassification
+    ? metrics["metrics/accuracy_top1"] ?? metrics["accuracy_top1"]
+    : metrics["metrics/mAP50(B)"] ?? metrics["mAP50"];
+  return {
+    label: isClassification ? "top-1" : "mAP50",
+    value: typeof raw === "number" ? raw.toFixed(3) : "—",
+  };
 }
 
 export function ModelVersionsTable({ versions, onDownload, onDelete }: ModelVersionsTableProps) {
@@ -31,7 +41,7 @@ export function ModelVersionsTable({ versions, onDownload, onDelete }: ModelVers
         <tr className="border-b border-gray-800 text-gray-400">
           <th className="px-4 py-2 font-normal">Name</th>
           <th className="px-4 py-2 font-normal">Type</th>
-          <th className="px-4 py-2 font-normal">mAP50</th>
+          <th className="px-4 py-2 font-normal">Score</th>
           <th className="px-4 py-2 font-normal">Created</th>
           <th className="px-4 py-2 text-right font-normal">Actions</th>
         </tr>
@@ -42,7 +52,18 @@ export function ModelVersionsTable({ versions, onDownload, onDelete }: ModelVers
             <td className="px-4 py-2">{version.name}</td>
             <td className="px-4 py-2 text-gray-400">{version.task_type}</td>
             <td className="px-4 py-2 text-gray-400">
-              {formatMap50(version.metrics as Record<string, unknown>)}
+              {(() => {
+                const score = headlineScore(
+                  version.task_type,
+                  version.metrics as Record<string, unknown>,
+                );
+                return (
+                  <>
+                    {score.value}{" "}
+                    <span className="text-xs text-gray-600">{score.label}</span>
+                  </>
+                );
+              })()}
             </td>
             <td className="px-4 py-2 text-gray-400">
               {new Date(version.created_at).toLocaleDateString()}

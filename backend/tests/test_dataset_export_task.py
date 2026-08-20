@@ -377,3 +377,47 @@ def test_an_empty_val_split_is_warned_about_on_the_job(monkeypatch):
     finally:
         session.rollback()
         session.close()
+
+
+def test_a_single_class_dataset_is_warned_about(monkeypatch):
+    """One class means the model cannot be wrong, and learns nothing.
+
+    A classifier with a single class answers it every time and scores 1.0
+    accuracy -- which reads as a perfect model rather than as an absent
+    task. The user hit this after a full 100-epoch run: the only clue was
+    `found 113 images in 1 classes` buried in the training log. Say it at
+    export time instead.
+    """
+    from app.db import SessionLocal
+
+    from app.worker import export_task as module
+
+    session = SessionLocal()
+    try:
+        dataset, frame, annotation, user_id = _build_dataset(
+            session, "single", task_type=TaskType.CLASSIFICATION,
+            annotation_scope=AnnotationScope.FRAME,
+        )
+        storage = _FakeStorage()
+        storage.put(annotation.storage_key, _png())
+        storage.put(frame.storage_key, _png())
+        job = Job(job_type=JobType.DATASET_EXPORT, payload={
+            "dataset_id": dataset.id, "include_images": True}, created_by_id=user_id)
+        session.add(job)
+        session.commit()
+        job_id = job.id
+
+        monkeypatch.setattr(module, "get_storage_service", lambda: storage)
+        module.dataset_export(job_id)
+
+        refreshed = SessionLocal()
+        try:
+            done = refreshed.get(Job, job_id)
+            assert done.status == JobStatus.SUCCEEDED, done.error
+            warnings = done.payload.get("warnings", [])
+            assert any("one class" in w for w in warnings), warnings
+        finally:
+            refreshed.close()
+    finally:
+        session.rollback()
+        session.close()
