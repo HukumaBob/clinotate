@@ -19,6 +19,19 @@ const versions: ModelVersionRead[] = [
   },
 ];
 
+const twoVersions: ModelVersionRead[] = [
+  ...versions,
+  {
+    id: 5,
+    training_run_id: 8,
+    name: "yolo11s-run8",
+    task_type: "detection",
+    metrics: { "metrics/mAP50(B)": 0.55 },
+    is_active: false,
+    created_at: "2026-08-19T11:00:00Z",
+  },
+];
+
 describe("ModelVersionsTable", () => {
   it("shows an empty state with no versions", () => {
     render(<ModelVersionsTable versions={[]} onDownload={vi.fn()} onDelete={vi.fn()} />);
@@ -54,9 +67,33 @@ describe("ModelVersionsTable", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /download/i }));
-    await user.click(screen.getByRole("button", { name: /delete/i }));
-
     expect(onDownload).toHaveBeenCalledWith(4);
+
+    await user.click(screen.getByRole("button", { name: /delete/i }));
+    expect(onDelete).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /confirm/i }));
     expect(onDelete).toHaveBeenCalledWith(4);
+  });
+
+  it("arming one row's delete does not arm the others", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(
+      <ModelVersionsTable versions={twoVersions} onDownload={vi.fn()} onDelete={onDelete} />,
+    );
+
+    const deleteButtons = screen.getAllByRole("button", { name: /^delete$/i });
+    expect(deleteButtons).toHaveLength(2);
+
+    await user.click(deleteButtons[0]);
+
+    expect(screen.getByRole("button", { name: /confirm/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^delete$/i })).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: /confirm/i }));
+
+    expect(onDelete).toHaveBeenCalledWith(4);
+    expect(onDelete).not.toHaveBeenCalledWith(5);
   });
 });

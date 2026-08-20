@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { components } from "../../shared/api/generated/schema";
 
 type ModelVersionRead = components["schemas"]["ModelVersionRead"];
@@ -17,6 +19,8 @@ function formatMap50(metrics: Record<string, unknown>): string {
 }
 
 export function ModelVersionsTable({ versions, onDownload, onDelete }: ModelVersionsTableProps) {
+  const [armed, setArmed] = useState<number | null>(null);
+
   if (versions.length === 0) {
     return <p className="text-sm text-gray-500">No trained models yet.</p>;
   }
@@ -51,13 +55,26 @@ export function ModelVersionsTable({ versions, onDownload, onDelete }: ModelVers
               >
                 Download
               </button>
-              <button
-                type="button"
-                className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-red-400"
-                onClick={() => onDelete(version.id)}
-              >
-                Delete
-              </button>
+              {armed === version.id ? (
+                <button
+                  type="button"
+                  className="rounded bg-red-700 px-2 py-1 text-xs text-white"
+                  onClick={() => {
+                    onDelete(version.id);
+                    setArmed(null);
+                  }}
+                >
+                  Confirm
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300"
+                  onClick={() => setArmed(version.id)}
+                >
+                  Delete
+                </button>
+              )}
             </td>
           </tr>
         ))}
