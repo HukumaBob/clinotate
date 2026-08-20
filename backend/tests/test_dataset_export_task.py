@@ -125,14 +125,15 @@ def _png(height=80, width=100, x=10, y=20, w=30, h=40):
     return cv2.imencode(".png", mask)[1].tobytes()
 
 
-def _build_dataset(session, tag, include_mask=True):
+def _build_dataset(session, tag, include_mask=True, task_type=TaskType.DETECTION,
+                   annotation_scope=AnnotationScope.REGION):
     procedure = Procedure(name=f"xt-{tag}-proc")
     session.add(procedure)
     session.flush()
     category = Category(name=f"xt-{tag}-cat", procedure_id=procedure.id)
     session.add(category)
     session.flush()
-    region = EvaluationType(name=f"xt-{tag}-et", annotation_scope=AnnotationScope.REGION)
+    region = EvaluationType(name=f"xt-{tag}-et", annotation_scope=annotation_scope)
     session.add(region)
     session.flush()
     video = Video(title=f"xt-{tag}-v", storage_key=f"xt/{tag}.mp4", checksum=f"xt-{tag}",
@@ -160,7 +161,7 @@ def _build_dataset(session, tag, include_mask=True):
     session.add(annotation)
     session.flush()
     dataset = Dataset(
-        name=f"xt-{tag}-ds", task_type=TaskType.DETECTION, taxonomy_version=1,
+        name=f"xt-{tag}-ds", task_type=task_type, taxonomy_version=1,
         split_config={"train": 70, "val": 20}, grouping_overrides={},
         excluded_label_ids=[], class_limits={}, balance_metrics={}, created_by_id=user_id,
     )
@@ -273,6 +274,104 @@ def test_findings_abort_the_export_and_are_recorded_on_the_job(monkeypatch):
             findings = done.payload["findings"]
             assert any(f["kind"] == "missing_mask" for f in findings)
             assert done.error and "finding" in done.error.lower()
+        finally:
+            refreshed.close()
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_a_classification_export_uses_the_folder_per_class_layout(monkeypatch):
+    """YOLO classification reads a directory, never a data.yaml.
+
+    Its class names come from the subdirectory names under train/, so a
+    classification dataset has to ship as train/<class>/<image>.png with no
+    labels/ at all. Exporting the detection layout instead produced an
+    archive Ultralytics could not read: it reported a missing images/val
+    path, which says nothing about the real mismatch.
+    """
+    from app.db import SessionLocal
+
+    from app.worker import export_task as module
+
+    session = SessionLocal()
+    try:
+        dataset, frame, annotation, user_id = _build_dataset(
+            session, "cls", task_type=TaskType.CLASSIFICATION,
+            annotation_scope=AnnotationScope.FRAME,
+        )
+        storage = _FakeStorage()
+        storage.put(annotation.storage_key, _png())
+        storage.put(frame.storage_key, _png())
+        job = Job(job_type=JobType.DATASET_EXPORT, payload={
+            "dataset_id": dataset.id, "include_images": True}, created_by_id=user_id)
+        session.add(job)
+        session.commit()
+        job_id = job.id
+
+        monkeypatch.setattr(module, "get_storage_service", lambda: storage)
+        module.dataset_export(job_id)
+
+        refreshed = SessionLocal()
+        try:
+            done = refreshed.get(Job, job_id)
+            assert done.status == JobStatus.SUCCEEDED, done.error
+            with zipfile.ZipFile(io.BytesIO(storage.uploaded[done.result_ref])) as archive:
+                names = archive.namelist()
+                assert not any(n.startswith("labels/") for n in names), names
+                assert "data.yaml" not in names, names
+                images = [n for n in names if n.endswith(".png")]
+                assert images, names
+                # train/<class>/<file>.png -- the class name is the folder.
+                for path in images:
+                    parts = path.split("/")
+                    assert len(parts) == 3, path
+                    assert parts[0] in {"train", "val", "test"}, path
+                    assert parts[1] == f"xt-cls-polyp", path
+        finally:
+            refreshed.close()
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_an_empty_val_split_is_warned_about_on_the_job(monkeypatch):
+    """A train-only dataset exports fine but cannot be validated.
+
+    Splits are assigned per grouping unit -- a whole video, so one procedure
+    never straddles train and val and validation cannot measure memorisation
+    of it. A dataset built from a single unit therefore lands entirely in
+    train. Ultralytics only discovers this at training time, reporting a
+    missing images/val directory, which reads as a broken archive rather
+    than a dataset that has nothing to validate against. Warn on the job so
+    the user sees it while still looking at the dataset.
+    """
+    from app.db import SessionLocal
+
+    from app.worker import export_task as module
+
+    session = SessionLocal()
+    try:
+        dataset, frame, annotation, user_id = _build_dataset(session, "emptyval")
+        storage = _FakeStorage()
+        storage.put(annotation.storage_key, _png())
+        storage.put(frame.storage_key, _png())
+        job = Job(job_type=JobType.DATASET_EXPORT, payload={
+            "dataset_id": dataset.id, "include_images": True}, created_by_id=user_id)
+        session.add(job)
+        session.commit()
+        job_id = job.id
+
+        monkeypatch.setattr(module, "get_storage_service", lambda: storage)
+        module.dataset_export(job_id)
+
+        refreshed = SessionLocal()
+        try:
+            done = refreshed.get(Job, job_id)
+            # The export still succeeds -- an unvalidatable dataset is legal.
+            assert done.status == JobStatus.SUCCEEDED, done.error
+            warnings = done.payload.get("warnings", [])
+            assert any("val" in w for w in warnings), warnings
         finally:
             refreshed.close()
     finally:

@@ -202,3 +202,71 @@ def test_relative_output_dir_still_yields_correct_weights_path(monkeypatch, tmp_
     # all, mirroring what get_save_dir() does to a relative project path.
     assert result.weights_path == weights_dir / "best.pt"
     assert result.weights_path.exists()
+
+
+def test_task_type_picks_the_weights_and_the_data_argument(monkeypatch, tmp_path):
+    """Each task trains from its own pretrained weights and its own data shape.
+
+    Detection weights cannot train a classifier, and YOLO classification is
+    handed a DIRECTORY (its subfolder names are the classes) where detection
+    and segmentation are handed a data.yaml. Running everything as detection
+    made a classification run die inside Ultralytics complaining about a
+    missing images/val path -- a message that says nothing about the real
+    mismatch.
+    """
+    from app.training_adapter import TrainingRequest
+    from app.ultralytics_yolo_adapter import UltralyticsYoloAdapter
+
+    seen: dict[str, dict] = {}
+
+    cases = [
+        ("detection", "yolo11n.pt", "yolo11n.pt", True),
+        ("segmentation", "yolo11n.pt", "yolo11n-seg.pt", True),
+        ("classification", "yolo11n.pt", "yolo11n-cls.pt", False),
+    ]
+
+    for task_type, requested, expected_weights, expects_yaml in cases:
+        captured = {}
+
+        class _Recorder:
+            def __init__(self, base_model):
+                captured["base_model"] = base_model
+                self._callbacks = {}
+                self.trainer = _FakeTrainer(tmp_path / task_type / "weights")
+
+            def add_callback(self, event, fn):
+                self._callbacks[event] = fn
+
+            def train(self, **kwargs):
+                captured["data"] = kwargs["data"]
+                self.trainer.best.parent.mkdir(parents=True, exist_ok=True)
+                self.trainer.best.write_bytes(b"w")
+                return _FakeResults()
+
+        monkeypatch.setattr("app.ultralytics_yolo_adapter.YOLO", _Recorder)
+
+        dataset_dir = tmp_path / f"ds-{task_type}"
+        dataset_dir.mkdir(exist_ok=True)
+        UltralyticsYoloAdapter().train(
+            TrainingRequest(
+                dataset_dir=dataset_dir,
+                task_type=task_type,
+                base_model=requested,
+                config={"epochs": 1},
+                output_dir=tmp_path / f"out-{task_type}",
+            ),
+            on_log=lambda line: None,
+            on_epoch=lambda e, t: None,
+            should_stop=lambda: False,
+        )
+        seen[task_type] = dict(captured)
+
+    assert seen["detection"]["base_model"] == "yolo11n.pt"
+    assert seen["segmentation"]["base_model"] == "yolo11n-seg.pt"
+    assert seen["classification"]["base_model"] == "yolo11n-cls.pt"
+
+    assert seen["detection"]["data"].endswith("data.yaml")
+    assert seen["segmentation"]["data"].endswith("data.yaml")
+    # Classification gets the directory itself, not a yaml inside it.
+    assert not seen["classification"]["data"].endswith("data.yaml")
+    assert seen["classification"]["data"].endswith("ds-classification")

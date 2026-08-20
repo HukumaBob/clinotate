@@ -69,12 +69,46 @@ class _ForwardingLogHandler(logging.Handler):
         self._on_log(self.format(record))
 
 
+# Ultralytics ships a separate pretrained checkpoint per task, and the
+# suffix is part of the filename: yolo11n.pt detects, yolo11n-seg.pt
+# segments, yolo11n-cls.pt classifies. Handing detection weights to a
+# classification run does not fail cleanly -- it trains the wrong head.
+_TASK_SUFFIX = {"segmentation": "-seg", "classification": "-cls"}
+
+
+def weights_for_task(base_model: str, task_type: str) -> str:
+    """Return `base_model` carrying the suffix its task requires.
+
+    A caller that already named a task-specific checkpoint keeps it, so an
+    explicit yolo11m-seg.pt is never rewritten.
+    """
+    suffix = _TASK_SUFFIX.get(task_type, "")
+    if not suffix:
+        return base_model
+    stem, dot, extension = base_model.rpartition(".")
+    if not dot:
+        return f"{base_model}{suffix}"
+    if stem.endswith(suffix):
+        return base_model
+    return f"{stem}{suffix}.{extension}"
+
+
 class UltralyticsYoloAdapter:
     name = "ultralytics_yolo"
 
     def train(self, request: TrainingRequest, on_log, on_epoch, should_stop) -> TrainingResult:
         total_epochs = int(request.config.get("epochs", 1))
-        model = YOLO(request.base_model)
+        model = YOLO(weights_for_task(request.base_model, request.task_type))
+
+        # Classification reads a directory whose subfolders name the classes;
+        # detection and segmentation read a data.yaml describing images/ and
+        # labels/. Passing a data.yaml path for a classification run is what
+        # produced the "images not found, missing path .../images/val" error.
+        data_argument = (
+            str(request.dataset_dir)
+            if request.task_type == "classification"
+            else str(request.dataset_dir / "data.yaml")
+        )
 
         def _on_epoch_end(trainer):
             epoch = int(getattr(trainer, "epoch", 0)) + 1
@@ -106,7 +140,7 @@ class UltralyticsYoloAdapter:
                     # labels/<split>/ layout, which data.yaml's own
                     # train/val/test entries (images/train etc.) assume sit
                     # alongside it.
-                    data=str(request.dataset_dir / "data.yaml"),
+                    data=data_argument,
                     epochs=total_epochs,
                     batch=int(request.config.get("batch", 8)),
                     imgsz=int(request.config.get("imgsz", 640)),

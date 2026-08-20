@@ -21,7 +21,7 @@ from app.datasets.export import (
     collect_export_items,
     write_yolo_label,
 )
-from app.datasets.models import Dataset
+from app.datasets.models import Dataset, TaskType
 from app.jobs.models import Job, JobStatus
 from app.storage import get_storage_service
 from app.worker.celery_app import celery_app
@@ -95,19 +95,40 @@ def dataset_export(job_id: int) -> None:
             session.commit()
             return
 
+        # YOLO classification reads a DIRECTORY whose subfolder names are the
+        # class names (train/<class>/<image>.png) and never a data.yaml, while
+        # detection and segmentation read images/ + labels/ + data.yaml. One
+        # layout cannot serve both: exporting the detection shape for a
+        # classification dataset yields an archive Ultralytics rejects with a
+        # missing-images/val error that hides the real mismatch.
+        is_classification = dataset.task_type == TaskType.CLASSIFICATION
+
         with tempfile.NamedTemporaryFile(suffix=".zip") as archive_tmp:
             with zipfile.ZipFile(archive_tmp, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr("data.yaml", _data_yaml(class_names_by_id))
+                if not is_classification:
+                    archive.writestr("data.yaml", _data_yaml(class_names_by_id))
 
                 total = len(items)
                 for index, item in enumerate(items, start=1):
                     name = archive_name(item)
-                    label_text = write_yolo_label(item, dataset.task_type)
-                    archive.writestr(f"labels/{item.split}/{name}.txt", label_text)
 
-                    if include_images:
-                        image_bytes = storage.download(item.storage_key)
-                        archive.writestr(f"images/{item.split}/{name}.png", image_bytes)
+                    if is_classification:
+                        # A classification frame carries exactly one label --
+                        # export.py already reports a multi_label_classification
+                        # finding otherwise, and those abort the export.
+                        if include_images and item.entries:
+                            class_name = item.entries[0].class_name
+                            image_bytes = storage.download(item.storage_key)
+                            archive.writestr(
+                                f"{item.split}/{class_name}/{name}.png", image_bytes
+                            )
+                    else:
+                        label_text = write_yolo_label(item, dataset.task_type)
+                        archive.writestr(f"labels/{item.split}/{name}.txt", label_text)
+
+                        if include_images:
+                            image_bytes = storage.download(item.storage_key)
+                            archive.writestr(f"images/{item.split}/{name}.png", image_bytes)
 
                     job.progress = int(index / total * 100) if total else 100
                     session.commit()
@@ -123,9 +144,34 @@ def dataset_export(job_id: int) -> None:
         archive_key = f"datasets/{dataset_id}/export-{timestamp}.zip"
         storage.upload(archive_key, archive_bytes, "application/zip")
 
+        # Splits are assigned per grouping unit -- a whole video, so one
+        # procedure never straddles train and val and validation cannot
+        # measure memorisation of it. A dataset built from a single unit
+        # therefore lands entirely in train, and Ultralytics only notices at
+        # training time, reporting a missing images/val directory that reads
+        # as a broken archive. Say it here, while the user is still looking
+        # at the dataset. Not an error: a train-only export is legal, it
+        # simply cannot be validated.
+        populated = {item.split for item in items}
+        split_config = dataset.split_config or {}
+        train_pct = split_config.get("train", 70)
+        val_pct = split_config.get("val", 20)
+        wanted = {
+            "train": train_pct > 0,
+            "val": val_pct > 0,
+            "test": max(100 - train_pct - val_pct, 0) > 0,
+        }
+        warnings = [
+            f"{name} split is empty: the dataset's frames all fall in one "
+            "grouping unit, so there is nothing to validate against"
+            for name in ("train", "val", "test")
+            if wanted[name] and name not in populated
+        ]
+
         warning_findings = [f for f in findings if f.kind not in _ERROR_FINDING_KINDS]
         job.payload = {
             **job.payload,
+            "warnings": warnings,
             "findings": [
                 {
                     "kind": f.kind,
