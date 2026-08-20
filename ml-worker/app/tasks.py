@@ -1,7 +1,12 @@
 import io
 import os
 import sys
+import tempfile
+import threading
+import time
+import zipfile
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -10,12 +15,24 @@ from PIL import Image
 from app.celery_app import WORKER_VRAM_FRACTION as _WORKER_VRAM_FRACTION
 from app.celery_app import celery_app
 from app.db import SessionLocal
-from app.models import Annotation, AnnotationStatus, AnnotationType, Frame, Job, JobStatus, Label
+from app.models import (
+    Annotation,
+    AnnotationStatus,
+    AnnotationType,
+    Frame,
+    Job,
+    JobStatus,
+    Label,
+    ModelVersion,
+    TrainingRun,
+    TrainingRunStatus,
+)
 from app.quality_adapter import QualityAdapter
 from app.sam2_adapter import Sam2Adapter
 from app.sam3_adapter import Sam3Adapter
 from app.similarity_adapter import SimilarityAdapter
 from app.storage import get_storage_service
+from app.training_adapter import TrainingRequest
 from app.union_find import cluster_by_threshold
 
 
@@ -684,3 +701,189 @@ def _restart_worker_process_after_track_failure() -> None:
     sys.stderr.flush()
     sys.stdout.flush()
     os._exit(1)
+
+
+LOG_FLUSH_SECONDS = 2.0
+LOG_FLUSH_LINES = 20
+
+
+class _LogBuffer:
+    """Accumulates log lines and flushes them to TrainingRun.log_text.
+
+    Flushed on a cadence rather than per line: a multi-hour run at ~30
+    single-row UPDATEs per minute costs Postgres nothing, while one UPDATE
+    per line would not.
+
+    Thread safety: UltralyticsYoloAdapter's _ForwardingLogHandler.emit()
+    calls on_log directly, outside _LineForwardingStream's lock, and
+    stdlib logging can emit from a thread other than the one running
+    train() (a DataLoader or callback thread). on_log here is this
+    buffer's add(), which both mutates self._lines and -- on flush --
+    commits self._session, a SQLAlchemy Session that is explicitly NOT
+    thread-safe. Two threads committing the same session concurrently is
+    a real corruption/exception risk, not a theoretical one, so add() and
+    flush() both hold self._lock for their entire body: the buffer
+    mutation and the session commit are serialized regardless of which
+    thread calls in. The lock lives here, not in the adapter, because the
+    shared state that needs protecting is this buffer and this session --
+    not the call site.
+    """
+
+    def __init__(self, session, run, flush_seconds=LOG_FLUSH_SECONDS, flush_lines=LOG_FLUSH_LINES):
+        self._session = session
+        self._run = run
+        self._lines: list[str] = []
+        self._flush_seconds = flush_seconds
+        self._flush_lines = flush_lines
+        self._last_flush = time.monotonic()
+        self._lock = threading.Lock()
+
+    def add(self, line: str) -> None:
+        with self._lock:
+            self._lines.append(line)
+            elapsed = time.monotonic() - self._last_flush
+            if len(self._lines) >= self._flush_lines or elapsed >= self._flush_seconds:
+                self._flush_locked()
+
+    def flush(self) -> None:
+        with self._lock:
+            self._flush_locked()
+
+    def _flush_locked(self) -> None:
+        """Caller must hold self._lock."""
+        if not self._lines:
+            return
+        chunk = "\n".join(self._lines) + "\n"
+        self._run.log_text = (self._run.log_text or "") + chunk
+        self._session.commit()
+        self._lines = []
+        self._last_flush = time.monotonic()
+
+
+@celery_app.task(name="model_train")
+def model_train(job_id: int, adapter=None) -> None:
+    """Train a model on an exported dataset.
+
+    Runs on this worker's solo pool, which means annotation jobs queue
+    behind it -- the accepted cost of one GPU. Stopping is cooperative:
+    revoke(terminate=True) on a solo worker would SIGTERM the container,
+    so the adapter polls TrainingRun.stop_requested at epoch boundaries.
+    """
+    session = SessionLocal()
+    job = session.get(Job, job_id)
+    if job is None:
+        session.close()
+        return
+
+    run = session.get(TrainingRun, job.payload["training_run_id"])
+    if run is None:
+        job.status = JobStatus.FAILED
+        job.error = f"TrainingRun {job.payload.get('training_run_id')} not found"
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
+        session.close()
+        return
+
+    if adapter is None:
+        from app.ultralytics_yolo_adapter import UltralyticsYoloAdapter
+
+        adapter = UltralyticsYoloAdapter()
+
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime.now(timezone.utc)
+    run.status = TrainingRunStatus.RUNNING
+    run.started_at = job.started_at
+    session.commit()
+
+    buffer = _LogBuffer(session, run)
+    storage = get_storage_service()
+
+    def _on_log(line: str) -> None:
+        buffer.add(line)
+
+    def _on_epoch(epoch: int, total: int) -> None:
+        buffer.flush()
+        run.current_epoch = epoch
+        run.total_epochs = total
+        job.progress = int((epoch / total) * 100) if total else 0
+        _record_vram_usage(job)
+        session.commit()
+
+    def _should_stop() -> bool:
+        session.refresh(run)
+        return bool(run.stop_requested)
+
+    try:
+        with tempfile.TemporaryDirectory() as workdir:
+            work = Path(workdir)
+            dataset_dir = work / "dataset"
+            dataset_dir.mkdir()
+            output_dir = work / "output"
+            output_dir.mkdir()
+
+            archive_bytes = storage.download(job.payload["export_key"])
+            archive_path = work / "dataset.zip"
+            archive_path.write_bytes(archive_bytes)
+            with zipfile.ZipFile(archive_path) as archive:
+                archive.extractall(dataset_dir)
+
+            result = adapter.train(
+                TrainingRequest(
+                    dataset_dir=dataset_dir,
+                    task_type=run.task_type.value,
+                    base_model=run.base_model,
+                    config=run.config,
+                    output_dir=output_dir,
+                ),
+                on_log=_on_log,
+                on_epoch=_on_epoch,
+                should_stop=_should_stop,
+            )
+
+            buffer.flush()
+
+            storage_key = f"models/{run.id}/{Path(result.weights_path).name}"
+            storage.upload(
+                storage_key,
+                Path(result.weights_path).read_bytes(),
+                "application/octet-stream",
+            )
+
+        version = ModelVersion(
+            training_run_id=run.id,
+            name=f"{run.base_model.rsplit('.', 1)[0]}-run{run.id}",
+            task_type=run.task_type,
+            storage_key=storage_key,
+            metrics=result.metrics,
+        )
+        session.add(version)
+
+        run.status = (
+            TrainingRunStatus.STOPPED if run.stop_requested else TrainingRunStatus.SUCCEEDED
+        )
+        run.metrics = result.metrics
+        run.finished_at = datetime.now(timezone.utc)
+        job.status = JobStatus.SUCCEEDED
+        job.progress = 100
+        job.result_ref = storage_key
+        job.finished_at = run.finished_at
+        session.commit()
+    except Exception as exc:  # noqa: BLE001 -- recorded, not swallowed
+        # buffer.flush() before rollback: the log lines already committed
+        # by earlier flushes are safe, but anything still buffered must be
+        # written before the rollback below discards any uncommitted ORM
+        # state, matching the rollback-then-refetch pattern every other
+        # task in this file uses on failure (e.g. run_sam2_predict above).
+        buffer.flush()
+        session.rollback()
+        job = session.get(Job, job_id)
+        run = session.get(TrainingRun, job.payload["training_run_id"])
+        run.status = TrainingRunStatus.FAILED
+        run.error = str(exc)[:2000]
+        run.finished_at = datetime.now(timezone.utc)
+        job.status = JobStatus.FAILED
+        job.error = str(exc)[:2000]
+        job.finished_at = run.finished_at
+        session.commit()
+    finally:
+        session.close()

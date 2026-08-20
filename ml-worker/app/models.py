@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -14,6 +14,7 @@ class JobType(str, enum.Enum):
     SAM2_TRACK = "sam2_track"
     RANK_QUALITY = "rank_quality"
     FIND_SIMILAR = "find_similar"
+    MODEL_TRAIN = "model_train"
 
 
 class JobStatus(str, enum.Enum):
@@ -139,6 +140,88 @@ class Annotation(Base):
     # Label.procedure_id above — this module has no duplicate Job table
     # mapping usable as an FK target within this process's metadata.
     job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class TaskType(str, enum.Enum):
+    """Duplicate of backend/app/datasets/models.py's TaskType — member
+    names must match the real Postgres enum labels exactly."""
+
+    DETECTION = "detection"
+    SEGMENTATION = "segmentation"
+    CLASSIFICATION = "classification"
+
+
+class TrainingRunStatus(str, enum.Enum):
+    """Deliberately parallel to JobStatus rather than reusing it: a run can
+    end as STOPPED, which is neither success nor failure, and widening an
+    enum shared by every job type to serve one of them is worse than a
+    neighbouring enum."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+
+class TrainingRun(Base):
+    """One attempt at training, successful or not.
+
+    Kept separate from ModelVersion because a run that dies in epoch three
+    still belongs in the history table while having no weights at all.
+    """
+
+    __tablename__ = "training_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Plain int, not a ForeignKey("datasets.id"): same reasoning as
+    # Label.category_id above -- ml-worker has no duplicate `datasets`
+    # table mapping, and declaring an unresolvable FK breaks SQLAlchemy's
+    # mapper configuration for the whole Base metadata. The real FK
+    # constraint lives in the backend's migration-owned schema.
+    dataset_id: Mapped[int] = mapped_column(Integer)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    adapter: Mapped[str] = mapped_column(String(100))
+    base_model: Mapped[str] = mapped_column(String(200))
+    task_type: Mapped[TaskType] = mapped_column(Enum(TaskType))
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[TrainingRunStatus] = mapped_column(
+        Enum(TrainingRunStatus), default=TrainingRunStatus.PENDING
+    )
+    stop_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Appended in chunks by the worker (~2s or ~20 lines), never per line.
+    log_text: Mapped[str] = mapped_column(Text, default="")
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    current_epoch: Mapped[int] = mapped_column(Integer, default=0)
+    total_epochs: Mapped[int] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Plain int, not a ForeignKey("users.id"): same reasoning as
+    # dataset_id above -- ml-worker has no duplicate `users` table mapping.
+    created_by_id: Mapped[int] = mapped_column(Integer)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class ModelVersion(Base):
+    """Trained weights worth keeping. Created only when a run reaches
+    SUCCEEDED or STOPPED -- the Results screen reads this table and never
+    needs to know that training exists."""
+
+    __tablename__ = "model_versions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    training_run_id: Mapped[int] = mapped_column(ForeignKey("training_runs.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(200))
+    task_type: Mapped[TaskType] = mapped_column(Enum(TaskType))
+    storage_key: Mapped[str] = mapped_column(String(500))
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
