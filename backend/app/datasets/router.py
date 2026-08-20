@@ -20,6 +20,7 @@ from app.jobs.schemas import JobRead
 from app.media.models import Frame
 from app.storage import StorageService, get_storage_service
 from app.taxonomy.hierarchy import GroupingRules
+from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 from app.worker.export_task import dataset_export
 
 router = APIRouter(prefix="/datasets", tags=["datasets"], dependencies=[Depends(get_current_user)])
@@ -244,9 +245,65 @@ def download_export(
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_dataset(dataset_id: int, session: Session = Depends(get_session)) -> None:
+    """Delete a dataset, and with it any training runs that left nothing behind.
+
+    `training_runs.dataset_id` is a real foreign key, so a dataset that was
+    ever trained on cannot simply be dropped -- Postgres raises, and the
+    endpoint used to answer 500. What actually deserves protecting is not
+    the fact that training happened but the artifact it produced: a
+    `ModelVersion` is the only record of where a set of weights came from.
+    So a run holding no ModelVersion (it failed, or its weights were
+    deleted afterwards) is deleted along with the dataset, while a run that
+    still owns weights refuses the delete and names them. Blocking on runs
+    alone would tell the user to remove models that no longer exist.
+    """
     dataset = session.get(Dataset, dataset_id)
     if dataset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+
+    active = (
+        session.query(TrainingRun)
+        .filter(
+            TrainingRun.dataset_id == dataset_id,
+            TrainingRun.status.in_(
+                (TrainingRunStatus.PENDING, TrainingRunStatus.RUNNING)
+            ),
+        )
+        .first()
+    )
+    if active is not None:
+        # The worker is reading this dataset's export archive right now.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Training run {active.id} is still {active.status.value} on this "
+                "dataset. Stop it before deleting."
+            ),
+        )
+
+    run_ids = [
+        row.id
+        for row in session.query(TrainingRun.id).filter(TrainingRun.dataset_id == dataset_id)
+    ]
+    if run_ids:
+        blocking = (
+            session.query(ModelVersion)
+            .filter(ModelVersion.training_run_id.in_(run_ids))
+            .all()
+        )
+        if blocking:
+            names = ", ".join(sorted(version.name for version in blocking))
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"This dataset trained {len(blocking)} model version(s) that still "
+                    f"exist: {names}. Delete them first."
+                ),
+            )
+        session.query(TrainingRun).filter(TrainingRun.dataset_id == dataset_id).delete(
+            synchronize_session=False
+        )
+
     session.query(DatasetItem).filter(DatasetItem.dataset_id == dataset_id).delete()
     session.delete(dataset)
     session.commit()

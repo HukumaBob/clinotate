@@ -3032,6 +3032,7 @@
           "datasets"
         ],
         "summary": "Delete Dataset",
+        "description": "Delete a dataset, and with it any training runs that left nothing behind.\n\n`training_runs.dataset_id` is a real foreign key, so a dataset that was\never trained on cannot simply be dropped -- Postgres raises, and the\nendpoint used to answer 500. What actually deserves protecting is not\nthe fact that training happened but the artifact it produced: a\n`ModelVersion` is the only record of where a set of weights came from.\nSo a run holding no ModelVersion (it failed, or its weights were\ndeleted afterwards) is deleted along with the dataset, while a run that\nstill owns weights refuses the delete and names them. Blocking on runs\nalone would tell the user to remove models that no longer exist.",
         "operationId": "delete_dataset_datasets__dataset_id__delete",
         "security": [
           {

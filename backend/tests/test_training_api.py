@@ -199,3 +199,112 @@ def test_models_list_is_empty_initially():
     response = client.get("/training/models", headers=headers)
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+def _make_run(session, dataset, user_id, status=TrainingRunStatus.SUCCEEDED):
+    run = TrainingRun(
+        dataset_id=dataset.id,
+        adapter="ultralytics_yolo",
+        base_model="yolo11n.pt",
+        task_type=dataset.task_type,
+        config={"epochs": 1},
+        status=status,
+        total_epochs=1,
+        created_by_id=user_id,
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def test_deleting_a_dataset_whose_runs_left_no_model_succeeds():
+    """Training alone must not strand a dataset.
+
+    A run that produced no ModelVersion -- it failed, or its weights were
+    deleted later -- holds nothing worth protecting. Blocking on the mere
+    existence of a run would tell the user to "delete the models first"
+    when there are no models to delete, which is exactly the dead end the
+    first version of this rule created.
+    """
+    headers = _register_and_login("del-dataset-norun@example.com")
+    session = _session()
+    try:
+        user_id = session.execute(sa.text("SELECT id FROM users ORDER BY id DESC LIMIT 1")).scalar()
+        dataset = _make_dataset(session, user_id)
+        run = _make_run(session, dataset, user_id)
+        dataset_id, run_id = dataset.id, run.id
+    finally:
+        session.close()
+
+    response = client.delete(f"/datasets/{dataset_id}", headers=headers)
+    assert response.status_code == 204
+
+    session = _session()
+    try:
+        assert session.get(Dataset, dataset_id) is None
+        # The run goes with it -- nothing references it any more.
+        assert session.get(TrainingRun, run_id) is None
+    finally:
+        session.close()
+
+
+def test_deleting_a_dataset_with_a_trained_model_is_refused():
+    headers = _register_and_login("del-dataset-model@example.com")
+    session = _session()
+    try:
+        user_id = session.execute(sa.text("SELECT id FROM users ORDER BY id DESC LIMIT 1")).scalar()
+        dataset = _make_dataset(session, user_id)
+        run = _make_run(session, dataset, user_id)
+        version = ModelVersion(
+            training_run_id=run.id,
+            name="keep-me",
+            task_type=dataset.task_type,
+            storage_key=f"models/{run.id}/best.pt",
+            metrics={},
+        )
+        session.add(version)
+        session.commit()
+        dataset_id, version_id, run_id = dataset.id, version.id, run.id
+    finally:
+        session.close()
+
+    response = client.delete(f"/datasets/{dataset_id}", headers=headers)
+    assert response.status_code == 409
+    assert "keep-me" in response.json()["detail"]
+
+    session = _session()
+    try:
+        assert session.get(Dataset, dataset_id) is not None
+        session.query(ModelVersion).filter_by(id=version_id).delete()
+        session.query(TrainingRun).filter_by(id=run_id).delete()
+        session.query(Dataset).filter_by(id=dataset_id).delete()
+        session.commit()
+    finally:
+        session.close()
+
+
+def test_deleting_a_dataset_with_an_active_run_is_refused():
+    """An active run is reading this dataset's export archive right now."""
+    headers = _register_and_login("del-dataset-active@example.com")
+    session = _session()
+    try:
+        user_id = session.execute(sa.text("SELECT id FROM users ORDER BY id DESC LIMIT 1")).scalar()
+        dataset = _make_dataset(session, user_id)
+        run = _make_run(session, dataset, user_id, status=TrainingRunStatus.RUNNING)
+        dataset_id, run_id = dataset.id, run.id
+    finally:
+        session.close()
+
+    response = client.delete(f"/datasets/{dataset_id}", headers=headers)
+    assert response.status_code == 409
+    assert "running" in response.json()["detail"].lower()
+
+    session = _session()
+    try:
+        assert session.get(Dataset, dataset_id) is not None
+        session.query(TrainingRun).filter_by(id=run_id).delete()
+        session.query(Dataset).filter_by(id=dataset_id).delete()
+        session.commit()
+    finally:
+        session.close()
