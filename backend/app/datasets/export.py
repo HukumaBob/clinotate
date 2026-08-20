@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.annotation.models import Annotation, AnnotationType
 from app.datasets.geometry import MaskGeometry, decode_mask, extract_geometry
 from app.datasets.models import Dataset, DatasetItem, TaskType
+from app.taxonomy.hierarchy import GroupingRules, build_label_tree, resolve_class
 from app.media.models import Frame
 from app.settings.models import PlatformSettings
 from app.taxonomy.models import Label
@@ -112,14 +113,39 @@ def collect_export_items(
         annotations_by_id = {row.id: row for row in rows}
 
     label_ids = {a.label_id for a in annotations_by_id.values()}
+
+    # Resolve every annotation's label to the class it actually exports as,
+    # through the SAME rules the balance panel uses (service.py). Without
+    # this, an abstract parent like `polyp` groups its subtypes on screen
+    # while the archive still writes one class per subtype -- the panel and
+    # data.yaml disagreeing about what the dataset even contains. Empty
+    # grouping_overrides means "as the taxonomy says", and the taxonomy
+    # collapses any label that has children.
+    tree = build_label_tree(session)
+    overrides = dataset.grouping_overrides or {}
+    rules = GroupingRules(
+        collapse=frozenset(overrides.get("collapse") or []),
+        expand=frozenset(overrides.get("expand") or []),
+    )
+    resolved_label_id = {lid: resolve_class(lid, tree, rules) for lid in label_ids}
+
+    # Load the resolved ids too: a collapsed parent is usually abstract, so
+    # no annotation references it directly and it would otherwise be absent.
+    lookup_ids = label_ids | set(resolved_label_id.values())
     labels_by_id: dict[int, Label] = {}
-    if label_ids:
+    if lookup_ids:
         labels_by_id = {
             label.id: label
-            for label in session.query(Label).filter(Label.id.in_(label_ids)).all()
+            for label in session.query(Label).filter(Label.id.in_(lookup_ids)).all()
         }
 
-    class_names = sorted({labels_by_id[lid].name for lid in label_ids if lid in labels_by_id})
+    class_names = sorted(
+        {
+            labels_by_id[resolved_label_id[lid]].name
+            for lid in label_ids
+            if resolved_label_id.get(lid) in labels_by_id
+        }
+    )
     class_id_by_name = {name: idx for idx, name in enumerate(class_names)}
     class_names_by_id = {idx: name for idx, name in enumerate(class_names)}
 
@@ -171,11 +197,19 @@ def collect_export_items(
                 label = labels_by_id.get(annotation.label_id)
                 if label is None:
                     continue
+                # The class is the resolved (possibly collapsed) ancestor;
+                # label_id stays the raw annotation's label so findings and
+                # provenance still point at what was actually annotated.
+                export_class = labels_by_id.get(
+                    resolved_label_id.get(annotation.label_id, annotation.label_id)
+                )
+                if export_class is None:
+                    continue
                 entries.append(
                     ExportEntry(
                         annotation_id=annotation.id,
-                        class_id=class_id_by_name[label.name],
-                        class_name=label.name,
+                        class_id=class_id_by_name[export_class.name],
+                        class_name=export_class.name,
                         geometry=None,
                         label_id=label.id,
                     )
@@ -237,11 +271,16 @@ def collect_export_items(
                     )
                     continue
 
+                export_class = labels_by_id.get(
+                    resolved_label_id.get(annotation.label_id, annotation.label_id)
+                )
+                if export_class is None:
+                    continue
                 entries.append(
                     ExportEntry(
                         annotation_id=annotation.id,
-                        class_id=class_id_by_name[label.name],
-                        class_name=label.name,
+                        class_id=class_id_by_name[export_class.name],
+                        class_name=export_class.name,
                         geometry=geometry,
                         label_id=label.id,
                     )

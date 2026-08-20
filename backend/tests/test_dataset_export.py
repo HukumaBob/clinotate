@@ -371,3 +371,50 @@ def test_a_negative_frame_appears_in_coco_images_with_no_annotation():
     finally:
         session.rollback()
         session.close()
+
+
+def test_children_of_a_collapsed_parent_export_as_one_class():
+    """An abstract parent like `polyp` collapses its subtypes into itself.
+
+    The balance panel already resolves classes this way (service.py's
+    resolve_class calls), so an export that reads raw label names instead
+    shows the user one thing on screen and writes another into data.yaml.
+    That is what happened on the first real training run: the panel grouped
+    six polyp subtypes into `polyp`, the export wrote `nc: 6`, and four of
+    those classes had between 1 and 4 annotations -- unlearnable, and
+    dragging the averaged mAP down with them.
+    """
+    session = SessionLocal()
+    try:
+        category, evaluation_type, sequence, user_id = _island(session, "collapse")
+        parent = _label(session, category, evaluation_type, "ex-collapse-polyp")
+        parent.is_abstract = True
+        session.flush()
+
+        child_a = _label(session, category, evaluation_type, "ex-collapse-pedunculated")
+        child_b = _label(session, category, evaluation_type, "ex-collapse-sessile")
+        child_a.parent_label_id = parent.id
+        child_b.parent_label_id = parent.id
+        session.flush()
+
+        storage = _FakeStorage()
+        frame = _frame(session, sequence, 0)
+        annotations = []
+        for index, label in enumerate((child_a, child_b)):
+            key = f"masks/collapse-{index}.png"
+            storage.put_mask(key, _rect_mask(80, 100, 10 + index * 30, 10, 20, 20))
+            annotations.append(_annotate(session, frame, label, user_id, key=key).id)
+
+        dataset = _dataset(session, user_id, TaskType.DETECTION,
+                           [(frame, annotations, SplitName.TRAIN)])
+
+        items, findings, class_names_by_id = collect_export_items(session, dataset, storage)
+
+        # Both subtypes carry the parent's name, under a single class id.
+        assert list(class_names_by_id.values()) == ["ex-collapse-polyp"]
+        exported = {entry.class_name for item in items for entry in item.entries}
+        assert exported == {"ex-collapse-polyp"}
+        assert {entry.class_id for item in items for entry in item.entries} == {0}
+    finally:
+        session.rollback()
+        session.close()
