@@ -1,7 +1,16 @@
 # Task brief: trainer-agnostic training metrics
 
-**Status:** not started. Written 2026-08-20 at the end of the session that
-built the Train screen, to be picked up in a fresh conversation.
+**Status:** DONE (2026-08-21), except the real training run and the MinIO
+deletion check, which need GPU and destructive-delete access. Written
+2026-08-20 at the end of the session that built the Train screen.
+
+- Design: [specs/2026-08-21-training-metrics-design.md](specs/2026-08-21-training-metrics-design.md)
+- Plan: [plans/2026-08-21-training-metrics.md](plans/2026-08-21-training-metrics.md)
+- Outcome and what remains unverified: ROADMAP.md, "Phase 2b:
+  Trainer-agnostic training metrics".
+
+Kept as the problem statement the design argues from. Do not start new work
+from this file.
 
 **Start by invoking `superpowers:brainstorming`.** This is architectural
 work — a new persisted artifact, a widened adapter contract, new API
