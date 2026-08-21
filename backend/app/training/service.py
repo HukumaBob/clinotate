@@ -6,6 +6,7 @@ ml-worker. What makes it different is the stop path: ml-worker runs
 Stopping is therefore a flag the adapter polls at epoch boundaries.
 """
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -17,6 +18,8 @@ from app.datasets.models import Dataset
 from app.jobs.models import Job, JobStatus, JobType
 from app.storage import StorageService
 from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
+
+logger = logging.getLogger(__name__)
 
 ADAPTER_NAME = "ultralytics_yolo"
 
@@ -215,7 +218,19 @@ def get_model_version(session: Session, version_id: int) -> ModelVersion:
 
 
 def delete_model_version(session: Session, storage: StorageService, version_id: int) -> None:
+    """Delete a model version and every object that names it.
+
+    Objects go before the row, matching delete_dataset: a storage failure
+    then leaves a recoverable version rather than orphaned bytes. A
+    missing object is logged and skipped rather than blocking the delete
+    -- 174 MB of orphaned export archives accumulated exactly this way
+    before 857760d.
+    """
     version = get_model_version(session, version_id)
-    storage.delete(version.storage_key)
+    for key in [*(version.artifact_keys or []), version.storage_key]:
+        try:
+            storage.delete(key)
+        except Exception:  # noqa: BLE001 -- a missing object must not block the delete
+            logger.warning("delete_model_version: could not remove %s", key)
     session.delete(version)
     session.commit()

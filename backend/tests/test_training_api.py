@@ -7,6 +7,7 @@ from app.datasets.models import Dataset, TaskType
 from app.jobs.models import Job, JobStatus, JobType
 from app.main import app
 from app.storage import get_storage_service
+from app.training import service
 from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 
 
@@ -359,3 +360,82 @@ def test_deleting_a_dataset_removes_its_export_archives():
         f"datasets/{dataset_id}/export-a.zip",
         f"datasets/{dataset_id}/export-b.zip",
     ]
+
+
+class _FakeStorage:
+    def __init__(self, objects):
+        self.objects = dict(objects)
+
+    def delete(self, key):
+        del self.objects[key]
+
+    def url_for(self, key):
+        return f"https://example.invalid/{key}"
+
+
+def _make_version(session, storage_key: str, artifact_keys: list[str]) -> ModelVersion:
+    """Build a ModelVersion with the parent Dataset/TrainingRun/User rows it
+    needs to satisfy real foreign keys, following the pattern established
+    by _make_dataset/_make_run above. The dataset id is stashed on the
+    returned object so callers can clean up the parent rows, since
+    delete_model_version only removes the ModelVersion itself."""
+    headers = _register_and_login(f"artifact-delete-{storage_key}@example.com".replace("/", "-"))
+    assert headers
+    user_id = session.execute(sa.text("SELECT id FROM users ORDER BY id DESC LIMIT 1")).scalar()
+    dataset = _make_dataset(session, user_id)
+    run = _make_run(session, dataset, user_id)
+    version = ModelVersion(
+        training_run_id=run.id,
+        name="artifact-delete-test",
+        task_type=dataset.task_type,
+        storage_key=storage_key,
+        metrics={},
+        artifact_keys=artifact_keys,
+    )
+    session.add(version)
+    session.commit()
+    session.refresh(version)
+    version._test_dataset_id = dataset.id  # noqa: SLF001 -- test-only bookkeeping
+    return version
+
+
+def test_deleting_a_model_version_removes_its_artifacts():
+    session = _session()
+    storage = _FakeStorage(objects={
+        "models/9/best.pt": b"w",
+        "models/9/artifacts/results.csv": b"epoch,loss\n",
+        "models/9/artifacts/confusion_matrix.png": b"png",
+    })
+    version = _make_version(
+        session,
+        storage_key="models/9/best.pt",
+        artifact_keys=[
+            "models/9/artifacts/results.csv",
+            "models/9/artifacts/confusion_matrix.png",
+        ],
+    )
+    dataset_id = version._test_dataset_id  # noqa: SLF001
+
+    service.delete_model_version(session, storage, version.id)
+
+    assert storage.objects == {}
+    assert session.get(ModelVersion, version.id) is None
+    _cleanup(session, dataset_id)
+    session.close()
+
+
+def test_a_missing_artifact_does_not_block_the_delete():
+    session = _session()
+    storage = _FakeStorage(objects={"models/9/best.pt": b"w"})
+    version = _make_version(
+        session,
+        storage_key="models/9/best.pt",
+        artifact_keys=["models/9/artifacts/gone.csv"],
+    )
+    dataset_id = version._test_dataset_id  # noqa: SLF001
+
+    service.delete_model_version(session, storage, version.id)
+
+    assert session.get(ModelVersion, version.id) is None
+    _cleanup(session, dataset_id)
+    session.close()
