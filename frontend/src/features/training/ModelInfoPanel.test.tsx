@@ -1,12 +1,25 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { ModelInfoPanel } from "./ModelInfoPanel";
 import { apiClient } from "../../shared/api/client";
+import type { components } from "../../shared/api/generated/schema";
 
 vi.mock("../../shared/api/client", () => ({
   apiClient: { GET: vi.fn() },
 }));
+
+type ModelVersionRead = components["schemas"]["ModelVersionRead"];
+
+const testVersion: ModelVersionRead = {
+  id: 1,
+  training_run_id: 7,
+  name: "yolo11n-run7",
+  task_type: "detection",
+  metrics: { "metrics/mAP50(B)": 0.712 },
+  is_active: false,
+  created_at: "2026-08-19T10:00:00Z",
+};
 
 const full = {
   metrics: { "metrics/mAP50(B)": 0.65 },
@@ -25,7 +38,7 @@ describe("ModelInfoPanel", () => {
   it("renders every block when the trainer supplied everything", async () => {
     vi.mocked(apiClient.GET).mockResolvedValue({ data: full });
 
-    render(<ModelInfoPanel versionId={1} onClose={() => {}} />);
+    render(<ModelInfoPanel version={testVersion} onClose={() => {}} />);
 
     // Not getByText: ConfusionMatrix (Task 8, unmodified here) renders each
     // label as both a row header and a column header by design -- its own
@@ -38,6 +51,17 @@ describe("ModelInfoPanel", () => {
     expect(document.querySelectorAll("path[data-series]").length).toBeGreaterThan(0);
     expect(document.querySelectorAll("[data-cell]").length).toBe(4);
     expect(screen.getByText("results.csv")).toBeInTheDocument();
+
+    // Guards the Critical finding from round 1: the header must actually
+    // identify which model is open (name, task type, headline metric) --
+    // without this the panel looks identical for every model.
+    // "mAP50" also appears as a per-class table column header for this
+    // fixture, so scope the headline-metric check to the header itself
+    // rather than the whole document.
+    const heading = screen.getByText(testVersion.name).closest("div") as HTMLElement;
+    expect(within(heading).getByText(new RegExp(testVersion.task_type))).toBeInTheDocument();
+    expect(within(heading).getByText(/0\.712/)).toBeInTheDocument();
+    expect(within(heading).getByText(/mAP50/)).toBeInTheDocument();
   });
 
   it("omits blocks the trainer did not supply, without erroring", async () => {
@@ -45,7 +69,7 @@ describe("ModelInfoPanel", () => {
       data: { metrics: {}, history: [], per_class: [], confusion: null, artifacts: [] },
     });
 
-    render(<ModelInfoPanel versionId={1} onClose={() => {}} />);
+    render(<ModelInfoPanel version={testVersion} onClose={() => {}} />);
 
     await waitFor(() => expect(screen.queryByText(/loading/i)).not.toBeInTheDocument());
     expect(document.querySelectorAll("path[data-series]")).toHaveLength(0);
@@ -64,7 +88,7 @@ describe("ModelInfoPanel", () => {
       },
     });
 
-    render(<ModelInfoPanel versionId={1} onClose={() => {}} />);
+    render(<ModelInfoPanel version={testVersion} onClose={() => {}} />);
 
     // See the note in the previous test: ConfusionMatrix renders "polyp" as
     // both a row and a column header for a 1x1 matrix too, so this waits on

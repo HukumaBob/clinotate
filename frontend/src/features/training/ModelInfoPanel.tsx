@@ -3,13 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
 import { ConfusionMatrix } from "./ConfusionMatrix";
+import { headlineScore } from "./ModelVersionsTable";
 import { MetricsChart } from "./MetricsChart";
 
 type ModelMetricsRead = components["schemas"]["ModelMetricsRead"];
 type ArtifactRead = components["schemas"]["ArtifactRead"];
+type ModelVersionRead = components["schemas"]["ModelVersionRead"];
 
 interface ModelInfoPanelProps {
-  versionId: number;
+  version: ModelVersionRead;
   onClose: () => void;
 }
 
@@ -44,7 +46,8 @@ function formatCell(value: unknown): string {
   return String(value);
 }
 
-export function ModelInfoPanel({ versionId, onClose }: ModelInfoPanelProps) {
+export function ModelInfoPanel({ version, onClose }: ModelInfoPanelProps) {
+  const versionId = version.id;
   const [data, setData] = useState<ModelMetricsRead | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -80,6 +83,8 @@ export function ModelInfoPanel({ versionId, onClose }: ModelInfoPanelProps) {
       cancelled = true;
     };
   }, [versionId]);
+
+  const score = headlineScore(version.task_type, version.metrics as Record<string, unknown>);
 
   const perClassRows = (data?.per_class ?? []) as Array<Record<string, unknown>>;
   const columns = useMemo(() => deriveColumns(perClassRows), [perClassRows]);
@@ -120,7 +125,13 @@ export function ModelInfoPanel({ versionId, onClose }: ModelInfoPanelProps) {
   return (
     <div className="flex flex-col gap-4 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4 text-gray-200">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-100">Model info</h2>
+        <div>
+          <h2 className="text-sm font-semibold text-gray-100">{version.name}</h2>
+          <p className="text-xs text-gray-500">
+            {version.task_type} · {score.value}{" "}
+            <span className="text-gray-600">{score.label}</span>
+          </p>
+        </div>
         <button
           type="button"
           onClick={onClose}

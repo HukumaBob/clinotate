@@ -15,7 +15,7 @@ interface ModelVersionsTableProps {
  * predicted boxes overlap real ones and does not exist for a classifier,
  * whose score is top-1 accuracy instead. Showing a dash for a classifier
  * would hide the only number it produces. Keys are Ultralytics' own. */
-function headlineScore(
+export function headlineScore(
   taskType: string,
   metrics: Record<string, unknown>,
 ): { label: string; value: string } {

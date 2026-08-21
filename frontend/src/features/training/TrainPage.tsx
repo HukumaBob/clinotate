@@ -26,6 +26,7 @@ export function TrainPage() {
   const [submitPending, setSubmitPending] = useState(false);
   const [stopPending, setStopPending] = useState(false);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
+  const selectedVersion = versions.find((v) => v.id === selectedVersionId) ?? null;
 
   // Running offset into the active run's log, kept outside React state so
   // the poll tick can read the latest value without re-subscribing the
@@ -233,9 +234,9 @@ export function TrainPage() {
               stopPending={stopPending}
             />
 
-            {selectedVersionId !== null && (
+            {selectedVersion && (
               <ModelInfoPanel
-                versionId={selectedVersionId}
+                version={selectedVersion}
                 onClose={() => setSelectedVersionId(null)}
               />
             )}
