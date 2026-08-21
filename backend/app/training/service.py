@@ -46,6 +46,10 @@ class ModelVersionNotFound(Exception):
     """No such model version."""
 
 
+class ArtifactNotFound(Exception):
+    """No artifact at that index for this model version."""
+
+
 def find_export_job(session: Session, dataset_id: int) -> Job | None:
     """The most recent succeeded export for this dataset, or None.
 
@@ -234,3 +238,28 @@ def delete_model_version(session: Session, storage: StorageService, version_id: 
             logger.warning("delete_model_version: could not remove %s", key)
     session.delete(version)
     session.commit()
+
+
+def get_model_metrics(session: Session, version_id: int) -> dict:
+    """Assemble the Info panel's payload. History comes from the run,
+    since it belongs to the attempt rather than to the weights."""
+    version = get_model_version(session, version_id)
+    run = session.get(TrainingRun, version.training_run_id)
+    return {
+        "metrics": version.metrics or {},
+        "history": (run.metrics_history or []) if run else [],
+        "per_class": version.per_class_metrics or [],
+        "confusion": version.confusion_matrix,
+        "artifacts": [
+            {"name": key.rsplit("/", 1)[-1], "index": index}
+            for index, key in enumerate(version.artifact_keys or [])
+        ],
+    }
+
+
+def get_artifact_key(session: Session, version_id: int, index: int) -> str:
+    version = get_model_version(session, version_id)
+    keys = version.artifact_keys or []
+    if index < 0 or index >= len(keys):
+        raise ArtifactNotFound(f"Artifact {index} not found on model version {version_id}")
+    return keys[index]

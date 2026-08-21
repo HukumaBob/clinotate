@@ -9,6 +9,7 @@ from app.training import service
 from app.training.models import TrainingRunStatus
 from app.training.schemas import (
     ModelDownloadRead,
+    ModelMetricsRead,
     ModelVersionRead,
     TrainingLogRead,
     TrainingRunCreate,
@@ -107,6 +108,31 @@ def download_model(
     except service.ModelVersionNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return {"download_url": storage.url_for(version.storage_key)}
+
+
+@router.get("/models/{version_id}/metrics", response_model=ModelMetricsRead)
+def read_model_metrics(
+    version_id: int,
+    session: Session = Depends(get_session),
+):
+    try:
+        return service.get_model_metrics(session, version_id)
+    except service.ModelVersionNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/models/{version_id}/artifacts/{index}", response_model=ModelDownloadRead)
+def download_artifact(
+    version_id: int,
+    index: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+):
+    try:
+        key = service.get_artifact_key(session, version_id, index)
+    except (service.ModelVersionNotFound, service.ArtifactNotFound) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return {"download_url": storage.url_for(key)}
 
 
 @router.delete("/models/{version_id}", status_code=status.HTTP_204_NO_CONTENT)

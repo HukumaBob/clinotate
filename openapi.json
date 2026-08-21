@@ -3812,6 +3812,109 @@
         }
       }
     },
+    "/training/models/{version_id}/metrics": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Read Model Metrics",
+        "operationId": "read_model_metrics_training_models__version_id__metrics_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelMetricsRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/models/{version_id}/artifacts/{index}": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Download Artifact",
+        "operationId": "download_artifact_training_models__version_id__artifacts__index__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Index"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelDownloadRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/training/models/{version_id}": {
       "delete": {
         "tags": [
@@ -4013,6 +4116,25 @@
           "bbox"
         ],
         "title": "AnnotationType"
+      },
+      "ArtifactRead": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "index"
+        ],
+        "title": "ArtifactRead",
+        "description": "One trainer-written file, addressed by index rather than by key so\na storage key never travels in a URL."
       },
       "BalanceReportRead": {
         "properties": {
@@ -5256,6 +5378,60 @@
           "download_url"
         ],
         "title": "ModelDownloadRead"
+      },
+      "ModelMetricsRead": {
+        "properties": {
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          },
+          "history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "History"
+          },
+          "per_class": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Per Class"
+          },
+          "confusion": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confusion"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRead"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metrics",
+          "history",
+          "per_class",
+          "confusion",
+          "artifacts"
+        ],
+        "title": "ModelMetricsRead",
+        "description": "Everything the Info panel draws, in one request.\n\nDeliberately not folded into ModelVersionRead: the models list is\npolled, and a 180-class confusion matrix is ~130 KB per row -- the\nsame reason log_text is not part of TrainingRunRead."
       },
       "ModelVersionRead": {
         "properties": {

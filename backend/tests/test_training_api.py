@@ -373,29 +373,49 @@ class _FakeStorage:
         return f"https://example.invalid/{key}"
 
 
-def _make_version(session, storage_key: str, artifact_keys: list[str]) -> ModelVersion:
+def _make_version(
+    session,
+    storage_key: str,
+    artifact_keys: list[str] | None = None,
+    per_class_metrics: list[dict] | None = None,
+    confusion_matrix: dict | None = None,
+    history: list[dict] | None = None,
+) -> ModelVersion:
     """Build a ModelVersion with the parent Dataset/TrainingRun/User rows it
     needs to satisfy real foreign keys, following the pattern established
     by _make_dataset/_make_run above. The dataset id is stashed on the
     returned object so callers can clean up the parent rows, since
-    delete_model_version only removes the ModelVersion itself."""
+    delete_model_version only removes the ModelVersion itself.
+
+    `history` is written onto the parent TrainingRun.metrics_history, not
+    onto the version, since per-epoch history belongs to the attempt
+    rather than to the weights it produced.
+    """
     headers = _register_and_login(f"artifact-delete-{storage_key}@example.com".replace("/", "-"))
     assert headers
     user_id = session.execute(sa.text("SELECT id FROM users ORDER BY id DESC LIMIT 1")).scalar()
     dataset = _make_dataset(session, user_id)
     run = _make_run(session, dataset, user_id)
+    if history is not None:
+        run.metrics_history = history
+        session.add(run)
+        session.commit()
+        session.refresh(run)
     version = ModelVersion(
         training_run_id=run.id,
         name="artifact-delete-test",
         task_type=dataset.task_type,
         storage_key=storage_key,
         metrics={},
-        artifact_keys=artifact_keys,
+        artifact_keys=artifact_keys or [],
+        per_class_metrics=per_class_metrics or [],
+        confusion_matrix=confusion_matrix,
     )
     session.add(version)
     session.commit()
     session.refresh(version)
     version._test_dataset_id = dataset.id  # noqa: SLF001 -- test-only bookkeeping
+    version._test_headers = headers  # noqa: SLF001 -- test-only bookkeeping
     return version
 
 
@@ -439,3 +459,94 @@ def test_a_missing_artifact_does_not_block_the_delete():
     assert session.get(ModelVersion, version.id) is None
     _cleanup(session, dataset_id)
     session.close()
+
+
+def test_metrics_endpoint_returns_every_collection():
+    session = _session()
+    version = _make_version(
+        session,
+        storage_key="models/11/best.pt",
+        artifact_keys=["models/11/artifacts/results.csv"],
+        per_class_metrics=[{"class": "polyp", "mAP50": 0.7}],
+        confusion_matrix={"labels": ["polyp", "background"], "matrix": [[4, 1], [0, 2]]},
+        history=[{"epoch": 1, "train/loss": 0.5}],
+    )
+    version_id = version.id
+    headers = version._test_headers  # noqa: SLF001
+    dataset_id = version._test_dataset_id  # noqa: SLF001
+    session.close()
+
+    try:
+        body = client.get(f"/training/models/{version_id}/metrics", headers=headers).json()
+
+        assert body["history"] == [{"epoch": 1, "train/loss": 0.5}]
+        assert body["per_class"][0]["class"] == "polyp"
+        assert body["confusion"]["labels"][-1] == "background"
+        assert body["artifacts"] == [{"name": "results.csv", "index": 0}]
+    finally:
+        cleanup_session = _session()
+        _cleanup(cleanup_session, dataset_id)
+        cleanup_session.close()
+
+
+def test_metrics_endpoint_returns_empty_collections_not_404():
+    session = _session()
+    version = _make_version(session, storage_key="models/12/best.pt")
+    version_id = version.id
+    headers = version._test_headers  # noqa: SLF001
+    dataset_id = version._test_dataset_id  # noqa: SLF001
+    session.close()
+
+    try:
+        response = client.get(f"/training/models/{version_id}/metrics", headers=headers)
+
+        assert response.status_code == 200
+        assert response.json()["per_class"] == []
+        assert response.json()["confusion"] is None
+    finally:
+        cleanup_session = _session()
+        _cleanup(cleanup_session, dataset_id)
+        cleanup_session.close()
+
+
+def test_artifact_download_returns_a_url():
+    session = _session()
+    version = _make_version(
+        session,
+        storage_key="models/13/best.pt",
+        artifact_keys=["models/13/artifacts/results.csv"],
+    )
+    version_id = version.id
+    headers = version._test_headers  # noqa: SLF001
+    dataset_id = version._test_dataset_id  # noqa: SLF001
+    session.close()
+
+    app.dependency_overrides[get_storage_service] = lambda: _FakeStorage(objects={})
+    try:
+        body = client.get(f"/training/models/{version_id}/artifacts/0", headers=headers).json()
+
+        assert "results.csv" in body["download_url"]
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+        cleanup_session = _session()
+        _cleanup(cleanup_session, dataset_id)
+        cleanup_session.close()
+
+
+def test_an_out_of_range_artifact_index_is_404():
+    session = _session()
+    version = _make_version(session, storage_key="models/14/best.pt")
+    version_id = version.id
+    headers = version._test_headers  # noqa: SLF001
+    dataset_id = version._test_dataset_id  # noqa: SLF001
+    session.close()
+
+    try:
+        assert (
+            client.get(f"/training/models/{version_id}/artifacts/7", headers=headers).status_code
+            == 404
+        )
+    finally:
+        cleanup_session = _session()
+        _cleanup(cleanup_session, dataset_id)
+        cleanup_session.close()

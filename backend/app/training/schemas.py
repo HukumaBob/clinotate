@@ -62,3 +62,26 @@ class ModelVersionRead(BaseModel):
 
 class ModelDownloadRead(BaseModel):
     download_url: str
+
+
+class ArtifactRead(BaseModel):
+    """One trainer-written file, addressed by index rather than by key so
+    a storage key never travels in a URL."""
+
+    name: str
+    index: int
+
+
+class ModelMetricsRead(BaseModel):
+    """Everything the Info panel draws, in one request.
+
+    Deliberately not folded into ModelVersionRead: the models list is
+    polled, and a 180-class confusion matrix is ~130 KB per row -- the
+    same reason log_text is not part of TrainingRunRead.
+    """
+
+    metrics: dict
+    history: list[dict]
+    per_class: list[dict]
+    confusion: dict | None
+    artifacts: list[ArtifactRead]
