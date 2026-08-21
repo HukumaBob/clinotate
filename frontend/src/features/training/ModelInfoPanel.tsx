@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
+import { ArtifactGallery } from "./ArtifactGallery";
 import { ConfusionMatrix } from "./ConfusionMatrix";
 import { headlineScore } from "./ModelVersionsTable";
 import { MetricsChart } from "./MetricsChart";
 
 type ModelMetricsRead = components["schemas"]["ModelMetricsRead"];
-type ArtifactRead = components["schemas"]["ArtifactRead"];
 type ModelVersionRead = components["schemas"]["ModelVersionRead"];
 
 interface ModelInfoPanelProps {
@@ -112,16 +112,6 @@ export function ModelInfoPanel({ version, onClose }: ModelInfoPanelProps) {
     });
   }
 
-  async function handleArtifactClick(artifact: ArtifactRead) {
-    const { data: result } = await apiClient.GET(
-      "/training/models/{version_id}/artifacts/{index}",
-      { params: { path: { version_id: versionId, index: artifact.index } } },
-    );
-    if (result?.download_url) {
-      window.open(result.download_url, "_blank", "noopener,noreferrer");
-    }
-  }
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4 text-gray-200">
       <div className="flex items-center justify-between">
@@ -223,19 +213,7 @@ export function ModelInfoPanel({ version, onClose }: ModelInfoPanelProps) {
           {(data.artifacts ?? []).length > 0 && (
             <section>
               <h3 className="mb-2 text-xs font-medium uppercase text-gray-500">Artifacts</h3>
-              <ul className="flex flex-col gap-1">
-                {data.artifacts.map((artifact) => (
-                  <li key={artifact.index}>
-                    <button
-                      type="button"
-                      onClick={() => handleArtifactClick(artifact)}
-                      className="text-xs text-blue-400 hover:text-blue-300 hover:underline"
-                    >
-                      {artifact.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <ArtifactGallery versionId={versionId} artifacts={data.artifacts} />
             </section>
           )}
         </>
