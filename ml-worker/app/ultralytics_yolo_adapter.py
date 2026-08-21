@@ -75,6 +75,81 @@ class _ForwardingLogHandler(logging.Handler):
 # classification run does not fail cleanly -- it trains the wrong head.
 _TASK_SUFFIX = {"segmentation": "-seg", "classification": "-cls"}
 
+# Files the trainer writes that are worth keeping but not worth parsing.
+# The size cap keeps a forgotten checkpoint from riding along as an
+# "artifact"; weights already have their own upload path.
+_ARTIFACT_SUFFIXES = {".csv", ".yaml", ".png", ".jpg", ".json"}
+_ARTIFACT_MAX_BYTES = 10 * 1024 * 1024
+
+
+def _per_class_rows(results) -> list[dict]:
+    """Per-class numbers in the trainer's own vocabulary.
+
+    Only the `Class` key is renamed, to the `class` key the platform
+    requires; every other column stays exactly as Ultralytics named it,
+    because normalizing names is what makes a schema fit one trainer.
+    """
+    summary = getattr(results, "summary", None)
+    if not callable(summary):
+        return []
+    try:
+        rows = summary()
+    except Exception:  # noqa: BLE001 -- metrics must never fail a finished run
+        return []
+    out = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        converted = {"class": str(row.get("Class", ""))}
+        for key, value in row.items():
+            if key != "Class" and isinstance(value, (int, float)):
+                converted[str(key)] = float(value)
+        out.append(converted)
+    return out
+
+
+def _confusion_from(results, task_type: str) -> dict | None:
+    """The confusion matrix as plain numbers plus honest class names.
+
+    Read off `.matrix`/`.names` rather than ConfusionMatrix.summary(),
+    which sanitizes names through [^a-zA-Z0-9_] -> _ and de-duplicates
+    collisions -- lossy for display, since a real label like
+    "bad_preparation (colono)" would come back mangled.
+
+    Detection and segmentation matrices are (nc+1, nc+1); the trailing
+    row/column counts predictions against background, which is kept as an
+    explicit label because misses into background are real data.
+    """
+    matrix_holder = getattr(results, "confusion_matrix", None)
+    if matrix_holder is None:
+        return None
+    try:
+        raw = matrix_holder.matrix
+        names = matrix_holder.names
+        labels = [str(names[key]) for key in sorted(names)]
+        if len(raw) == len(labels) + 1:
+            labels = [*labels, "background"]
+        return {
+            "labels": labels,
+            "matrix": [[int(round(float(cell))) for cell in row] for row in raw],
+        }
+    except Exception:  # noqa: BLE001 -- metrics must never fail a finished run
+        return None
+
+
+def _collect_artifacts(output_dir: Path) -> list[Path]:
+    """The trainer's own files, stored without being parsed."""
+    if not output_dir.exists():
+        return []
+    found = []
+    for path in sorted(output_dir.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in _ARTIFACT_SUFFIXES:
+            continue
+        if path.stat().st_size > _ARTIFACT_MAX_BYTES:
+            continue
+        found.append(path)
+    return found
+
 
 def weights_for_task(base_model: str, task_type: str) -> str:
     """Return `base_model` carrying the suffix its task requires.
@@ -112,7 +187,17 @@ class UltralyticsYoloAdapter:
 
         def _on_epoch_end(trainer):
             epoch = int(getattr(trainer, "epoch", 0)) + 1
-            on_epoch(epoch, total_epochs)
+            # trainer.metrics is a flat dict of this epoch's validation
+            # numbers. Read defensively: it is absent before the first
+            # validation runs, and its shape is not a contract.
+            epoch_metrics = getattr(trainer, "metrics", None)
+            on_epoch(
+                epoch,
+                total_epochs,
+                {str(k): float(v) for k, v in epoch_metrics.items() if isinstance(v, (int, float))}
+                if isinstance(epoch_metrics, dict)
+                else None,
+            )
             if should_stop():
                 on_log(f"Stop requested; ending after epoch {epoch}.")
                 # Ultralytics checks this flag at the top of its next
@@ -176,4 +261,10 @@ class UltralyticsYoloAdapter:
         if isinstance(results_dict, dict):
             metrics = {str(k): v for k, v in results_dict.items() if isinstance(v, (int, float))}
 
-        return TrainingResult(weights_path=weights_path, metrics=metrics)
+        return TrainingResult(
+            weights_path=weights_path,
+            metrics=metrics,
+            per_class=_per_class_rows(results),
+            confusion=_confusion_from(results, request.task_type),
+            artifacts=_collect_artifacts(request.output_dir),
+        )

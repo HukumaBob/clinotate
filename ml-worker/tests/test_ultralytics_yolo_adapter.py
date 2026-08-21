@@ -10,6 +10,7 @@ train() returns.
 
 import logging
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -27,8 +28,24 @@ class _FakeTrainer:
         self.last = weights_dir / "last.pt"
 
 
+class _FakeConfusionMatrix:
+    def __init__(self):
+        import numpy as np
+
+        self.names = {0: "polyp", 1: "erosion"}
+        # (nc+1, nc+1): the trailing row/column is background.
+        self.matrix = np.array([[8.0, 1.0, 2.0], [0.0, 5.0, 1.0], [3.0, 2.0, 0.0]])
+
+
 class _FakeResults:
     results_dict = {"metrics/mAP50-95(B)": 0.42, "fitness": 0.5}
+    confusion_matrix = _FakeConfusionMatrix()
+
+    def summary(self):
+        return [
+            {"Class": "polyp", "Images": 10, "Instances": 12, "Box-P": 0.8, "mAP50": 0.7},
+            {"Class": "erosion", "Images": 6, "Instances": 7, "Box-P": 0.6, "mAP50": 0.5},
+        ]
 
 
 def _make_fake_yolo(*, epochs, weights_dir, log_lines_via_print, log_lines_via_logger, raise_error=False):
@@ -99,7 +116,7 @@ def test_partial_final_line_reaches_on_log_when_train_raises(monkeypatch, tmp_pa
     )
 
     with pytest.raises(RuntimeError, match="CUDA out of memory"):
-        adapter.train(request, on_log=lines.append, on_epoch=lambda e, t: None, should_stop=lambda: False)
+        adapter.train(request, on_log=lines.append, on_epoch=lambda e, t, m=None: None, should_stop=lambda: False)
 
     assert any("CUDA out of memory" in line for line in lines), (
         f"buffered partial line was dropped on the failure path; got {lines!r}"
@@ -130,7 +147,7 @@ def test_logger_info_line_reaches_on_log_exactly_once(monkeypatch, tmp_path):
         output_dir=tmp_path / "out",
     )
 
-    adapter.train(request, on_log=lines.append, on_epoch=lambda e, t: None, should_stop=lambda: False)
+    adapter.train(request, on_log=lines.append, on_epoch=lambda e, t, m=None: None, should_stop=lambda: False)
 
     logger_matches = [line for line in lines if "distinctive logger summary line" in line]
     assert len(logger_matches) == 1, f"expected exactly one match, got {logger_matches!r} in {lines!r}"
@@ -161,7 +178,7 @@ def test_logger_handler_removed_after_run_does_not_double_log_on_second_run(monk
         config={"epochs": 1},
         output_dir=tmp_path / "out",
     )
-    adapter.train(request, on_log=lines.append, on_epoch=lambda e, t: None, should_stop=lambda: False)
+    adapter.train(request, on_log=lines.append, on_epoch=lambda e, t, m=None: None, should_stop=lambda: False)
 
     assert list(real_logger.handlers) == handlers_before, "adapter left a handler attached to the shared LOGGER"
 
@@ -194,7 +211,7 @@ def test_relative_output_dir_still_yields_correct_weights_path(monkeypatch, tmp_
         output_dir=Path("relative_run_dir"),
     )
 
-    result = adapter.train(request, on_log=lines.append, on_epoch=lambda e, t: None, should_stop=lambda: False)
+    result = adapter.train(request, on_log=lines.append, on_epoch=lambda e, t, m=None: None, should_stop=lambda: False)
 
     # The adapter must report the path Ultralytics itself used (best.pt,
     # written by the fake train()), not a guess reconstructed from
@@ -256,7 +273,7 @@ def test_task_type_picks_the_weights_and_the_data_argument(monkeypatch, tmp_path
                 output_dir=tmp_path / f"out-{task_type}",
             ),
             on_log=lambda line: None,
-            on_epoch=lambda e, t: None,
+            on_epoch=lambda e, t, m=None: None,
             should_stop=lambda: False,
         )
         seen[task_type] = dict(captured)
@@ -270,3 +287,101 @@ def test_task_type_picks_the_weights_and_the_data_argument(monkeypatch, tmp_path
     # Classification gets the directory itself, not a yaml inside it.
     assert not seen["classification"]["data"].endswith("data.yaml")
     assert seen["classification"]["data"].endswith("ds-classification")
+
+
+def test_per_class_rows_keep_the_trainers_own_keys(tmp_path):
+    from app.ultralytics_yolo_adapter import _per_class_rows
+
+    rows = _per_class_rows(_FakeResults())
+
+    assert rows[0]["class"] == "polyp"
+    assert rows[0]["mAP50"] == 0.7
+    assert rows[0]["Box-P"] == 0.8
+    assert "Class" not in rows[0]
+
+
+def test_confusion_matrix_appends_background_for_detection():
+    from app.ultralytics_yolo_adapter import _confusion_from
+
+    confusion = _confusion_from(_FakeResults(), "detection")
+
+    assert confusion["labels"] == ["polyp", "erosion", "background"]
+    assert confusion["matrix"] == [[8, 1, 2], [0, 5, 1], [3, 2, 0]]
+
+
+def test_confusion_matrix_has_no_background_for_classification():
+    from app.ultralytics_yolo_adapter import _confusion_from
+
+    class _ClsResults:
+        class confusion_matrix:
+            import numpy as _np
+
+            names = {0: "clean", 1: "dirty"}
+            matrix = _np.array([[4.0, 1.0], [2.0, 6.0]])
+
+    confusion = _confusion_from(_ClsResults(), "classification")
+
+    assert confusion["labels"] == ["clean", "dirty"]
+    assert confusion["matrix"] == [[4, 1], [2, 6]]
+
+
+def test_confusion_is_none_when_the_trainer_supplies_none():
+    from app.ultralytics_yolo_adapter import _confusion_from
+
+    class _Bare:
+        pass
+
+    assert _confusion_from(_Bare(), "detection") is None
+
+
+def test_artifacts_collect_known_extensions_and_skip_large_files(tmp_path):
+    from app.ultralytics_yolo_adapter import _collect_artifacts
+
+    run = tmp_path / "run"
+    (run / "weights").mkdir(parents=True)
+    (run / "results.csv").write_text("epoch,loss\n1,0.5\n")
+    (run / "args.yaml").write_text("epochs: 1\n")
+    (run / "confusion_matrix.png").write_bytes(b"\x89PNG fake")
+    (run / "weights" / "best.pt").write_bytes(b"weights are not artifacts")
+    (run / "huge.png").write_bytes(b"x" * (11 * 1024 * 1024))
+
+    names = sorted(p.name for p in _collect_artifacts(tmp_path))
+
+    assert names == ["args.yaml", "confusion_matrix.png", "results.csv"]
+
+
+def test_train_reports_metrics_per_epoch_and_returns_collections(tmp_path):
+    points: list[tuple[int, dict | None]] = []
+    weights_dir = tmp_path / "out" / "run" / "weights"
+    fake_yolo = _make_fake_yolo(
+        epochs=2,
+        weights_dir=weights_dir,
+        log_lines_via_print=[],
+        log_lines_via_logger=[],
+    )
+    (tmp_path / "out").mkdir(exist_ok=True)
+    (tmp_path / "out" / "results.csv").write_text("epoch,loss\n1,0.5\n")
+
+    adapter = UltralyticsYoloAdapter()
+    request = TrainingRequest(
+        dataset_dir=tmp_path / "ds",
+        task_type="detection",
+        base_model="yolo11n.pt",
+        config={"epochs": 2},
+        output_dir=tmp_path / "out",
+    )
+
+    with mock.patch("app.ultralytics_yolo_adapter.YOLO", fake_yolo):
+        result = adapter.train(
+            request,
+            on_log=lambda line: None,
+            on_epoch=lambda e, t, m: points.append((e, m)),
+            should_stop=lambda: False,
+        )
+
+    # The fake trainer has no .metrics attribute, so the adapter must
+    # degrade to None rather than raising.
+    assert [e for e, _ in points] == [1, 2]
+    assert result.per_class[0]["class"] == "polyp"
+    assert result.confusion["labels"][-1] == "background"
+    assert [p.name for p in result.artifacts] == ["results.csv"]
