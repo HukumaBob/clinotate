@@ -872,7 +872,20 @@ def model_train(job_id: int, adapter=None) -> None:
                 artifact_path = Path(artifact)
                 if not artifact_path.exists():
                     continue
-                artifact_key = f"models/{run.id}/artifacts/{artifact_path.name}"
+                # Preserve the path relative to output_dir (not just the
+                # basename) so same-named artifacts in different
+                # subdirectories -- e.g. train/results.csv and
+                # val/results.csv -- land on distinct keys instead of one
+                # silently overwriting the other. Sanitized against ".."
+                # and a leading "/" so a trainer can't write outside the
+                # artifacts prefix.
+                try:
+                    relative = artifact_path.relative_to(output_dir)
+                except ValueError:
+                    relative = Path(artifact_path.name)
+                safe_parts = [part for part in relative.parts if part not in ("..", "/", "")]
+                relative_key = "/".join(safe_parts) if safe_parts else artifact_path.name
+                artifact_key = f"models/{run.id}/artifacts/{relative_key}"
                 storage.upload(
                     artifact_key,
                     artifact_path.read_bytes(),

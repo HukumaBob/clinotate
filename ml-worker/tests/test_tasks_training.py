@@ -37,6 +37,41 @@ def test_history_accumulates_during_training(db_session, make_job_and_run, fake_
     assert version.artifact_keys == [f"models/{run.id}/artifacts/results.csv"]
 
 
+def test_same_named_artifacts_in_different_subdirs_get_distinct_keys(
+    db_session, make_job_and_run, fake_storage
+):
+    from app.tasks import model_train
+
+    class _SubdirArtifactAdapter:
+        def train(self, request, on_log, on_epoch, should_stop):
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+
+            train_dir = request.output_dir / "train"
+            train_dir.mkdir()
+            train_results = train_dir / "results.csv"
+            train_results.write_text("epoch,loss\n1,0.5\n")
+
+            val_dir = request.output_dir / "val"
+            val_dir.mkdir()
+            val_results = val_dir / "results.csv"
+            val_results.write_text("epoch,loss\n1,0.4\n")
+
+            return TrainingResult(
+                weights_path=weights,
+                artifacts=[train_results, val_results],
+            )
+
+    job, run = make_job_and_run()
+    model_train(job.id, adapter=_SubdirArtifactAdapter())
+    db_session.refresh(run)
+
+    version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
+    assert len(version.artifact_keys) == 2
+    assert len(set(version.artifact_keys)) == 2
+    assert all(key.startswith(f"models/{run.id}/artifacts/") for key in version.artifact_keys)
+
+
 def test_a_silent_adapter_leaves_history_empty(db_session, make_job_and_run, fake_storage):
     from app.tasks import model_train
 

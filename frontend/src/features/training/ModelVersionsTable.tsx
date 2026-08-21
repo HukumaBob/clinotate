@@ -14,7 +14,11 @@ interface ModelVersionsTableProps {
 /** The headline score, which differs by task: mAP50 measures how well
  * predicted boxes overlap real ones and does not exist for a classifier,
  * whose score is top-1 accuracy instead. Showing a dash for a classifier
- * would hide the only number it produces. Keys are Ultralytics' own. */
+ * would hide the only number it produces. The known keys are Ultralytics'
+ * own; a trainer with a different vocabulary (e.g. RT-DETR's "ap_50") has
+ * neither, so we fall back to the first numeric entry in `metrics` and
+ * label it with its own key -- never a hardcoded name next to a dash,
+ * which would misattribute a metric the trainer never produced. */
 export function headlineScore(
   taskType: string,
   metrics: Record<string, unknown>,
@@ -23,10 +27,15 @@ export function headlineScore(
   const raw = isClassification
     ? metrics["metrics/accuracy_top1"] ?? metrics["accuracy_top1"]
     : metrics["metrics/mAP50(B)"] ?? metrics["mAP50"];
-  return {
-    label: isClassification ? "top-1" : "mAP50",
-    value: typeof raw === "number" ? raw.toFixed(3) : "—",
-  };
+  if (typeof raw === "number") {
+    return { label: isClassification ? "top-1" : "mAP50", value: raw.toFixed(3) };
+  }
+  const fallback = Object.entries(metrics).find(([, value]) => typeof value === "number");
+  if (fallback) {
+    const [key, value] = fallback;
+    return { label: key, value: (value as number).toFixed(3) };
+  }
+  return { label: "", value: "—" };
 }
 
 export function ModelVersionsTable({

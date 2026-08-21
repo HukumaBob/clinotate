@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../shared/api/generated/schema";
-import { ModelVersionsTable } from "./ModelVersionsTable";
+import { headlineScore, ModelVersionsTable } from "./ModelVersionsTable";
 
 type ModelVersionRead = components["schemas"]["ModelVersionRead"];
 
@@ -101,6 +101,34 @@ describe("ModelVersionsTable", () => {
     );
 
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("still renders the known-key score exactly as before (regression guard)", () => {
+    expect(headlineScore("detection", { "metrics/mAP50(B)": 0.657 })).toEqual({
+      label: "mAP50",
+      value: "0.657",
+    });
+    expect(headlineScore("classification", { "metrics/accuracy_top1": 0.989 })).toEqual({
+      label: "top-1",
+      value: "0.989",
+    });
+  });
+
+  it("falls back to the first numeric key for an unknown trainer vocabulary", () => {
+    // An RT-DETR-style adapter reports ap_50, not any Ultralytics key --
+    // the header must show that key's own name, never a hardcoded label.
+    expect(headlineScore("detection", { ap_50: 0.71 })).toEqual({
+      label: "ap_50",
+      value: "0.710",
+    });
+  });
+
+  it("shows a dash with no misleading label when metrics has no numeric value", () => {
+    expect(headlineScore("detection", {})).toEqual({ label: "", value: "—" });
+    expect(headlineScore("detection", { note: "no run yet" })).toEqual({
+      label: "",
+      value: "—",
+    });
   });
 
   it("calls the action handlers with the version id", async () => {
