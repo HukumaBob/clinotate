@@ -254,3 +254,121 @@ def training_job(db_session):
     db_session.query(TrainingRun).filter_by(id=run.id).delete()
     db_session.query(Job).filter_by(id=job.id).delete()
     db_session.commit()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _sweep_test_rows_from_the_dev_database():
+    """Removes the rows and objects this suite leaves in the real database.
+
+    ml-worker's tests deliberately run against the real dev database -- there
+    is no test-database patching here the way there is in `backend/tests`,
+    because these tests exercise the worker's own SessionLocal against real
+    Postgres. That is a legitimate choice, but it made every run leak:
+    `test-polyp-label` labels, `test/`-keyed frames,
+    `rank-quality-test-sequence` rows and their SAM3/RANK_QUALITY/
+    FIND_SIMILAR jobs accumulated in the user's own data, invisible until
+    someone counted rows by date. 62 rows and 6 MinIO objects were swept by
+    hand on 2026-08-21 before this fixture existed.
+
+    Swept by the exact literals this suite itself writes -- never by date,
+    never by TRUNCATE: a predicate that could match a real row is worse than
+    the leak it fixes. Deletion follows foreign keys inward so nothing is
+    orphaned, and a failure here is swallowed rather than failing a green
+    suite.
+    """
+    yield
+
+    try:
+        from sqlalchemy import text
+
+        import app.db as db_module
+
+        session = db_module.SessionLocal()
+    except Exception:  # noqa: BLE001 -- no database here means nothing was written
+        return
+
+    # The masks these jobs produced are keyed by the frame they annotated, so
+    # they have to be collected before those rows are deleted -- afterwards
+    # nothing names them and they become the same kind of orphan the export
+    # archives were in 857760d.
+    # payload is a plain `json` column, not `jsonb`, so it carries no `?`
+    # operator -- and `?` would be read as a bind parameter by SQLAlchemy
+    # anyway. Cast explicitly and test the extracted value for NULL instead.
+    doomed_keys: list[str] = []
+    doomed_job_ids: list[int] = []
+    try:
+        doomed_keys = [
+            row[0]
+            for row in session.execute(
+                text(
+                    "SELECT result_ref FROM jobs WHERE result_ref LIKE 'masks/%' "
+                    "AND (payload::jsonb->>'frame_id') IS NOT NULL "
+                    "AND (payload::jsonb->>'frame_id')::int IN "
+                    "(SELECT id FROM frames WHERE storage_key LIKE 'test/%')"
+                )
+            )
+            if row[0]
+        ]
+        doomed_job_ids = [
+            row[0]
+            for row in session.execute(
+                text(
+                    # SAM3_PREDICT payloads name a frame_id; RANK_QUALITY and
+                    # FIND_SIMILAR name a sequence_id instead. Both shapes have
+                    # to be matched, or the second pair survives every sweep.
+                    "SELECT id FROM jobs WHERE job_type IN "
+                    "('SAM3_PREDICT', 'RANK_QUALITY', 'FIND_SIMILAR') AND ("
+                    "  (payload::jsonb->>'frame_id')::int IN "
+                    "    (SELECT id FROM frames WHERE storage_key LIKE 'test/%')"
+                    "  OR (payload::jsonb->>'sequence_id')::int IN "
+                    "    (SELECT id FROM sequences WHERE name = 'rank-quality-test-sequence')"
+                    ")"
+                )
+            )
+        ]
+        session.execute(
+            text(
+                "DELETE FROM annotations WHERE frame_id IN "
+                "(SELECT id FROM frames WHERE storage_key LIKE 'test/%')"
+            )
+        )
+        session.execute(text("DELETE FROM frames WHERE storage_key LIKE 'test/%'"))
+        session.execute(
+            text("DELETE FROM sequences WHERE name = 'rank-quality-test-sequence'")
+        )
+        session.execute(text("DELETE FROM labels WHERE name = 'test-polyp-label'"))
+        # The jobs these tests enqueue point at the frames just deleted, so
+        # they can no longer refer to anything real. Matched by the payload's
+        # dangling frame_id rather than by job_type or date -- a real
+        # SAM3_PREDICT job of the user's must never match this.
+        if doomed_job_ids:
+            # Deleted by the ids collected BEFORE the frames went: the
+            # predicate that found them joins against frames, so it matches
+            # nothing once those rows are gone.
+            session.execute(
+                text("DELETE FROM jobs WHERE id = ANY(:ids)"), {"ids": doomed_job_ids}
+            )
+        session.commit()
+    except Exception:  # noqa: BLE001 -- a failed sweep must never fail the suite
+        session.rollback()
+    finally:
+        session.close()
+
+    # The frames above named objects under the storage service's `test/`
+    # prefix; the rows are gone, so the bytes must go too.
+    try:
+        from app.storage import get_storage_service
+
+        storage = get_storage_service()
+        # The worker's StorageService intentionally exposes no delete() --
+        # deletion is the backend's job -- so this reaches the boto3 client
+        # directly rather than widening that façade for test cleanup.
+        client = storage._client  # noqa: SLF001
+        bucket = storage._bucket  # noqa: SLF001
+        for key in doomed_keys:
+            client.delete_object(Bucket=bucket, Key=key)
+        listing = client.list_objects_v2(Bucket=bucket, Prefix="test/")
+        for obj in listing.get("Contents", []):
+            client.delete_object(Bucket=bucket, Key=obj["Key"])
+    except Exception:  # noqa: BLE001 -- object cleanup is best-effort
+        pass
