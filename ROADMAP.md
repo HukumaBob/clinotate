@@ -1468,3 +1468,107 @@ not a logged driver fault. One new data point for that open issue: `ollama`
 runs here as a systemd service holding the same RTX 2070, so VRAM has three
 consumers while `WORKER_VRAM_FRACTION = 0.8` was sized assuming only the
 desktop shares the card.
+
+### Phase 2b: Trainer-agnostic training metrics — DONE, real-training and
+deletion checks PENDING (2026-08-21)
+
+Widens the Train screen's metrics beyond the single flat `metrics` dict, so
+a model's Info panel can show a per-epoch loss curve, a confusion matrix and
+per-class numbers, without hard-coding to Ultralytics.
+
+**Decided:**
+
+- **The adapter contract normalizes SHAPE, never key names.** `TrainingResult`
+  gained `history: list[dict] | None`, `per_class: list[dict] | None`,
+  `confusion: dict | None` and `artifacts: list[str] | None`, but each field's
+  inner dict keeps whatever vocabulary the trainer that produced it uses
+  (Ultralytics' `train/box_loss`, `metrics/mAP50(B)`, etc., unchanged). This
+  was settled by reading the reference platform's hand-written loops
+  (`rtdetrv2_trainer.py`, `convnext_trainer.py` in the sibling `segmentation`
+  project): they already compute per-epoch validation metrics, a confusion
+  matrix and a flat final dict — the same shape as Ultralytics, with entirely
+  different key names. Normalizing names would mean inventing a canonical
+  vocabulary no real trainer speaks and translating every adapter into it;
+  normalizing only shape lets each adapter stay a thin pass-through of what
+  its trainer already computes.
+- **`on_epoch` widened to `on_epoch(epoch, total, metrics | None)`,** so
+  history streams into the database during training rather than only at the
+  end. A run that dies at epoch 12 keeps 12 points instead of none. The
+  history write goes through `_LogBuffer`'s existing threading lock rather
+  than a new one — a second lock guarding the same non-thread-safe SQLAlchemy
+  session would risk deadlock with the first.
+- **`ConfusionMatrix.summary()` was deliberately not used.** It sanitizes
+  class names through `[^a-zA-Z0-9_] -> _` and de-duplicates them, which
+  mangles real labels such as `bad_preparation (colono)`. The adapter reads
+  the raw `.matrix`/`.names` arrays instead and builds the `confusion` dict
+  itself, appending `background` last for detection tasks only.
+- **`delete_dataset` was left unchanged.** It already raises 409 whenever any
+  `ModelVersion` references the dataset and never deletes one itself, so the
+  artifact-leak cascade this plan anticipated (a dataset delete silently
+  orphaning a model's artifacts) does not exist; no code change was needed
+  there.
+
+**Implemented 2026-08-21**, spec
+[2026-08-21-training-metrics-design.md](docs/superpowers/specs/2026-08-21-training-metrics-design.md),
+plan [2026-08-21-training-metrics.md](docs/superpowers/plans/2026-08-21-training-metrics.md),
+10 commits from `8d2a043` to `c650d29`. Adds four `ModelVersion`/`TrainingRun`
+columns (`metrics_history`, `per_class_metrics`, `confusion_matrix`,
+`artifact_keys`), symmetric artifact deletion alongside weights, two new API
+endpoints, and a model Info panel with a training-curve chart and a
+confusion-matrix component.
+
+**What Task 10 actually verified (this session):**
+
+- **Backend:** `pytest tests/test_training_api.py tests/test_training_models.py
+  tests/test_training_service.py` — 28 passed, 2 failed. Both failures
+  (`test_training_run_defaults`, `test_model_version_links_to_run`) are
+  pre-existing and unrelated to this plan: `git diff` against `e5e7eb8` (the
+  commit immediately before Task 1) shows both test bodies byte-for-byte
+  unchanged, and the failure itself is an existing test/fixture mismatch —
+  the tests query real seeded `users`/`datasets` rows via
+  `db_module.SessionLocal()`, but the autouse `_route_app_db_sessions_to_the_test_database`
+  fixture (from `1f42e1e`, also pre-dating this plan) redirects that session
+  to the empty `endoscopy_test` schema for every test in the session, so the
+  `SELECT ... LIMIT 1` scalars come back `NULL`. Not chased, per this plan's
+  scope.
+- **ml-worker:** code copied into the running container with `docker cp`
+  (individual `tests` and `app` dirs, not nested) and run as
+  `/app/.venv/bin/python -m pytest tests/test_training_adapter.py
+  tests/test_ultralytics_yolo_adapter.py tests/test_tasks_training.py` — 23
+  passed, 0 failed.
+- **Frontend:** `npm test` — 76 test files, 517 tests, all passed. (`npm run
+  build` was not used as a gate — it is pre-existing red, per
+  `reference_pre_existing_red_tests`.)
+- **Image rebuild (the check this project has burned itself on before):**
+  `docker compose build ml-worker` rebuilt the `COPY app ./app` layer
+  (cache miss, confirming new code went in) and `docker compose up -d
+  ml-worker` recreated the container from that image — discarding the
+  `docker cp`-only state the test run above had left. Against the freshly
+  recreated container:
+  `python -c "from app.training_adapter import TrainingResult; print(TrainingResult.__dataclass_fields__.keys())"`
+  printed `dict_keys(['weights_path', 'metrics', 'history', 'per_class',
+  'confusion', 'artifacts'])` — all four new fields present in the image
+  itself, not just a live-patched container.
+
+**Explicitly not verified this session — pending a session with GPU and
+destructive-delete access:**
+
+- **No real training run was executed.** The brief's Step 3 (train 3 real
+  epochs on an existing dataset, then check the Info panel's curve point
+  count, confusion-matrix labels/`background` ordering, per-class numbers
+  against Ultralytics' own printed table, and that each artifact — especially
+  `results.csv` — downloads and opens) was explicitly out of scope for this
+  task and was deferred to the user directly. The `history`/`per_class`/
+  `confusion`/`artifacts` plumbing is exercised only by the unit and adapter
+  tests above, not by an actual Ultralytics run writing to the real database
+  and MinIO.
+- **Deletion symmetry was not verified against real MinIO objects.** The
+  brief's Step 4 (list `models/` in MinIO, delete a model version through the
+  UI, list again, confirm both the weights and every
+  `models/<id>/artifacts/*` object are gone) was likewise deferred — no
+  MinIO objects were listed or deleted in this session, per this task's
+  explicit constraint not to delete anything in MinIO.
+
+So this entry should be read as: the code compiles, unit-tests green, and
+the shipped image demonstrably contains it — but the feature has not yet
+been proven end-to-end against a real GPU training run or a real delete.
