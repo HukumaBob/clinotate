@@ -1572,3 +1572,36 @@ destructive-delete access:**
 So this entry should be read as: the code compiles, unit-tests green, and
 the shipped image demonstrably contains it — but the feature has not yet
 been proven end-to-end against a real GPU training run or a real delete.
+
+**Final whole-branch review, after the entry above was written (2026-08-21).**
+The review found no merge blockers, and confirmed the cross-cutting
+properties per-task reviews could not: the upload and delete paths store and
+remove the *same* key string with no reconstruction anywhere; the history
+write shares `_LogBuffer`'s lock with the log flush without nesting or
+committing off-lock; both ORM copies agree on all four columns; and an
+adapter reporting unknown metric names flows end to end. Two findings were
+fixed in `339716f`:
+
+- **`headlineScore` was the one place a trainer's vocabulary was hardcoded**,
+  and it had just been pulled into the new Info panel header — so an RT-DETR
+  run returning `ap_50` would have rendered `detection · — mAP50`, a dash
+  beside a metric that trainer never emits, while every other block on the
+  same screen showed correct numbers. It now falls back to the first numeric
+  entry in `metrics` and labels it with that entry's own key, leaving
+  Ultralytics runs rendering exactly as before. `fitness` is deliberately not
+  special-cased: the generic rule is what keeps it trainer-agnostic.
+- **Artifact keys were built from the basename alone** while collection walks
+  recursively, so a trainer writing both `train/results.csv` and
+  `val/results.csv` would have silently overwritten one with the other in
+  MinIO and listed the same key twice. Keys now preserve the path relative to
+  the output directory, sanitized so no component can escape the prefix.
+  Ultralytics cannot trigger this (its run directory is flat apart from
+  `weights/`), so this is hardening rather than a fixed live bug.
+
+Two checks to make during the pending real run, both suggested by that
+review: confirm `artifact_keys` contains no duplicate entries and that the
+artifact count matches the file count in Ultralytics' own `run/` directory;
+and when verifying the delete, confirm the whole `models/<id>/artifacts/`
+prefix is empty afterwards rather than spot-checking one object — the
+per-key `try`/`except` logs a warning and continues, so a partial deletion
+still returns 204 and would look like success at the API level.
