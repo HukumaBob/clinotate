@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
+import { ModelInfoPanel } from "./ModelInfoPanel";
 import { ModelVersionsTable } from "./ModelVersionsTable";
 import { TrainConfigForm, type DatasetOption, type TrainConfigValues } from "./TrainConfigForm";
 import { TrainRunPanel } from "./TrainRunPanel";
@@ -24,6 +25,7 @@ export function TrainPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitPending, setSubmitPending] = useState(false);
   const [stopPending, setStopPending] = useState(false);
+  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
 
   // Running offset into the active run's log, kept outside React state so
   // the poll tick can read the latest value without re-subscribing the
@@ -223,13 +225,20 @@ export function TrainPage() {
         </div>
 
         <div className="col-span-2 flex flex-col gap-6 overflow-hidden">
-          <div className="min-h-0 flex-1">
+          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
             <TrainRunPanel
               run={activeRun}
               logText={logText}
               onStop={handleStop}
               stopPending={stopPending}
             />
+
+            {selectedVersionId !== null && (
+              <ModelInfoPanel
+                versionId={selectedVersionId}
+                onClose={() => setSelectedVersionId(null)}
+              />
+            )}
           </div>
 
           <div className="max-h-64 shrink-0 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
@@ -237,6 +246,7 @@ export function TrainPage() {
               versions={versions}
               onDownload={handleDownload}
               onDelete={handleDelete}
+              onInfo={setSelectedVersionId}
             />
           </div>
         </div>

@@ -8,6 +8,7 @@ interface ModelVersionsTableProps {
   versions: ModelVersionRead[];
   onDownload: (id: number) => void;
   onDelete: (id: number) => void;
+  onInfo: (id: number) => void;
 }
 
 /** The headline score, which differs by task: mAP50 measures how well
@@ -28,7 +29,12 @@ function headlineScore(
   };
 }
 
-export function ModelVersionsTable({ versions, onDownload, onDelete }: ModelVersionsTableProps) {
+export function ModelVersionsTable({
+  versions,
+  onDownload,
+  onDelete,
+  onInfo,
+}: ModelVersionsTableProps) {
   const [armed, setArmed] = useState<number | null>(null);
 
   if (versions.length === 0) {
@@ -69,6 +75,13 @@ export function ModelVersionsTable({ versions, onDownload, onDelete }: ModelVers
               {new Date(version.created_at).toLocaleDateString()}
             </td>
             <td className="px-4 py-2 text-right">
+              <button
+                type="button"
+                className="mr-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"
+                onClick={() => onInfo(version.id)}
+              >
+                Info
+              </button>
               <button
                 type="button"
                 className="mr-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"

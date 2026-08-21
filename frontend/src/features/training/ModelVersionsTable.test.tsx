@@ -48,6 +48,7 @@ describe("ModelVersionsTable", () => {
         ]}
         onDownload={vi.fn()}
         onDelete={vi.fn()}
+        onInfo={vi.fn()}
       />,
     );
 
@@ -67,6 +68,7 @@ describe("ModelVersionsTable", () => {
         ]}
         onDownload={vi.fn()}
         onDelete={vi.fn()}
+        onInfo={vi.fn()}
       />,
     );
 
@@ -74,13 +76,15 @@ describe("ModelVersionsTable", () => {
   });
 
   it("shows an empty state with no versions", () => {
-    render(<ModelVersionsTable versions={[]} onDownload={vi.fn()} onDelete={vi.fn()} />);
+    render(<ModelVersionsTable versions={[]} onDownload={vi.fn()} onDelete={vi.fn()}
+        onInfo={vi.fn()} />);
 
     expect(screen.getByText(/no trained models yet/i)).toBeInTheDocument();
   });
 
   it("renders the headline metric", () => {
-    render(<ModelVersionsTable versions={versions} onDownload={vi.fn()} onDelete={vi.fn()} />);
+    render(<ModelVersionsTable versions={versions} onDownload={vi.fn()} onDelete={vi.fn()}
+        onInfo={vi.fn()} />);
 
     expect(screen.getByText("yolo11n-run7")).toBeInTheDocument();
     expect(screen.getByText("0.712")).toBeInTheDocument();
@@ -92,6 +96,7 @@ describe("ModelVersionsTable", () => {
         versions={[{ ...versions[0], metrics: {} }]}
         onDownload={vi.fn()}
         onDelete={vi.fn()}
+        onInfo={vi.fn()}
       />,
     );
 
@@ -103,7 +108,7 @@ describe("ModelVersionsTable", () => {
     const onDownload = vi.fn();
     const onDelete = vi.fn();
     render(
-      <ModelVersionsTable versions={versions} onDownload={onDownload} onDelete={onDelete} />,
+      <ModelVersionsTable versions={versions} onDownload={onDownload} onDelete={onDelete} onInfo={vi.fn()} />,
     );
 
     await user.click(screen.getByRole("button", { name: /download/i }));
@@ -116,11 +121,27 @@ describe("ModelVersionsTable", () => {
     expect(onDelete).toHaveBeenCalledWith(4);
   });
 
+  it("calls onInfo with the version id", async () => {
+    const onInfo = vi.fn();
+    render(
+      <ModelVersionsTable
+        versions={[versions[0]]}
+        onDownload={() => {}}
+        onDelete={() => {}}
+        onInfo={onInfo}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /info/i }));
+
+    expect(onInfo).toHaveBeenCalledWith(versions[0].id);
+  });
+
   it("arming one row's delete does not arm the others", async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();
     render(
-      <ModelVersionsTable versions={twoVersions} onDownload={vi.fn()} onDelete={onDelete} />,
+      <ModelVersionsTable versions={twoVersions} onDownload={vi.fn()} onDelete={onDelete} onInfo={vi.fn()} />,
     );
 
     const deleteButtons = screen.getAllByRole("button", { name: /^delete$/i });
