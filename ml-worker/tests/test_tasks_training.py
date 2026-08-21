@@ -5,6 +5,74 @@ from app.models import JobStatus, ModelVersion, TrainingRun, TrainingRunStatus
 from app.training_adapter import TrainingResult
 
 
+def test_history_accumulates_during_training(db_session, make_job_and_run, fake_storage):
+    from app.tasks import model_train
+
+    class _ReportingAdapter:
+        def train(self, request, on_log, on_epoch, should_stop):
+            for epoch in (1, 2, 3):
+                on_epoch(epoch, 3, {"train/loss": 1.0 / epoch})
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            artifact = request.output_dir / "results.csv"
+            artifact.write_text("epoch,loss\n")
+            return TrainingResult(
+                weights_path=weights,
+                metrics={"fitness": 0.5},
+                per_class=[{"class": "polyp", "mAP50": 0.7}],
+                confusion={"labels": ["polyp", "background"], "matrix": [[4, 1], [0, 2]]},
+                artifacts=[artifact],
+            )
+
+    job, run = make_job_and_run()
+    model_train(job.id, adapter=_ReportingAdapter())
+    db_session.refresh(run)
+
+    assert [p["epoch"] for p in run.metrics_history] == [1, 2, 3]
+    assert run.metrics_history[0]["train/loss"] == 1.0
+
+    version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
+    assert version.per_class_metrics[0]["class"] == "polyp"
+    assert version.confusion_matrix["labels"][-1] == "background"
+    assert version.artifact_keys == [f"models/{run.id}/artifacts/results.csv"]
+
+
+def test_a_silent_adapter_leaves_history_empty(db_session, make_job_and_run, fake_storage):
+    from app.tasks import model_train
+
+    class _SilentAdapter:
+        def train(self, request, on_log, on_epoch, should_stop):
+            on_epoch(1, 1, None)
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            return TrainingResult(weights_path=weights)
+
+    job, run = make_job_and_run()
+    model_train(job.id, adapter=_SilentAdapter())
+    db_session.refresh(run)
+
+    # Not [{"epoch": 1}] -- a point with no metrics would render a chart
+    # with no series.
+    assert run.metrics_history == []
+
+
+def test_history_survives_a_run_that_fails_midway(db_session, make_job_and_run, fake_storage):
+    from app.tasks import model_train
+
+    class _CrashingAdapter:
+        def train(self, request, on_log, on_epoch, should_stop):
+            on_epoch(1, 5, {"train/loss": 0.9})
+            on_epoch(2, 5, {"train/loss": 0.7})
+            raise RuntimeError("CUDA out of memory")
+
+    job, run = make_job_and_run()
+    model_train(job.id, adapter=_CrashingAdapter())
+    db_session.refresh(run)
+
+    assert run.status == TrainingRunStatus.FAILED
+    assert [p["epoch"] for p in run.metrics_history] == [1, 2]
+
+
 class StubAdapter:
     def __init__(self, *, stop_after=None):
         self.stop_after = stop_after
@@ -15,7 +83,7 @@ class StubAdapter:
         completed = 0
         for epoch in range(1, total + 1):
             on_log(f"epoch {epoch}/{total}")
-            on_epoch(epoch, total)
+            on_epoch(epoch, total, {"train/loss": 0.5})
             completed = epoch
             if should_stop():
                 self.saw_stop = True

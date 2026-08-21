@@ -759,6 +759,19 @@ class _LogBuffer:
         self._lines = []
         self._last_flush = time.monotonic()
 
+    def append_history(self, point: dict) -> None:
+        """Append one per-epoch point under this buffer's lock.
+
+        Deliberately a method here rather than a separate helper with its
+        own lock: the state needing protection is this session, and two
+        independent locks around one session is a deadlock waiting to
+        happen. Reassigns rather than mutating in place -- SQLAlchemy does
+        not track in-place mutation of a plain JSON column.
+        """
+        with self._lock:
+            self._run.metrics_history = [*(self._run.metrics_history or []), point]
+            self._session.commit()
+
 
 @celery_app.task(name="model_train")
 def model_train(job_id: int, adapter=None) -> None:
@@ -801,13 +814,18 @@ def model_train(job_id: int, adapter=None) -> None:
     def _on_log(line: str) -> None:
         buffer.add(line)
 
-    def _on_epoch(epoch: int, total: int) -> None:
+    def _on_epoch(epoch: int, total: int, metrics: dict | None = None) -> None:
         buffer.flush()
         run.current_epoch = epoch
         run.total_epochs = total
         job.progress = int((epoch / total) * 100) if total else 0
         _record_vram_usage(job)
         session.commit()
+        # A trainer that computes nothing contributes no point at all --
+        # not {"epoch": n} with no values, which would render a chart with
+        # no series.
+        if metrics:
+            buffer.append_history({"epoch": epoch, **metrics})
 
     def _should_stop() -> bool:
         session.refresh(run)
@@ -849,12 +867,28 @@ def model_train(job_id: int, adapter=None) -> None:
                 "application/octet-stream",
             )
 
+            artifact_keys = []
+            for artifact in result.artifacts:
+                artifact_path = Path(artifact)
+                if not artifact_path.exists():
+                    continue
+                artifact_key = f"models/{run.id}/artifacts/{artifact_path.name}"
+                storage.upload(
+                    artifact_key,
+                    artifact_path.read_bytes(),
+                    "application/octet-stream",
+                )
+                artifact_keys.append(artifact_key)
+
         version = ModelVersion(
             training_run_id=run.id,
             name=f"{run.base_model.rsplit('.', 1)[0]}-run{run.id}",
             task_type=run.task_type,
             storage_key=storage_key,
             metrics=result.metrics,
+            per_class_metrics=result.per_class,
+            confusion_matrix=result.confusion,
+            artifact_keys=artifact_keys,
         )
         session.add(version)
 
@@ -862,6 +896,10 @@ def model_train(job_id: int, adapter=None) -> None:
             TrainingRunStatus.STOPPED if run.stop_requested else TrainingRunStatus.SUCCEEDED
         )
         run.metrics = result.metrics
+        # A trainer that fills history only at the end wins over what
+        # on_epoch accumulated: it is that trainer's final word.
+        if result.history:
+            run.metrics_history = result.history
         run.finished_at = datetime.now(timezone.utc)
         job.status = JobStatus.SUCCEEDED
         job.progress = 100

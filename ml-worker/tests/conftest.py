@@ -123,6 +123,69 @@ def fake_storage(monkeypatch):
 
 
 @pytest.fixture
+def make_job_and_run(db_session):
+    """Factory version of `training_job` below: same Job/TrainingRun
+    construction and the same teardown, but returns a `(job, run)` pair
+    per call instead of a single fixed `training_job`, so a test can build
+    more than one pairing (or customize nothing and just call it once).
+    Kept as a separate fixture rather than refactoring `training_job` to
+    use it, to avoid touching the already-passing tests below.
+    """
+    from app.models import Job, JobStatus, JobType, TaskType, TrainingRun, TrainingRunStatus
+
+    created: list[tuple] = []
+
+    def _make():
+        dataset_id = _existing_row_id(db_session, "datasets")
+        user_id = _existing_row_id(db_session, "users")
+
+        run = TrainingRun(
+            dataset_id=dataset_id,
+            adapter="ultralytics_yolo",
+            base_model="yolo11n.pt",
+            task_type=TaskType.DETECTION,
+            config={"epochs": 2, "batch": 8, "imgsz": 640},
+            status=TrainingRunStatus.PENDING,
+            total_epochs=2,
+            created_by_id=user_id,
+        )
+        db_session.add(run)
+        db_session.commit()
+        db_session.refresh(run)
+
+        job = Job(
+            job_type=JobType.MODEL_TRAIN,
+            status=JobStatus.PENDING,
+            progress=0,
+            payload={"training_run_id": run.id, "export_key": "exports/1/dataset.zip"},
+            created_by_id=user_id,
+        )
+        db_session.add(job)
+        db_session.commit()
+        db_session.refresh(job)
+
+        run.job_id = job.id
+        # See training_job's comment below: commit(), not refresh(), so
+        # this fixture's identity-map entries are expired and later
+        # db_session.get(...) calls in the test observe model_train's
+        # writes from its own separate SessionLocal() instance.
+        db_session.commit()
+
+        created.append((job, run))
+        return job, run
+
+    yield _make
+
+    from app.models import ModelVersion
+
+    for job, run in created:
+        db_session.query(ModelVersion).filter_by(training_run_id=run.id).delete()
+        db_session.query(TrainingRun).filter_by(id=run.id).delete()
+        db_session.query(Job).filter_by(id=job.id).delete()
+    db_session.commit()
+
+
+@pytest.fixture
 def training_job(db_session):
     """A Job(job_type=MODEL_TRAIN) paired with a TrainingRun(total_epochs=2),
     linked via payload={"training_run_id", "export_key"} exactly as
