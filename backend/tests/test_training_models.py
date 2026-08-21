@@ -88,3 +88,33 @@ def test_model_version_links_to_run():
         session.query(TrainingRun).filter(TrainingRun.id == run.id).delete()
         session.commit()
         session.close()
+
+
+def test_training_run_carries_metrics_history():
+    run = TrainingRun(
+        dataset_id=1,
+        adapter="ultralytics_yolo",
+        base_model="yolo11n.pt",
+        task_type=TaskType.DETECTION,
+        total_epochs=3,
+        created_by_id=1,
+        metrics_history=[{"epoch": 1, "train/loss": 0.5}],
+    )
+
+    assert run.metrics_history[0]["epoch"] == 1
+
+
+def test_model_version_carries_per_class_confusion_and_artifacts():
+    version = ModelVersion(
+        training_run_id=1,
+        name="yolo11n-run1",
+        task_type=TaskType.DETECTION,
+        storage_key="models/1/best.pt",
+        per_class_metrics=[{"class": "polyp", "mAP50": 0.7}],
+        confusion_matrix={"labels": ["polyp", "background"], "matrix": [[5, 1], [2, 0]]},
+        artifact_keys=["models/1/artifacts/results.csv"],
+    )
+
+    assert version.per_class_metrics[0]["class"] == "polyp"
+    assert version.confusion_matrix["labels"][-1] == "background"
+    assert version.artifact_keys == ["models/1/artifacts/results.csv"]

@@ -53,6 +53,10 @@ class TrainingRun(Base):
     # Appended in chunks by the worker (~2s or ~20 lines), never per line.
     log_text: Mapped[str] = mapped_column(Text, default="")
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Per-epoch points, appended as training runs. Lives on the run rather
+    # than the model because a run that dies at epoch 12 has no
+    # ModelVersion at all, and those 12 points are what it left behind.
+    metrics_history: Mapped[list] = mapped_column(JSON, default=list)
     current_epoch: Mapped[int] = mapped_column(Integer, default=0)
     total_epochs: Mapped[int] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
@@ -77,6 +81,14 @@ class ModelVersion(Base):
     task_type: Mapped[TaskType] = mapped_column(Enum(TaskType))
     storage_key: Mapped[str] = mapped_column(String(500))
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Per-class rows in the trainer's own vocabulary, [{"class": ...}, ...].
+    per_class_metrics: Mapped[list] = mapped_column(JSON, default=list)
+    # {"labels": [...], "matrix": [[int, ...]]} -- numbers, not a picture,
+    # so a trainer that ships no PNG renders the same as one that does.
+    confusion_matrix: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Keys of the trainer's own files in object storage. Deleted with this
+    # row -- see delete_model_version.
+    artifact_keys: Mapped[list] = mapped_column(JSON, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
