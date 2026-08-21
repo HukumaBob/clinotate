@@ -123,7 +123,7 @@ export function ModelInfoPanel({ version, onClose }: ModelInfoPanelProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4 text-gray-200">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4 text-gray-200">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-gray-100">{version.name}</h2>

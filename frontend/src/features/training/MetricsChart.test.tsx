@@ -39,4 +39,37 @@ describe("MetricsChart", () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("caps an axis dominated by an early-epoch spike", () => {
+    // A real run peaked at val/cls_loss 674.84 against a steady-state 2-3;
+    // scaling to that maximum flattened every other series into a line.
+    const spiky = [
+      { epoch: 1, "val/cls_loss": 674.84 },
+      ...Array.from({ length: 20 }, (_, i) => ({
+        epoch: i + 2,
+        "val/cls_loss": 2 + (i % 3) * 0.1,
+      })),
+    ];
+
+    render(<MetricsChart history={spiky} />);
+
+    const labels = [...document.querySelectorAll("text")].map((t) => t.textContent);
+    expect(labels).not.toContain("674.84");
+    // The axis top now sits in the useful range, not at the outlier.
+    expect(labels.some((l) => l !== null && parseFloat(l) > 1 && parseFloat(l) < 10)).toBe(true);
+  });
+
+  it("leaves an axis alone when there is no outlier", () => {
+    render(
+      <MetricsChart
+        history={[
+          { epoch: 1, "metrics/mAP50(B)": 0.2 },
+          { epoch: 2, "metrics/mAP50(B)": 0.5 },
+          { epoch: 3, "metrics/mAP50(B)": 0.76 },
+        ]}
+      />,
+    );
+
+    expect([...document.querySelectorAll("text")].map((t) => t.textContent)).toContain("0.76");
+  });
 });

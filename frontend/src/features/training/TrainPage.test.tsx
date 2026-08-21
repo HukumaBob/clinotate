@@ -328,4 +328,64 @@ describe("TrainPage", () => {
 
     vi.useRealTimers();
   });
+
+  it("swaps the log for the metrics pane when a model's Info is opened", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/datasets") {
+        return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+      }
+      if (path === "/training/runs") return { data: [] };
+      if (path === "/training/models") {
+        return {
+          data: [
+            {
+              id: 7,
+              training_run_id: 3,
+              name: "yolo11n-run3",
+              task_type: "detection",
+              metrics: { "metrics/mAP50(B)": 0.65 },
+              is_active: false,
+              created_at: "2026-08-21T00:00:00Z",
+            },
+          ],
+        };
+      }
+      if (path === "/training/models/7/metrics") {
+        return {
+          data: {
+            metrics: { "metrics/mAP50(B)": 0.65 },
+            history: [{ epoch: 1, "train/loss": 0.5 }],
+            per_class: [],
+            confusion: null,
+            artifacts: [],
+          },
+        };
+      }
+      return { data: null };
+    });
+
+    render(<TrainPage />);
+
+    // No tabs until a model is selected -- the log owns the column.
+    expect(await screen.findByRole("button", { name: /^Info$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Metrics" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Info$/ }));
+    });
+
+    // Opening Info switches to Metrics, and Log remains one click away.
+    const metricsTab = screen.getByRole("tab", { name: "Metrics" });
+    expect(metricsTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "false");
+    // The name also appears in the models table below, so assert on the
+    // panel's own heading rather than a bare text match.
+    expect(screen.getByRole("heading", { name: "yolo11n-run3" })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Log" }));
+    });
+
+    expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
+  });
 });

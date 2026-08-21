@@ -42,6 +42,20 @@ function extent(values: number[]): [number, number] {
     // Flat series: pad so the line isn't drawn on the axis edge.
     return [min - 1, max + 1];
   }
+  // An early-epoch spike is normal in training losses and would otherwise
+  // set the whole axis: one real run peaked at val/cls_loss 674.84 against a
+  // steady-state 2-3, flattening every other series into a straight line.
+  // The axis is clipped to the 99th percentile so the useful range stays
+  // readable; the spike still draws, it just runs past the top.
+  const sorted = [...values].sort((a, b) => a - b);
+  // Indexed off length - 1 (not length): with 50 points, floor(50 * 0.95)
+  // still lands past the last index once rounding is applied, so the
+  // "percentile" would BE the outlier and the cap could never trigger.
+  const capIndex = Math.max(0, Math.min(sorted.length - 2, Math.floor((sorted.length - 1) * 0.95)));
+  const cap = sorted[capIndex];
+  if (cap > min && max > cap * 4) {
+    return [min, cap];
+  }
   return [min, max];
 }
 
@@ -142,12 +156,33 @@ export function MetricsChart({ history }: MetricsChartProps) {
 
   return (
     <div className="text-gray-200">
+      {/* preserveAspectRatio="none" with an explicit height: `w-full` alone
+          let the viewBox scale the height with the container's width, which
+          on a wide screen stretched a 280-unit chart to ~516px and pushed
+          the epoch axis out of the panel entirely. */}
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
         aria-label="Training metrics chart"
+        preserveAspectRatio="none"
+        height={HEIGHT}
         className="w-full"
+        style={{ height: HEIGHT }}
       >
+        {/* Clips the series to the plot area: with the axis capped at the
+            99th percentile, a spike runs past the top and would otherwise be
+            painted over the legend and the axis labels. */}
+        <defs>
+          <clipPath id="metrics-chart-plot">
+            <rect
+              x={MARGIN.left}
+              y={MARGIN.top}
+              width={WIDTH - MARGIN.left - MARGIN.right}
+              height={PLOT_HEIGHT}
+            />
+          </clipPath>
+        </defs>
+
         {/* Plot border */}
         <rect
           x={MARGIN.left}
@@ -158,36 +193,50 @@ export function MetricsChart({ history }: MetricsChartProps) {
           className="stroke-gray-800"
         />
 
-        {/* X axis labels (epoch numbers) */}
-        {epochs.map((epoch) => (
-          <text
-            key={`x-${epoch}`}
-            x={xScale(epoch)}
-            y={HEIGHT - MARGIN.bottom + 16}
-            textAnchor="middle"
-            className="fill-gray-500 text-[10px]"
-          >
-            {epoch}
-          </text>
-        ))}
+        {/* X axis labels (epoch numbers), thinned to roughly ten ticks.
+            A 50-epoch run drew all fifty, which ran them together into an
+            unreadable band; the first and last are always kept so the range
+            stays legible. */}
+        {epochs
+          .filter(
+            (_, i) =>
+              i % Math.max(1, Math.ceil(epochs.length / 10)) === 0 || i === epochs.length - 1,
+          )
+          .map((epoch) => (
+            <text
+              key={`x-${epoch}`}
+              x={xScale(epoch)}
+              y={HEIGHT - MARGIN.bottom + 16}
+              textAnchor="middle"
+              className="fill-gray-500 text-[10px]"
+            >
+              {epoch}
+            </text>
+          ))}
 
-        {/* Left Y axis range */}
-        <text
-          x={MARGIN.left - 4}
-          y={MARGIN.top + 4}
-          textAnchor="end"
-          className="fill-gray-500 text-[10px]"
-        >
-          {leftRange[1].toFixed(2)}
-        </text>
-        <text
-          x={MARGIN.left - 4}
-          y={HEIGHT - MARGIN.bottom}
-          textAnchor="end"
-          className="fill-gray-500 text-[10px]"
-        >
-          {leftRange[0].toFixed(2)}
-        </text>
+        {/* Left Y axis range. Guarded like the right one: with every series
+            on the loss axis, an unguarded left axis printed a bare 0.00 /
+            0.00 against nothing. */}
+        {leftKeys.length > 0 && (
+          <>
+            <text
+              x={MARGIN.left - 4}
+              y={MARGIN.top + 4}
+              textAnchor="end"
+              className="fill-gray-500 text-[10px]"
+            >
+              {leftRange[1].toFixed(2)}
+            </text>
+            <text
+              x={MARGIN.left - 4}
+              y={HEIGHT - MARGIN.bottom}
+              textAnchor="end"
+              className="fill-gray-500 text-[10px]"
+            >
+              {leftRange[0].toFixed(2)}
+            </text>
+          </>
+        )}
 
         {/* Right Y axis range */}
         {rightKeys.length > 0 && (
@@ -211,19 +260,21 @@ export function MetricsChart({ history }: MetricsChartProps) {
           </>
         )}
 
-        {seriesKeys.map((key, index) => {
-          if (hidden.has(key)) return null;
-          return (
-            <path
-              key={key}
-              data-series={key}
-              d={pathFor(key)}
-              fill="none"
-              stroke={PALETTE[index % PALETTE.length]}
-              strokeWidth={1.5}
-            />
-          );
-        })}
+        <g clipPath="url(#metrics-chart-plot)">
+          {seriesKeys.map((key, index) => {
+            if (hidden.has(key)) return null;
+            return (
+              <path
+                key={key}
+                data-series={key}
+                d={pathFor(key)}
+                fill="none"
+                stroke={PALETTE[index % PALETTE.length]}
+                strokeWidth={1.5}
+              />
+            );
+          })}
+        </g>
       </svg>
 
       <div className="mt-2 flex flex-wrap gap-2">

@@ -27,6 +27,15 @@ export function TrainPage() {
   const [stopPending, setStopPending] = useState(false);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const selectedVersion = versions.find((v) => v.id === selectedVersionId) ?? null;
+  const [rightPane, setRightPane] = useState<"log" | "metrics">("log");
+  // A version that vanishes (deleted while its metrics were open) must not
+  // strand the pane on a tab with nothing behind it.
+  const showMetrics = rightPane === "metrics" && selectedVersion !== null;
+
+  function openModelInfo(versionId: number) {
+    setSelectedVersionId(versionId);
+    setRightPane("metrics");
+  }
 
   // Running offset into the active run's log, kept outside React state so
   // the poll tick can read the latest value without re-subscribing the
@@ -226,18 +235,62 @@ export function TrainPage() {
         </div>
 
         <div className="col-span-2 flex flex-col gap-6 overflow-hidden">
-          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
-            <TrainRunPanel
-              run={activeRun}
-              logText={logText}
-              onStop={handleStop}
-              stopPending={stopPending}
-            />
-
+          {/* Log and metrics are two views of the same run and are never
+              needed at once, so they share this column as tabs rather than
+              stacking: stacked, each got half the height and its own inner
+              scrollbar, which left the training curve as an unreadable
+              strip. Selecting a model switches here automatically; the log
+              stays one click away while training runs. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {selectedVersion && (
+              <div
+                role="tablist"
+                aria-label="Run views"
+                className="mb-3 flex shrink-0 gap-2 border-b border-gray-800"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={rightPane === "log"}
+                  className={`px-3 py-1.5 text-sm ${
+                    rightPane === "log"
+                      ? "border-b-2 border-blue-500 text-gray-100"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                  onClick={() => setRightPane("log")}
+                >
+                  Log
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={rightPane === "metrics"}
+                  className={`px-3 py-1.5 text-sm ${
+                    rightPane === "metrics"
+                      ? "border-b-2 border-blue-500 text-gray-100"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                  onClick={() => setRightPane("metrics")}
+                >
+                  Metrics
+                </button>
+              </div>
+            )}
+
+            {showMetrics && selectedVersion ? (
               <ModelInfoPanel
                 version={selectedVersion}
-                onClose={() => setSelectedVersionId(null)}
+                onClose={() => {
+                  setSelectedVersionId(null);
+                  setRightPane("log");
+                }}
+              />
+            ) : (
+              <TrainRunPanel
+                run={activeRun}
+                logText={logText}
+                onStop={handleStop}
+                stopPending={stopPending}
               />
             )}
           </div>
@@ -247,7 +300,7 @@ export function TrainPage() {
               versions={versions}
               onDownload={handleDownload}
               onDelete={handleDelete}
-              onInfo={setSelectedVersionId}
+              onInfo={openModelInfo}
             />
           </div>
         </div>
