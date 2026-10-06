@@ -38,7 +38,7 @@ describe("AppHeader", () => {
     renderHeader();
 
     const navItems = screen.getAllByTestId("app-header-nav-item").map((el) => el.textContent);
-    expect(navItems).toEqual(["Tags", "Media", "Sequences", "Dataset", "Train", "Results"]);
+    expect(navItems).toEqual(["Tags", "Media", "Sequences", "Dataset", "Train", "QC"]);
   });
 
   it("renders Media as a real link to /media", () => {
@@ -62,10 +62,11 @@ describe("AppHeader", () => {
     expect(sequencesLink).toHaveAttribute("href", "/sequences");
   });
 
-  it("does not render the remaining item as a link", () => {
+  it("renders QC as a real link to /qc and no longer has a Results item", () => {
     renderHeader();
 
-    expect(screen.queryByRole("link", { name: "Results" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "QC" })).toHaveAttribute("href", "/qc");
+    expect(screen.queryByText("Results")).not.toBeInTheDocument();
   });
 
   it("renders Dataset as a real link to /datasets", () => {
