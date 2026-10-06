@@ -15,6 +15,7 @@ class JobType(str, enum.Enum):
     RANK_QUALITY = "rank_quality"
     FIND_SIMILAR = "find_similar"
     MODEL_TRAIN = "model_train"
+    INFERENCE_RUN = "inference_run"
 
 
 class JobStatus(str, enum.Enum):
@@ -234,6 +235,47 @@ class ModelVersion(Base):
     # row -- see delete_model_version.
     artifact_keys: Mapped[list] = mapped_column(JSON, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class InferenceRunStatus(str, enum.Enum):
+    """Duplicate of backend/app/inference/models.py's InferenceRunStatus --
+    member NAMES are what Postgres stores, so they must match exactly."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class InferenceRun(Base):
+    """ml-worker's mapping of backend/app/inference/models.py's InferenceRun.
+
+    video_id and created_by_id are plain Integers rather than ForeignKeys,
+    for the same reason as TrainingRun.dataset_id: ml-worker has no
+    duplicate `videos`/`users` table mapping to point them at.
+    """
+
+    __tablename__ = "inference_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    video_id: Mapped[int] = mapped_column(Integer)
+    model_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model_name: Mapped[str] = mapped_column(String(200))
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    frame_stride: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[InferenceRunStatus] = mapped_column(
+        Enum(InferenceRunStatus), default=InferenceRunStatus.PENDING
+    )
+    frames_total: Mapped[int] = mapped_column(Integer, default=0)
+    frames_processed: Mapped[int] = mapped_column(Integer, default=0)
+    predictions_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_by_id: Mapped[int] = mapped_column(Integer)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

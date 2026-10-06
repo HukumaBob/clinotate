@@ -372,3 +372,73 @@ def _sweep_test_rows_from_the_dev_database():
             client.delete_object(Bucket=bucket, Key=obj["Key"])
     except Exception:  # noqa: BLE001 -- object cleanup is best-effort
         pass
+
+
+@pytest.fixture
+def make_inference_job(db_session):
+    """A Job(INFERENCE_RUN) paired with an InferenceRun and a throwaway
+    videos row, linked via the payload exactly as
+    backend/app/inference/service.py builds it. Committed through
+    db_session (a different SessionLocal() than the task's own), and
+    deleted afterwards, children before parents."""
+    from sqlalchemy import text
+
+    from app.models import InferenceRun, InferenceRunStatus, Job, JobStatus, JobType
+
+    created: list[tuple[int, int, int]] = []
+
+    def _make(frame_stride: int = 2):
+        user_id = _existing_row_id(db_session, "users")
+        video_id = db_session.execute(
+            text(
+                "INSERT INTO videos (storage_key, filename, title, fps, duration_seconds, "
+                "size_bytes, checksum, created_at) VALUES "
+                "('videos/inference-test.mp4', 'inference-test.mp4', 'inference test', "
+                "10, 1, 1, 'inference-test', now()) RETURNING id"
+            )
+        ).scalar_one()
+        run = InferenceRun(
+            video_id=video_id,
+            model_version_id=None,
+            model_name="yolo11n-run1",
+            frame_stride=frame_stride,
+            status=InferenceRunStatus.PENDING,
+            created_by_id=user_id,
+        )
+        db_session.add(run)
+        db_session.commit()
+        db_session.refresh(run)
+
+        job = Job(
+            job_type=JobType.INFERENCE_RUN,
+            status=JobStatus.PENDING,
+            progress=0,
+            payload={
+                "inference_run_id": run.id,
+                "video_id": video_id,
+                "model_version_id": None,
+                "model_name": "yolo11n-run1",
+                "weights_key": "models/1/best.pt",
+                "task_type": "detection",
+                "frame_stride": frame_stride,
+            },
+            created_by_id=user_id,
+        )
+        db_session.add(job)
+        db_session.commit()
+        db_session.refresh(job)
+
+        run.job_id = job.id
+        db_session.commit()
+        created.append((run.id, job.id, video_id))
+        return job, run
+
+    yield _make
+
+    from sqlalchemy import text as _text
+
+    for run_id, job_id, video_id in created:
+        db_session.query(InferenceRun).filter_by(id=run_id).delete()
+        db_session.query(Job).filter_by(id=job_id).delete()
+        db_session.execute(_text("DELETE FROM videos WHERE id = :id"), {"id": video_id})
+    db_session.commit()

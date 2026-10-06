@@ -1,4 +1,6 @@
+import gc
 import io
+import json
 import os
 import sys
 import tempfile
@@ -11,15 +13,19 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
+from sqlalchemy import text
 
 from app.celery_app import WORKER_VRAM_FRACTION as _WORKER_VRAM_FRACTION
 from app.celery_app import celery_app
 from app.db import SessionLocal
+from app.inference_adapter import InferenceRequest
 from app.models import (
     Annotation,
     AnnotationStatus,
     AnnotationType,
     Frame,
+    InferenceRun,
+    InferenceRunStatus,
     Job,
     JobStatus,
     Label,
@@ -938,3 +944,127 @@ def model_train(job_id: int, adapter=None) -> None:
         session.commit()
     finally:
         session.close()
+
+
+INFERENCE_PROGRESS_SECONDS = 2.0
+
+
+@celery_app.task(name="inference_run")
+def inference_run(job_id: int, adapter=None) -> None:
+    """Run a detection or segmentation model over a stored video.
+
+    Writes one predictions document to object storage. Progress is
+    flushed on a cadence rather than per frame: a 90k-frame video would
+    otherwise cost 90k single-row UPDATEs.
+    """
+    # Same cross-family VRAM rule as every other task here.
+    _evict_sam3_models()
+    _evict_sam2_models()
+    _evict_quality_models()
+    _evict_similarity_models()
+
+    session = SessionLocal()
+    job = session.get(Job, job_id)
+    if job is None:
+        session.close()
+        return
+
+    run = session.get(InferenceRun, job.payload["inference_run_id"])
+    if run is None:
+        job.status = JobStatus.FAILED
+        job.error = f"InferenceRun {job.payload.get('inference_run_id')} not found"
+        job.finished_at = datetime.now(timezone.utc)
+        session.commit()
+        session.close()
+        return
+
+    if adapter is None:
+        from app.ultralytics_inference_adapter import UltralyticsInferenceAdapter
+
+        adapter = UltralyticsInferenceAdapter()
+
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime.now(timezone.utc)
+    run.status = InferenceRunStatus.RUNNING
+    run.started_at = job.started_at
+    session.commit()
+
+    storage = get_storage_service()
+    last_flush = [0.0]
+
+    def _on_progress(done: int, total: int) -> None:
+        now = time.monotonic()
+        if done < total and now - last_flush[0] < INFERENCE_PROGRESS_SECONDS:
+            return
+        last_flush[0] = now
+        run.frames_processed = done
+        run.frames_total = total
+        job.progress = int(done / total * 100) if total else 0
+        session.commit()
+
+    try:
+        # Resolved here, not at enqueue: a transcode between the two
+        # replaces videos.storage_key and deletes the old object.
+        video_key = session.execute(
+            text("SELECT storage_key FROM videos WHERE id = :id"),
+            {"id": job.payload["video_id"]},
+        ).scalar_one_or_none()
+        if video_key is None:
+            raise ValueError(f"Video {job.payload['video_id']} not found")
+
+        with tempfile.TemporaryDirectory() as workdir:
+            work = Path(workdir)
+            video_path = work / "input.mp4"
+            video_path.write_bytes(storage.download(video_key))
+            weights_path = work / "weights.pt"
+            weights_path.write_bytes(storage.download(job.payload["weights_key"]))
+
+            result = adapter.infer(
+                InferenceRequest(
+                    video_path=video_path,
+                    weights_path=weights_path,
+                    task_type=job.payload["task_type"],
+                    frame_stride=job.payload["frame_stride"],
+                ),
+                on_progress=_on_progress,
+            )
+
+        document = {
+            "task_type": result.task_type,
+            "model": {
+                "name": job.payload["model_name"],
+                "version_id": job.payload.get("model_version_id"),
+            },
+            "fps": result.fps,
+            "frame_stride": job.payload["frame_stride"],
+            "classes": result.classes,
+            "frames": result.frames,
+        }
+        predictions_key = f"inference/{run.id}/predictions.json"
+        storage.upload(predictions_key, json.dumps(document).encode(), "application/json")
+
+        run.predictions_key = predictions_key
+        run.frames_processed = run.frames_total = len(result.frames)
+        run.status = InferenceRunStatus.SUCCEEDED
+        run.finished_at = datetime.now(timezone.utc)
+        job.status = JobStatus.SUCCEEDED
+        job.progress = 100
+        job.result_ref = predictions_key
+        job.finished_at = run.finished_at
+        session.commit()
+    except Exception as exc:  # noqa: BLE001 -- recorded, not swallowed
+        session.rollback()
+        job = session.get(Job, job_id)
+        run = session.get(InferenceRun, job.payload["inference_run_id"])
+        run.status = InferenceRunStatus.FAILED
+        run.error = str(exc)[:2000]
+        run.finished_at = datetime.now(timezone.utc)
+        job.status = JobStatus.FAILED
+        job.error = str(exc)[:2000]
+        job.finished_at = run.finished_at
+        session.commit()
+    finally:
+        session.close()
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
