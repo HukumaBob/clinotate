@@ -1322,19 +1322,58 @@ pin holds, no version drift on the CUDA pair, container reaches Celery
   passed against the real running stack per `CLAUDE.md`'s testing
   philosophy.
 
-### Phase 3: QC screen, sub-project 1 (inference runs) — NOT STARTED (design approved 2026-10-06)
+### Phase 3: QC screen, sub-project 1 (inference runs) — IMPLEMENTED 2026-10-06, browser verification pending
 
 Design: [docs/specs/2026-10-06-qc-inference-runs-design.md](docs/specs/2026-10-06-qc-inference-runs-design.md).
-Implementation plan: not written yet.
+Plan: [docs/plans/2026-10-06-qc-inference-runs.md](docs/plans/2026-10-06-qc-inference-runs.md).
 
-The QC module comes from `yolo_qc_playground_architecture.pdf` and is split
-into five independent sub-projects (inference runs, inspection, QC flagging
-to dataset, A/B and stress tests, interpretability). Only the first is
-designed; the order is 1, 2, 3 and the rest are backlog. The QC screen
-replaces the never-built `Results` screen: the nav entry becomes `QC`
-(`/qc`). Open items for the plan are listed at the end of the spec (Alembic
-migration for the new `JobType` and table, the base for the QC player, and
-how QC videos are kept out of training datasets).
+The QC module comes from `yolo_qc_playground_architecture.pdf` (untracked, the
+user's) and is split into five independent sub-projects (inference runs,
+inspection, QC flagging to dataset, A/B and stress tests, interpretability).
+Only the first is built; the order is 1, 2, 3 and the rest are backlog. The QC
+screen replaces the never-built `Results` screen: the nav entry is `QC`
+(`/qc`, run view at `/qc/:runId`).
+
+Built: `backend/app/inference/` (table `inference_runs`, migration
+`d3e4f5a6b7c8`, REST under `/inference`), the `inference_run` Celery task and
+`InferenceAdapter` in ml-worker, and `frontend/src/features/qc/`. Executed
+subagent-driven on `master` (10 task commits plus review-fix commits).
+
+Verified on the real stack (API level): a real detect model over a real 660 s
+video at stride 30 gave 660 frames in 23 s with a valid predictions JSON;
+presigned predictions and video URLs both return `Access-Control-Allow-Origin`
+for `http://localhost:5173`; 409/404/422/503 paths behave; deleting a run
+removes its MinIO object and its job row.
+
+Deviations decided during implementation (also in the spec): `model_name`
+column on the run; `bbox` is `[x, y, w, h]` from the top-left; overlay redraws
+from a `requestAnimationFrame` loop; no drag-and-drop (the existing
+`VideoUploadFlow` form is reused); `DELETE /inference/runs/{id}` is refused
+(409) while active unless `?force=true`; enqueue failure marks the run failed
+and returns 503; deleting a Media video that has QC runs returns 409; a failed
+run's error is shown in its history row. The final whole-branch review found
+four Important issues (video delete 500, undeletable zombie runs, unreachable
+error text, unmeasured segmentation JSON size); the first three were fixed.
+
+**Still open:**
+- Browser verification (overlay alignment on real `currentTime`,
+  `devicePixelRatio` blur, canvas over the native controls bar) needs the
+  frontend on `http://localhost:5173` because the backend CORS allowlist only
+  has 5173. On 2026-10-06 another project's Vite held that port and this
+  project's frontend fell back to 5174; the user said to leave the port alone.
+- Segmentation JSON size is unmeasured (only a detect model exists in the dev
+  database). The 0.05 confidence floor with full contours at stride 1 could be
+  very large on a long video; measure with a real segmentation model before
+  trusting it. Deliberately not mitigated in code, because simplifying or
+  threshold-gating polygons would conflict with sub-project 2's confidence
+  slider.
+- QC videos are ordinary `Video` rows and could end up in a training dataset.
+  How they are marked or excluded (`grouping_key`) must be settled before
+  sub-project 3 commits frames back to datasets.
+- Deferred minors (see the SDD ledger, gitignored under `.superpowers/sdd/`):
+  `entities/` imports a type from `features/qc`; solo-pool ml-worker blocks
+  SAM calls during a long run (same as training); a predictions object can be
+  orphaned if a run is force-deleted at the moment the worker finishes.
 
 ---
 
