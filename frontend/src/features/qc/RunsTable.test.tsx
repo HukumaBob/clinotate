@@ -50,18 +50,36 @@ describe("RunsTable", () => {
     expect(screen.getByRole("button", { name: "View" })).toBeDisabled();
   });
 
-  it("does not offer Delete while a run is active", () => {
-    renderTable([run({ status: "pending" })]);
-    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+  it("offers Force delete on an active run and forwards force=true after Confirm", async () => {
+    const user = userEvent.setup();
+    const onDelete = renderTable([run({ id: 7, status: "running" })]);
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Force delete" }));
+    expect(onDelete).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(onDelete).toHaveBeenCalledWith(7, true);
   });
 
-  it("deletes only after the second press", async () => {
+  it("deletes a finished run only after the second press, without force", async () => {
     const user = userEvent.setup();
     const onDelete = renderTable([run({ id: 12 })]);
     await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(onDelete).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Confirm" }));
-    expect(onDelete).toHaveBeenCalledWith(12);
+    expect(onDelete).toHaveBeenCalledWith(12, false);
+  });
+
+  it("shows a failed run's error under its status", () => {
+    renderTable([run({ status: "failed", error: "Could not open the video file" })]);
+    expect(screen.getByText("Could not open the video file")).toHaveAttribute(
+      "title",
+      "Could not open the video file",
+    );
+  });
+
+  it("shows no error line for a succeeded run", () => {
+    renderTable([run({ status: "succeeded", error: null })]);
+    expect(screen.queryByTitle(/./)).not.toBeInTheDocument();
   });
 
   it("shows an empty state", () => {

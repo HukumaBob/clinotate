@@ -8,6 +8,7 @@ import {
 import { useModelVersions } from "../../entities/useModelVersions";
 import { useVideos } from "../../entities/useVideos";
 import { VideoUploadFlow } from "../media/VideoUploadFlow";
+import { errorMessage } from "./errorMessage";
 import { RunForm } from "./RunForm";
 import { RunStatus } from "./RunStatus";
 import { RunsTable } from "./RunsTable";
@@ -36,7 +37,7 @@ export function QcPage() {
     runs[0] ??
     null;
 
-  const submitError = createRun.error ? errorMessage(createRun.error) : null;
+  const submitError = createRun.error ? errorMessage(createRun.error, "Could not start the run") : null;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -75,19 +76,16 @@ export function QcPage() {
         </div>
         <RunStatus run={shownRun} />
       </div>
+      {deleteRun.error && (
+        <p role="alert" className="text-sm text-red-400">
+          {errorMessage(deleteRun.error, "Could not delete the run")}
+        </p>
+      )}
       <RunsTable
         runs={runs}
         videoTitles={videoTitles}
-        onDelete={(id) => deleteRun.mutate(id)}
+        onDelete={(id, force) => deleteRun.mutate({ runId: id, force })}
       />
     </div>
   );
-}
-
-function errorMessage(error: unknown): string {
-  if (error && typeof error === "object" && "detail" in error) {
-    const detail = (error as { detail: unknown }).detail;
-    if (typeof detail === "string") return detail;
-  }
-  return "Could not start the run";
 }

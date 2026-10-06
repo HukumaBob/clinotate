@@ -55,9 +55,9 @@ export function useCreateInferenceRun() {
 export function useDeleteInferenceRun() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (runId: number) => {
+    mutationFn: async ({ runId, force = false }: { runId: number; force?: boolean }) => {
       const result = await apiClient.DELETE("/inference/runs/{run_id}", {
-        params: { path: { run_id: runId } },
+        params: { path: { run_id: runId }, ...(force ? { query: { force: true } } : {}) },
       });
       if (result.error) throw result.error;
     },

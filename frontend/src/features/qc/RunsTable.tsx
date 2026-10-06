@@ -6,7 +6,7 @@ import type { InferenceRun } from "../../entities/useInferenceRuns";
 interface RunsTableProps {
   runs: InferenceRun[];
   videoTitles: Record<number, string>;
-  onDelete: (id: number) => void;
+  onDelete: (id: number, force: boolean) => void;
 }
 
 const BUTTON = "rounded border border-gray-700 px-2 py-1 text-xs text-gray-300";
@@ -38,7 +38,14 @@ export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
               <td className="px-4 py-2">{videoTitles[run.video_id] ?? `Video ${run.video_id}`}</td>
               <td className="px-4 py-2 text-gray-400">{run.model_name}</td>
               <td className="px-4 py-2 text-gray-400">{run.frame_stride}</td>
-              <td className="px-4 py-2 text-gray-400">{run.status}</td>
+              <td className="px-4 py-2 text-gray-400">
+                <div>{run.status}</div>
+                {run.status === "failed" && run.error && (
+                  <div className="max-w-xs truncate text-xs text-red-400" title={run.error}>
+                    {run.error}
+                  </div>
+                )}
+              </td>
               <td className="px-4 py-2 text-gray-400">
                 {new Date(run.created_at).toLocaleDateString()}
               </td>
@@ -57,7 +64,7 @@ export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
                     type="button"
                     className="rounded bg-red-700 px-2 py-1 text-xs text-white"
                     onClick={() => {
-                      onDelete(run.id);
+                      onDelete(run.id, active);
                       setArmed(null);
                     }}
                   >
@@ -66,11 +73,10 @@ export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
                 ) : (
                   <button
                     type="button"
-                    disabled={active}
-                    className={`${BUTTON} disabled:opacity-50`}
+                    className={BUTTON}
                     onClick={() => setArmed(run.id)}
                   >
-                    Delete
+                    {active ? "Force delete" : "Delete"}
                   </button>
                 )}
               </td>
