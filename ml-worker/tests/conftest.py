@@ -348,6 +348,36 @@ def _sweep_test_rows_from_the_dev_database():
             session.execute(
                 text("DELETE FROM jobs WHERE id = ANY(:ids)"), {"ids": doomed_job_ids}
             )
+        # make_inference_job's throwaway videos, in FK order: the runs name
+        # the videos and the jobs, so runs go first, then their jobs, then
+        # the videos. Job ids are collected before the runs vanish.
+        inference_video_ids = (
+            "SELECT id FROM videos WHERE title = 'inference test' "
+            "AND storage_key = 'videos/inference-test.mp4'"
+        )
+        inference_job_ids = [
+            row[0]
+            for row in session.execute(
+                text(
+                    "SELECT job_id FROM inference_runs WHERE job_id IS NOT NULL "
+                    f"AND video_id IN ({inference_video_ids})"
+                )
+            )
+        ]
+        session.execute(
+            text(f"DELETE FROM inference_runs WHERE video_id IN ({inference_video_ids})")
+        )
+        if inference_job_ids:
+            session.execute(
+                text("DELETE FROM jobs WHERE job_type = 'INFERENCE_RUN' AND id = ANY(:ids)"),
+                {"ids": inference_job_ids},
+            )
+        session.execute(
+            text(
+                "DELETE FROM videos WHERE title = 'inference test' "
+                "AND storage_key = 'videos/inference-test.mp4'"
+            )
+        )
         session.commit()
     except Exception:  # noqa: BLE001 -- a failed sweep must never fail the suite
         session.rollback()

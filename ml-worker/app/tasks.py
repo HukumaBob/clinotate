@@ -1055,15 +1055,22 @@ def inference_run(job_id: int, adapter=None) -> None:
         session.commit()
     except Exception as exc:  # noqa: BLE001 -- recorded, not swallowed
         session.rollback()
+        # A force delete may have removed the run (and its job) while we
+        # worked, so either row can be gone: record what still exists.
+        session.expunge_all()
         job = session.get(Job, job_id)
-        run = session.get(InferenceRun, job.payload["inference_run_id"])
-        run.status = InferenceRunStatus.FAILED
-        run.error = str(exc)[:2000]
-        run.finished_at = datetime.now(timezone.utc)
-        job.status = JobStatus.FAILED
-        job.error = str(exc)[:2000]
-        job.finished_at = run.finished_at
-        session.commit()
+        if job is not None:
+            run = session.get(InferenceRun, job.payload["inference_run_id"])
+            now = datetime.now(timezone.utc)
+            message = str(exc)[:2000]
+            if run is not None:
+                run.status = InferenceRunStatus.FAILED
+                run.error = message
+                run.finished_at = now
+            job.status = JobStatus.FAILED
+            job.error = message
+            job.finished_at = now
+            session.commit()
     finally:
         session.close()
         gc.collect()

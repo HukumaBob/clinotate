@@ -179,3 +179,55 @@ def test_other_model_families_are_evicted_before_the_model_loads(
 
     assert calls[-1] == "infer"
     assert sorted(calls[:-1]) == ["quality", "sam2", "sam3", "similarity"]
+
+
+def test_a_run_deleted_mid_flight_ends_without_raising_or_a_running_job(
+    db_session, make_inference_job, fake_storage
+):
+    """A force delete removes the run row while the worker is inferring."""
+    import app.db as db_module
+    from app.models import InferenceRun, Job
+    from app.tasks import inference_run
+
+    job, run = make_inference_job()
+    job_id, run_id = job.id, run.id
+
+    def _delete_the_run(on_progress):
+        other = db_module.SessionLocal()
+        try:
+            other.query(InferenceRun).filter_by(id=run_id).delete()
+            other.commit()
+        finally:
+            other.close()
+
+    inference_run(job_id, adapter=_StubAdapter(on_infer=_delete_the_run))
+
+    db_session.expire_all()
+    assert db_session.get(InferenceRun, run_id) is None
+    assert db_session.get(Job, job_id).status == JobStatus.FAILED
+
+
+def test_a_job_deleted_mid_flight_ends_without_raising(
+    db_session, make_inference_job, fake_storage
+):
+    import app.db as db_module
+    from app.models import InferenceRun, Job
+    from app.tasks import inference_run
+
+    job, run = make_inference_job()
+    job_id, run_id = job.id, run.id
+
+    def _delete_both(on_progress):
+        other = db_module.SessionLocal()
+        try:
+            other.query(InferenceRun).filter_by(id=run_id).update({"job_id": None})
+            other.query(InferenceRun).filter_by(id=run_id).delete()
+            other.query(Job).filter_by(id=job_id).delete()
+            other.commit()
+        finally:
+            other.close()
+
+    inference_run(job_id, adapter=_StubAdapter(on_infer=_delete_both))
+
+    db_session.expire_all()
+    assert db_session.get(Job, job_id) is None
