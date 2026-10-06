@@ -1,6 +1,7 @@
 # QC screen, sub-project 1: inference runs
 
-Date: 2026-10-06. Status: design approved, implementation plan not yet written.
+Date: 2026-10-06. Status: implemented; browser verification pending. Plan:
+[docs/plans/2026-10-06-qc-inference-runs.md](../plans/2026-10-06-qc-inference-runs.md).
 
 Source material: `yolo_qc_playground_architecture.pdf` (untracked, Russian) proposes a
 "Review" module (Inference & QC Playground). This document designs its first
@@ -55,9 +56,11 @@ All UI copy is English.
 
 ### `/qc`: launch and history
 
-- Run form: model select (detect/segment `ModelVersion`s, showing name, task
-  type and mAP50; classify models are not listed), video (the existing `VideoUploadFlow` form (title, procedure, file input); drag-and-drop is not added in this sub-project,
-  or a select of uploaded videos), `Frame stride`, `Run`.
+- Run form: model select (detect/segment `ModelVersion`s, showing name and
+  task type, not mAP50; classify models are not listed), video (a select of
+  uploaded videos, or the existing `VideoUploadFlow` form (title, procedure,
+  file input); drag-and-drop is not added in this sub-project), `Frame
+  stride`, `Run`.
 - Live status of the selected run: badge, progress bar, `frames done / total`.
 - History table: video, model, stride, status, date, `View`, `Delete`
   (arm/confirm, as in Train).
@@ -97,14 +100,23 @@ needs the live model row, and the history shows `model_name`, which is also copi
 - `POST /runs` takes `{video_id, model_version_id, frame_stride}`, creates
   the run and its `Job`, answers 202. 404 for an unknown video or model; 422
   for a classify model or `frame_stride < 1`; a clear error if the video is
-  not `browser_playable` (it could be inferred but not viewed).
+  not `browser_playable` (it could be inferred but not viewed): that is a 409.
+  If the job cannot be handed to the broker, the run and its job are marked
+  `failed` (error "Could not enqueue the job: ...") and the API answers 503.
 - `GET /runs`, newest first. `GET /runs/{id}` for status and progress.
 - `GET /runs/{id}/predictions` returns a presigned URL to the JSON, in the
   style of `download_model`. The JSON is not proxied through the API.
 - `DELETE /runs/{id}` removes the row and the JSON object together (the
   lesson from model artifacts that outlived their version). Refused with 409
-  while the run is `pending` or `running`.
+  while the run is `pending` or `running`. `DELETE /runs/{id}?force=true`
+  removes an active run too: its job is marked failed first, and the worker
+  tolerates the vanished rows. Deleting a run also deletes its job row.
 - After any schema or route change regenerate `openapi.json` (see CLAUDE.md).
+
+### Media
+
+Deleting a video that has QC runs returns 409 ("Delete this video's QC runs
+before deleting it"), because the run rows reference it.
 
 ### `ml-worker`
 
@@ -171,8 +183,8 @@ libraries.
   The upload form is the existing `VideoUploadFlow` form (title, procedure, file input); drag-and-drop is not added in this sub-project. It selects the new video on
   success.
 - `features/qc/RunViewPage.tsx`, `PredictionOverlay.tsx`, and
-  `predictionsAtTime.ts`, a pure function from time to the nearest processed
-  frame's detections, kept out of the component so it can be unit tested.
+  `predictions.ts` (`detectionsAt`), a pure function from time to the nearest
+  processed frame's detections, kept out of the component so it can be unit tested.
 - `AppHeader.tsx` and `App.tsx`: the `Results` entry becomes `QC`.
 - The overlay positions shapes inside the real picture rectangle, because
   the video is letterboxed. It reuses `features/media/computeVideoMediaRect.ts`.
@@ -200,12 +212,25 @@ Test-first, per CLAUDE.md.
   the confidence floor; the task's progress, its `failed` path, and that
   eviction runs before the model loads. Tests sweep the rows and objects
   they create.
-- Frontend: unit tests for `predictionsAtTime` and the overlay geometry,
+- Frontend: unit tests for `detectionsAt` and the overlay geometry,
   hook tests with a mocked `apiClient`, component tests for `RunForm` and
   `RunsTable`.
 - Before the work is called done, one real run in a real browser against the
   real stack with a real model and video. Mocked tests cannot catch CORS or
   packaging problems (see "Testing philosophy" in CLAUDE.md).
+
+## Deviations from the first draft
+
+Decided during implementation:
+
+- `inference_runs.model_name` column, copied at creation, so the history and
+  the overlay survive deletion of the model version.
+- Bounding boxes are stored and drawn top-left (`x, y, w, h`, normalized).
+- The overlay redraws in a `requestAnimationFrame` loop rather than on
+  `timeupdate`, which is too coarse for smooth boxes.
+- No drag-and-drop upload; the existing form is reused.
+- Force delete for active runs (arm/confirm, labelled "Force delete").
+- A failed run's error is shown in the history table, under its status.
 
 ## Out of scope
 
