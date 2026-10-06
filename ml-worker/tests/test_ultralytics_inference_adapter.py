@@ -143,3 +143,50 @@ def test_an_unreadable_video_fails_with_a_message_instead_of_hanging(tmp_path):
     broken.write_bytes(b"this is not a video")
     with pytest.raises(ValueError, match="video"):
         _adapter(_FakeModel()).infer(_request(broken, 1), lambda done, total: None)
+
+
+class _TimedResult(_Result):
+    def __init__(self, speed, **kwargs):
+        super().__init__(**kwargs)
+        self.speed = speed
+
+
+class _TimedModel(_FakeModel):
+    """Returns a result carrying Ultralytics-style `speed` for each call."""
+
+    def __init__(self, speeds):
+        super().__init__()
+        self.speeds = speeds
+
+    def __call__(self, image, conf, verbose):
+        speed = self.speeds[min(self.calls, len(self.speeds) - 1)]
+        self.calls += 1
+        return [_TimedResult(speed, boxes=_Boxes([], [], []))]
+
+
+def _speed(inference):
+    return {"preprocess": 1.0, "inference": inference, "postprocess": 1.0}
+
+
+def test_timing_aggregates_the_models_own_speed_and_drops_the_warm_up_frame(tmp_path):
+    video = _write_video(tmp_path / "v.avi", frames=4)
+    model = _TimedModel([_speed(50.0), _speed(10.0), _speed(10.0), _speed(10.0)])
+    result = _adapter(model).infer(_request(video, 1), lambda done, total: None)
+    assert result.timing["frames_measured"] == 3
+    assert result.timing["inference_ms"]["mean"] == 10.0
+    assert result.timing["total_ms"]["mean"] == 12.0
+
+
+def test_a_model_without_speed_yields_no_timing_and_still_succeeds(tmp_path):
+    video = _write_video(tmp_path / "v.avi", frames=3)
+    result = _adapter(_FakeModel()).infer(_request(video, 1), lambda done, total: None)
+    assert result.timing is None
+    assert list(result.frames) == ["0", "1", "2"]
+
+
+def test_a_malformed_speed_is_ignored_instead_of_failing_the_run(tmp_path):
+    video = _write_video(tmp_path / "v.avi", frames=3)
+    model = _TimedModel([{"preprocess": "fast", "inference": None}])
+    result = _adapter(model).infer(_request(video, 1), lambda done, total: None)
+    assert result.timing is None
+    assert len(result.frames) == 3

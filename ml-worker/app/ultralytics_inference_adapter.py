@@ -13,6 +13,7 @@ from typing import Any, Callable
 import cv2
 
 from app.inference_adapter import InferenceRequest, InferenceResult
+from app.inference_timing import summarize_timing
 
 _BOX_DIGITS = 5
 _CONFIDENCE_DIGITS = 4
@@ -81,6 +82,7 @@ class UltralyticsInferenceAdapter:
 
             frames: dict[str, dict] = {}
             index = 0
+            timing_samples: list[dict] = []
             # grab() advances without decoding; only the frames we keep are
             # retrieved, which is what makes a large stride cheap.
             while capture.grab():
@@ -93,6 +95,11 @@ class UltralyticsInferenceAdapter:
                         else:
                             timestamp_ms = int(index / fps * 1000) if fps else 0
                         results = model(image, conf=request.confidence_floor, verbose=False)
+                        speed = getattr(results[0], "speed", None)
+                        if isinstance(speed, dict):
+                            timing_samples.append(
+                                {stage: speed.get(stage) for stage in ("preprocess", "inference", "postprocess")}
+                            )
                         frames[str(index)] = {
                             "timestamp_ms": timestamp_ms,
                             "detections": _detections_from(results[0], request.task_type),
@@ -108,5 +115,9 @@ class UltralyticsInferenceAdapter:
         names = model.names
         classes = [str(names[i]) for i in range(len(names))]
         return InferenceResult(
-            task_type=request.task_type, fps=fps, classes=classes, frames=frames
+            task_type=request.task_type,
+            fps=fps,
+            classes=classes,
+            frames=frames,
+            timing=summarize_timing(timing_samples),
         )

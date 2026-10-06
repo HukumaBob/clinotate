@@ -231,3 +231,44 @@ def test_a_job_deleted_mid_flight_ends_without_raising(
 
     db_session.expire_all()
     assert db_session.get(Job, job_id) is None
+
+
+def test_timing_is_written_into_the_document_when_the_adapter_measured_it(
+    db_session, make_inference_job, fake_storage
+):
+    from app.tasks import inference_run
+
+    timing = {
+        "frames_measured": 2,
+        "preprocess_ms": {"mean": 1.0, "p50": 1.0, "p95": 1.0, "max": 1.0},
+        "inference_ms": {"mean": 9.0, "p50": 9.0, "p95": 9.0, "max": 9.0},
+        "postprocess_ms": {"mean": 1.0, "p50": 1.0, "p95": 1.0, "max": 1.0},
+        "total_ms": {"mean": 11.0, "p50": 11.0, "p95": 11.0, "max": 11.0},
+        "model_fps": 90.9,
+    }
+
+    class _TimedStub(_StubAdapter):
+        def infer(self, request, on_progress):
+            result = super().infer(request, on_progress)
+            result.timing = timing
+            return result
+
+    job, run = make_inference_job(frame_stride=2)
+    inference_run(job.id, adapter=_TimedStub())
+    db_session.refresh(run)
+
+    document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
+    assert document["timing"] == timing
+
+
+def test_the_document_has_no_timing_key_when_nothing_was_measured(
+    db_session, make_inference_job, fake_storage
+):
+    from app.tasks import inference_run
+
+    job, run = make_inference_job(frame_stride=2)
+    inference_run(job.id, adapter=_StubAdapter())
+    db_session.refresh(run)
+
+    document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
+    assert "timing" not in document

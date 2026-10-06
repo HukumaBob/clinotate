@@ -33,6 +33,9 @@ class InferenceResult:
     # A processed frame with nothing in it has "detections": [], so
     # "nothing found" stays distinguishable from "frame not processed".
     frames: dict[str, dict] = field(default_factory=dict)
+    # Aggregates of the model's own per-frame timings (see inference_timing),
+    # or None when the model reported none. Optional in the document too.
+    timing: dict | None = None
 
 
 class InferenceAdapter(Protocol):

@@ -1041,6 +1041,8 @@ def inference_run(job_id: int, adapter=None) -> None:
             "classes": result.classes,
             "frames": result.frames,
         }
+        if result.timing is not None:
+            document["timing"] = result.timing
         predictions_key = f"inference/{run.id}/predictions.json"
         storage.upload(predictions_key, json.dumps(document).encode(), "application/json")
 
