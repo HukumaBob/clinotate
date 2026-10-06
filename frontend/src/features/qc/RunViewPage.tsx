@@ -10,6 +10,7 @@ import { useViewParams } from "./analysis/useViewParams";
 import { buildView } from "./analysis/view";
 import { DisplayPanel } from "./DisplayPanel";
 import { EventNav } from "./EventNav";
+import { eventDirectionFor, isTypingTarget } from "./eventKeys";
 import { LatencyPanel } from "./LatencyPanel";
 import { PredictionOverlay } from "./PredictionOverlay";
 import { colorForClass, countByClass } from "./predictions";
@@ -18,11 +19,6 @@ import { TimelineStrip } from "./TimelineStrip";
 
 // A stable empty list, so callbacks that depend on `events` keep their identity.
 const NO_EVENTS: FlickerEvent[] = [];
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  return !!el && (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable);
-}
 
 export function RunViewPage() {
   const params = useParams();
@@ -83,8 +79,8 @@ export function RunViewPage() {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (isTypingTarget(event.target)) return;
-      if (event.key === "[") jump("prev");
-      else if (event.key === "]") jump("next");
+      const direction = eventDirectionFor(event);
+      if (direction) jump(direction);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -165,7 +161,9 @@ export function RunViewPage() {
                 isCoarse={flicker?.isCoarse ?? false}
               />
             ) : (
-              <p className="text-xs text-gray-500">Display controls appear when predictions load.</p>
+              predictionsQuery.isPending && (
+                <p className="text-xs text-gray-500">Display controls appear when predictions load.</p>
+              )
             )}
 
             <section aria-label="Classes">
