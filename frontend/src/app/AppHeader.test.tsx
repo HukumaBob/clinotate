@@ -34,3 +34,12 @@ describe("AppHeader settings icon", () => {
     expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
   });
 });
+
+describe("AppHeader navigation", () => {
+  it("links QC to /qc and no longer shows Results", () => {
+    mockAuth("admin");
+    render(<AppHeader />, { wrapper: MemoryRouter });
+    expect(screen.getByRole("link", { name: "QC" })).toHaveAttribute("href", "/qc");
+    expect(screen.queryByText("Results")).not.toBeInTheDocument();
+  });
+});

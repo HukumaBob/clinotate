@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { label: "Sequences", path: "/sequences" },
   { label: "Dataset", path: "/datasets" },
   { label: "Train", path: "/train" },
-  { label: "Results", path: null },
+  { label: "QC", path: "/qc" },
 ] as const;
 
 export function AppHeader() {
