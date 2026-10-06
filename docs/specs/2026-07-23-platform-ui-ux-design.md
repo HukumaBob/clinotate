@@ -24,8 +24,8 @@ Six sections, top nav bar:
 Tags → Media → Sequences → Dataset → Train → QC
 ```
 
-The `QC` screen replaces `Results` (inference runs over a video with a prediction overlay) is
-designed in [2026-10-06-qc-inference-runs-design.md](2026-10-06-qc-inference-runs-design.md).
+The `QC` screen (inference runs over a video with a prediction overlay) replaces
+`Results` and is designed in [2026-10-06-qc-inference-runs-design.md](2026-10-06-qc-inference-runs-design.md).
 
 The original draft of this spec put these in the old platform's order
 (`Media → Sequences → Tags → ...`); `Tags` was moved to the front once the
