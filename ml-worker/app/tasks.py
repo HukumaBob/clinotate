@@ -978,11 +978,6 @@ def inference_run(job_id: int, adapter=None) -> None:
         session.close()
         return
 
-    if adapter is None:
-        from app.ultralytics_inference_adapter import UltralyticsInferenceAdapter
-
-        adapter = UltralyticsInferenceAdapter()
-
     job.status = JobStatus.RUNNING
     job.started_at = datetime.now(timezone.utc)
     run.status = InferenceRunStatus.RUNNING
@@ -1003,6 +998,12 @@ def inference_run(job_id: int, adapter=None) -> None:
         session.commit()
 
     try:
+        # Inside the try so an import/CUDA failure ends FAILED, not pending.
+        if adapter is None:
+            from app.ultralytics_inference_adapter import UltralyticsInferenceAdapter
+
+            adapter = UltralyticsInferenceAdapter()
+
         # Resolved here, not at enqueue: a transcode between the two
         # replaces videos.storage_key and deletes the old object.
         video_key = session.execute(

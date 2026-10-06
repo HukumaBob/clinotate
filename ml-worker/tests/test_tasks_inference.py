@@ -97,20 +97,63 @@ def test_a_missing_video_row_fails_the_run_instead_of_crashing(
 
     assert run.status == InferenceRunStatus.FAILED
     assert "Video 0 not found" in run.error
+    db_session.refresh(job)
+    assert job.status == JobStatus.FAILED
 
 
-def test_progress_is_flushed_and_the_final_count_is_exact(
+def test_progress_is_flushed_on_a_cadence_and_the_final_tick_is_exact(
     db_session, make_inference_job, fake_storage
 ):
+    from app.models import InferenceRun, Job
     from app.tasks import inference_run
 
     job, run = make_inference_job()
-    adapter = _StubAdapter(on_infer=lambda on_progress: [on_progress(i, 3) for i in (1, 2, 3)])
+    seen = {}
 
+    def _observe(on_progress):
+        def read():
+            r = db_session.get(InferenceRun, run.id, populate_existing=True)
+            j = db_session.get(Job, job.id, populate_existing=True)
+            db_session.commit()
+            return r.frames_processed, r.frames_total, j.progress
+
+        on_progress(1, 3)
+        seen["first"] = read()
+        on_progress(2, 3)
+        seen["throttled"] = read()
+        on_progress(3, 3)
+        seen["final"] = read()
+
+    adapter = _StubAdapter(on_infer=_observe)
     inference_run(job.id, adapter=adapter)
     db_session.refresh(run)
 
-    assert run.frames_processed == run.frames_total
+    assert seen["first"] == (1, 3, 33)
+    assert seen["throttled"][0] == 1
+    assert seen["final"] == (3, 3, 100)
+    assert run.frames_processed == run.frames_total == 2
+
+
+def test_a_failing_default_adapter_constructor_fails_the_run(
+    db_session, make_inference_job, fake_storage, monkeypatch
+):
+    import app.ultralytics_inference_adapter as mod
+    from app.tasks import inference_run
+
+    class _Boom:
+        def __init__(self):
+            raise RuntimeError("no gpu")
+
+    monkeypatch.setattr(mod, "UltralyticsInferenceAdapter", _Boom)
+    job, run = make_inference_job()
+
+    inference_run(job.id)
+    db_session.refresh(run)
+    db_session.refresh(job)
+
+    assert run.status == InferenceRunStatus.FAILED
+    assert run.error == "no gpu"
+    assert job.status == JobStatus.FAILED
 
 
 def test_other_model_families_are_evicted_before_the_model_loads(
