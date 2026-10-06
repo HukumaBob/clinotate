@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { PARAMS_STORAGE_KEY, clampParams, loadParams, saveParams } from "./params";
 import { DEFAULT_VIEW_PARAMS } from "./view";
@@ -36,7 +36,13 @@ describe("clampParams", () => {
     expect(clampParams({ threshold: "abc", nmsIou: null, flickerN: NaN })).toEqual(DEFAULT_VIEW_PARAMS);
   });
 
-  it("rounds to the step grid so values compare cleanly", () => {
+  it("treats Infinity and -Infinity as non-numeric and falls back to the default (non-finite)", () => {
+    expect(clampParams({ threshold: Infinity, nmsIou: -Infinity, flickerN: Infinity })).toEqual(
+      DEFAULT_VIEW_PARAMS,
+    );
+  });
+
+  it("rounds thresholds to two decimals and the flicker window to whole frames", () => {
     expect(clampParams({ threshold: 0.333333, nmsIou: 0.4166, flickerN: 2.6 })).toEqual({
       threshold: 0.33,
       nmsIou: 0.42,
@@ -77,5 +83,23 @@ describe("loadParams / saveParams", () => {
     };
     expect(loadParams(throwing)).toEqual(DEFAULT_VIEW_PARAMS);
     expect(() => saveParams(DEFAULT_VIEW_PARAMS, throwing)).not.toThrow();
+  });
+});
+
+describe("blocked window.localStorage", () => {
+  const original = Object.getOwnPropertyDescriptor(window, "localStorage");
+  afterEach(() => {
+    if (original) Object.defineProperty(window, "localStorage", original);
+  });
+
+  it("loadParams() and saveParams() with no argument do not throw when reading localStorage throws", () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+    expect(loadParams()).toEqual(DEFAULT_VIEW_PARAMS);
+    expect(() => saveParams(DEFAULT_VIEW_PARAMS)).not.toThrow();
   });
 });

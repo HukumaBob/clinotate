@@ -21,8 +21,10 @@ export const DEFAULT_VIEW_PARAMS: ViewParams = {
 };
 
 /** The stored predictions with the display parameters applied, in the same
- * shape the overlay already reads. The threshold is applied first so a
- * hidden strong box can never suppress a visible weaker one. */
+ * shape the overlay already reads. The threshold is applied first because
+ * it is cheaper and gives the same result: greedy NMS visits boxes by
+ * descending confidence, so a below-threshold box could only ever
+ * suppress boxes weaker than itself, which are hidden anyway. */
 export function buildView(
   doc: PredictionsDocument,
   params: Pick<ViewParams, "threshold" | "nmsIou">,

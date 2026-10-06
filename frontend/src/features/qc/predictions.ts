@@ -41,7 +41,7 @@ export interface FrameIndex {
   detections: Detection[][];
 }
 
-/** The Ultralytics default. A slider replaces this in sub-project 2. */
+/** The Ultralytics default. It is now the default for the display slider, see analysis/view.ts. */
 export const DISPLAY_CONFIDENCE_THRESHOLD = 0.25;
 
 export function buildFrameIndex(doc: PredictionsDocument): FrameIndex {

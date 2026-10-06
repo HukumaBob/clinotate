@@ -28,11 +28,11 @@ export function clampParams(raw: Partial<Record<keyof ViewParams, unknown>>): Vi
 
 /** Storage can be blocked, empty or corrupt (private windows, cleared site
  * data); the screen must render with the defaults in every case. */
-export function loadParams(
-  storage: Pick<Storage, "getItem"> = window.localStorage,
-): ViewParams {
+export function loadParams(storage?: Pick<Storage, "getItem">): ViewParams {
   try {
-    const raw = storage.getItem(PARAMS_STORAGE_KEY);
+    // Resolved inside the try: merely reading window.localStorage throws a
+    // SecurityError when site data is blocked.
+    const raw = (storage ?? window.localStorage).getItem(PARAMS_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_VIEW_PARAMS };
     const parsed: unknown = JSON.parse(raw);
     return parsed && typeof parsed === "object"
@@ -43,12 +43,9 @@ export function loadParams(
   }
 }
 
-export function saveParams(
-  params: ViewParams,
-  storage: Pick<Storage, "setItem"> = window.localStorage,
-): void {
+export function saveParams(params: ViewParams, storage?: Pick<Storage, "setItem">): void {
   try {
-    storage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(params));
+    (storage ?? window.localStorage).setItem(PARAMS_STORAGE_KEY, JSON.stringify(params));
   } catch {
     // A convenience only; losing it is fine.
   }
