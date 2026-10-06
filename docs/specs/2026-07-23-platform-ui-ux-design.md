@@ -294,6 +294,10 @@ Approved at the same rough/draft level as Dataset.
 
 ## Results
 
+> **Superseded 2026-10-06:** this screen is replaced by `QC` (`/qc`), designed in
+> [2026-10-06-qc-inference-runs-design.md](2026-10-06-qc-inference-runs-design.md).
+> The text below is kept for history.
+
 Left side: model select + drag-and-drop video upload + "Run inference".
 Right side: live inference progress (status badge, progress bar, frame
 counter) — explicitly a real progress indicator, not the old platform's

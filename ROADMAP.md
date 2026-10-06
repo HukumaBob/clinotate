@@ -1322,6 +1322,20 @@ pin holds, no version drift on the CUDA pair, container reaches Celery
   passed against the real running stack per `CLAUDE.md`'s testing
   philosophy.
 
+### Phase 3: QC screen, sub-project 1 (inference runs) — NOT STARTED (design approved 2026-10-06)
+
+Design: [docs/specs/2026-10-06-qc-inference-runs-design.md](docs/specs/2026-10-06-qc-inference-runs-design.md).
+Implementation plan: not written yet.
+
+The QC module comes from `yolo_qc_playground_architecture.pdf` and is split
+into five independent sub-projects (inference runs, inspection, QC flagging
+to dataset, A/B and stress tests, interpretability). Only the first is
+designed; the order is 1, 2, 3 and the rest are backlog. The QC screen
+replaces the never-built `Results` screen: the nav entry becomes `QC`
+(`/qc`). Open items for the plan are listed at the end of the spec (Alembic
+migration for the new `JobType` and table, the base for the QC player, and
+how QC videos are kept out of training datasets).
+
 ---
 
 ## How to use this file
