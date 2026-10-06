@@ -34,6 +34,8 @@ def create_run(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except service.UnsupportedModelType as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except service.EnqueueFailed as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
 
 @router.get("/runs", response_model=list[InferenceRunRead])
@@ -68,11 +70,12 @@ def get_predictions(
 @router.delete("/runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_run(
     run_id: int,
+    force: bool = False,
     session: Session = Depends(get_session),
     storage: StorageService = Depends(get_storage_service),
 ):
     try:
-        service.delete_run(session, storage, run_id)
+        service.delete_run(session, storage, run_id, force=force)
     except service.InferenceRunNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except service.RunStillActive as exc:

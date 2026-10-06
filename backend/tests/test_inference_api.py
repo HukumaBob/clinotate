@@ -220,3 +220,90 @@ def test_delete_is_refused_while_the_run_is_active(committed_inference_rows):
 
     assert response.status_code == 409
     assert client.get(f"/inference/runs/{run_id}", headers=headers).status_code == 200
+
+
+def test_deleting_a_video_that_has_qc_runs_is_refused(committed_inference_rows):
+    headers = _register_and_login("infer-video-delete@example.com")
+    rows = committed_inference_rows
+    _create(headers, rows)
+
+    response = client.delete(f"/media/videos/{rows.video_id}", headers=headers)
+
+    assert response.status_code == 409
+    assert "QC runs" in response.json()["detail"]
+    session = db_module.SessionLocal()
+    try:
+        from app.media.models import Video
+
+        assert session.get(Video, rows.video_id) is not None
+    finally:
+        session.close()
+
+
+def test_enqueue_failure_marks_the_run_failed_and_returns_503(committed_inference_rows, monkeypatch):
+    headers = _register_and_login("infer-enqueue-fail@example.com")
+
+    def _boom(name, args=None, **kwargs):
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr("app.inference.service.celery_app.send_task", _boom)
+
+    response = _create(headers, committed_inference_rows)
+
+    assert response.status_code == 503
+    runs = client.get("/inference/runs", headers=headers).json()
+    run = runs[0]
+    assert run["status"] == "failed"
+    assert "Could not enqueue the job: broker down" in run["error"]
+    session = db_module.SessionLocal()
+    try:
+        job = session.get(Job, run["job_id"])
+        assert job.status.value == "failed"
+        assert "broker down" in job.error
+    finally:
+        session.close()
+
+
+def test_force_delete_removes_an_active_run_and_fails_its_job(committed_inference_rows):
+    headers = _register_and_login("infer-force@example.com")
+    run = _create(headers, committed_inference_rows).json()
+
+    response = client.delete(f"/inference/runs/{run['id']}?force=true", headers=headers)
+
+    assert response.status_code == 204
+    assert client.get(f"/inference/runs/{run['id']}", headers=headers).status_code == 404
+
+
+def test_force_delete_still_removes_the_run_when_storage_fails(committed_inference_rows):
+    headers = _register_and_login("infer-force-storage@example.com")
+    run_id = _create(headers, committed_inference_rows).json()["id"]
+    _mark_succeeded(run_id, f"inference/{run_id}/predictions.json")
+
+    class _Broken(_RecordingStorage):
+        def delete(self, key):
+            raise RuntimeError("minio down")
+
+    app.dependency_overrides[get_storage_service] = lambda: _Broken()
+    try:
+        response = client.delete(f"/inference/runs/{run_id}", headers=headers)
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+
+    assert response.status_code == 204
+
+
+def test_delete_also_removes_the_job_row(committed_inference_rows):
+    headers = _register_and_login("infer-delete-job@example.com")
+    run = _create(headers, committed_inference_rows).json()
+    _mark_succeeded(run["id"], f"inference/{run['id']}/predictions.json")
+    app.dependency_overrides[get_storage_service] = lambda: _RecordingStorage()
+    try:
+        assert client.delete(f"/inference/runs/{run['id']}", headers=headers).status_code == 204
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+
+    session = db_module.SessionLocal()
+    try:
+        assert session.get(Job, run["job_id"]) is None
+    finally:
+        session.close()

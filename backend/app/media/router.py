@@ -11,6 +11,7 @@ from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import get_session
+from app.inference.models import InferenceRun
 from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
 from app.jobs.service import enqueue_find_similar, enqueue_rank_quality, enqueue_video_transcode
@@ -783,6 +784,13 @@ def delete_video(video_id: int, session: Session = Depends(get_session)) -> None
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Delete or reassign this video's sequences before deleting it",
+        )
+
+    has_runs = session.query(InferenceRun.id).filter(InferenceRun.video_id == video_id).first()
+    if has_runs is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Delete this video's QC runs before deleting it",
         )
 
     session.delete(video)

@@ -6,6 +6,7 @@ ever hands out a presigned link to it.
 """
 
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -43,6 +44,10 @@ class InferenceRunNotFound(Exception):
 
 class RunStillActive(Exception):
     """The run is pending or running and cannot be deleted yet."""
+
+
+class EnqueueFailed(Exception):
+    """The job could not be handed to the broker; the run was marked failed."""
 
 
 class PredictionsNotReady(Exception):
@@ -108,7 +113,19 @@ def create_inference_run(
     session.refresh(run)
 
     # Default "celery" queue -- ml-worker consumes it.
-    celery_app.send_task("inference_run", args=[job.id])
+    try:
+        celery_app.send_task("inference_run", args=[job.id])
+    except Exception as exc:  # noqa: BLE001 -- recorded on the run, then surfaced as 503
+        message = f"Could not enqueue the job: {exc}"[:2000]
+        now = datetime.now(timezone.utc)
+        run.status = InferenceRunStatus.FAILED
+        run.error = message
+        run.finished_at = now
+        job.status = JobStatus.FAILED
+        job.error = message
+        job.finished_at = now
+        session.commit()
+        raise EnqueueFailed(message) from exc
     return run
 
 
@@ -130,21 +147,34 @@ def get_predictions_url(session: Session, storage: StorageService, run_id: int) 
     return storage.url_for(run.predictions_key)
 
 
-def delete_run(session: Session, storage: StorageService, run_id: int) -> None:
-    """Delete a finished run and the object that holds its predictions.
+def delete_run(
+    session: Session, storage: StorageService, run_id: int, *, force: bool = False
+) -> None:
+    """Delete a run, the object that holds its predictions, and its job row.
 
     The object goes before the row, matching delete_model_version: a
     storage failure then leaves a recoverable run rather than orphaned
-    bytes. An active run is refused because the worker still holds a
-    reference to its row.
+    bytes. An active run is refused unless `force` is set; forcing marks
+    its job failed first so the worker, if it is still alive, ends in its
+    tolerant failure path instead of finishing a vanished run.
     """
     run = get_run(session, run_id)
-    if run.status in ACTIVE_STATUSES:
+    if run.status in ACTIVE_STATUSES and not force:
         raise RunStillActive(f"Inference run {run_id} is still {run.status.value}")
+    job = session.get(Job, run.job_id) if run.job_id is not None else None
+    if run.status in ACTIVE_STATUSES and job is not None:
+        if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
+            job.status = JobStatus.FAILED
+            job.error = "Force-deleted by the user"
+            job.finished_at = datetime.now(timezone.utc)
+            session.commit()
     if run.predictions_key:
         try:
             storage.delete(run.predictions_key)
         except Exception:  # noqa: BLE001 -- a missing object must not block the delete
             logger.warning("delete_run: could not remove %s", run.predictions_key)
     session.delete(run)
+    session.flush()
+    if job is not None:
+        session.delete(job)
     session.commit()
