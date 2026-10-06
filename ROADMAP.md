@@ -1402,6 +1402,20 @@ first for video 2178, so only the unit test covers the new message).
   SAM calls during a long run (same as training); a predictions object can be
   orphaned if a run is force-deleted at the moment the worker finishes.
 
+### Phase 3: QC screen, sub-project 2 (inspection) — NOT STARTED (design approved 2026-10-06)
+
+Design: [docs/specs/2026-10-06-qc-inspection-design.md](docs/specs/2026-10-06-qc-inspection-design.md).
+Implementation plan: not written yet.
+
+Second slice of the QC module (after inference runs). A confidence slider, a
+client-side NMS slider (0.30 to 0.70, stricter than the model's 0.7 only),
+flicker events by class presence, a custom timeline strip with
+previous/next-event navigation, and a latency panel fed by a new optional
+`timing` block of aggregates in the predictions document. All analysis is
+client-side pure functions; the only backend change is the worker writing
+`timing` (no schema, API or migration change). Order of the module stays
+1, 2, 3; sub-projects 4 and 5 are backlog.
+
 ---
 
 ## How to use this file
