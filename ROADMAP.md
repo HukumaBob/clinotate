@@ -1322,7 +1322,7 @@ pin holds, no version drift on the CUDA pair, container reaches Celery
   passed against the real running stack per `CLAUDE.md`'s testing
   philosophy.
 
-### Phase 3: QC screen, sub-project 1 (inference runs) — IMPLEMENTED 2026-10-06, browser verification pending
+### Phase 3: QC screen, sub-project 1 (inference runs) — DONE 2026-10-06 (browser-verified; segmentation untested)
 
 Design: [docs/specs/2026-10-06-qc-inference-runs-design.md](docs/specs/2026-10-06-qc-inference-runs-design.md).
 Plan: [docs/plans/2026-10-06-qc-inference-runs.md](docs/plans/2026-10-06-qc-inference-runs.md).
@@ -1355,18 +1355,45 @@ run's error is shown in its history row. The final whole-branch review found
 four Important issues (video delete 500, undeletable zombie runs, unreachable
 error text, unmeasured segmentation JSON size); the first three were fixed.
 
+**Browser verification (2026-10-06, real stack, frontend on :5173):** login
+works with no CORS error; `/qc` shows `QC` in the nav and lists the detect
+model and the videos; a run started from the form (stek_polyps, stride 30)
+went pending -> succeeded 660/660 frames; the run view plays the video from
+MinIO (`:9000`, cross-origin fine) and draws the overlay. The drawn box matches
+the computed picture-rectangle coordinates within 2 px with 236 px letterbox
+bars, again after resizing the window to 937x527, and the stored boxes equal
+the model's own raw `xyxyn` output on that frame to four decimals (so the
+top-left xywh conversion is right; a tall 0.99-confidence box on one frame is
+the model's prediction, not a platform bug). The overlay holds the previous
+processed frame between stride steps, redraws while playing and while
+scrubbing, hides detections below 0.25 (a frame whose three detections were all
+below it correctly drew nothing), and the browser clock agrees with OpenCV's
+`POS_MSEC` (frame 6060 = 202.0 s). UI Delete -> Confirm removed the run, its
+job row and its MinIO object. Real size data point: a stride-1 detect run over
+the 660 s video (19,800 frames, 33,822 detections) is a 3.7 MB JSON that
+downloads in 25 ms and parses in 18 ms.
+
+**Findings from the browser check (not fixed):**
+- The empty state "Train a detect or segment model first." flashes while the
+  model list is still loading (it is shown for `models.length === 0` without
+  checking that the query has finished). Cosmetic but misleading.
+- Overlapping detections stack their labels on top of each other, and boxes
+  near the bottom edge draw over the native controls bar. Cosmetic.
+
+**Not verified:** hiDPI blur (the test browser had `devicePixelRatio` 1); a
+segmentation run (no segmentation model exists in the dev database, so polygon
+drawing and segmentation JSON size are still untested on real data); the
+upload-a-new-video path inside QC; the Force delete button and the failed-run
+error line in the history table (unit-tested only); and the Media video delete
+returning the QC-runs 409 (on the real stack the older sequences guard fired
+first for video 2178, so only the unit test covers the new message).
+
 **Still open:**
-- Browser verification (overlay alignment on real `currentTime`,
-  `devicePixelRatio` blur, canvas over the native controls bar) needs the
-  frontend on `http://localhost:5173` because the backend CORS allowlist only
-  has 5173. On 2026-10-06 another project's Vite held that port and this
-  project's frontend fell back to 5174; the user said to leave the port alone.
-- Segmentation JSON size is unmeasured (only a detect model exists in the dev
-  database). The 0.05 confidence floor with full contours at stride 1 could be
-  very large on a long video; measure with a real segmentation model before
-  trusting it. Deliberately not mitigated in code, because simplifying or
-  threshold-gating polygons would conflict with sub-project 2's confidence
-  slider.
+- Segmentation JSON size is unmeasured. Detection at stride 1 is small, but a
+  segmentation model stores a contour per detection above the 0.05 floor;
+  measure with a real segmentation model before trusting it. Deliberately not
+  mitigated in code, because simplifying or threshold-gating polygons would
+  conflict with sub-project 2's confidence slider.
 - QC videos are ordinary `Video` rows and could end up in a training dataset.
   How they are marked or excluded (`grouping_key`) must be settled before
   sub-project 3 commits frames back to datasets.
