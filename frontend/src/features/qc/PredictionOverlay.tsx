@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 
 import { computeVideoMediaRect } from "../media/computeVideoMediaRect";
 import { drawDetections } from "./drawDetections";
-import { DISPLAY_CONFIDENCE_THRESHOLD, detectionsAt, type FrameIndex } from "./predictions";
+import { detectionsAt, type FrameIndex } from "./predictions";
 
 interface PredictionOverlayProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -10,7 +10,8 @@ interface PredictionOverlayProps {
   classes: string[];
 }
 
-/** A canvas laid exactly over the <video> element. A rAF loop redraws only
+/** A canvas laid exactly over the <video> element; `index` is the filtered
+ * view (threshold and NMS already applied). A rAF loop redraws only
  * when the video time or the element size changed, which covers playback,
  * pausing and scrubbing with one mechanism. */
 export function PredictionOverlay({ videoRef, index, classes }: PredictionOverlayProps) {
@@ -36,13 +37,8 @@ export function PredictionOverlay({ videoRef, index, classes }: PredictionOverla
           const rect = computeVideoMediaRect(video.videoWidth, video.videoHeight, width, height);
           if (ctx && rect) {
             ctx.clearRect(0, 0, width, height);
-            drawDetections(
-              ctx,
-              rect,
-              detectionsAt(index, timeMs),
-              classes,
-              DISPLAY_CONFIDENCE_THRESHOLD,
-            );
+            // The index is already filtered by the display threshold and NMS.
+            drawDetections(ctx, rect, detectionsAt(index, timeMs), classes, 0);
           }
         }
       }
