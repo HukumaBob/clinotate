@@ -47,3 +47,34 @@ def test_total_is_the_per_frame_sum_and_fps_follows_its_mean():
     timing = summarize_timing(samples)
     assert timing["total_ms"] == {"mean": 10.0, "p50": 10.0, "p95": 10.0, "max": 10.0}
     assert timing["model_fps"] == 100.0
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [float("nan"), float("inf"), float("-inf"), True, False],
+)
+def test_non_finite_or_bool_stage_makes_a_sample_unusable(bad):
+    assert summarize_timing([_sample(bad, 2.0, 3.0)]) is None
+    assert summarize_timing([_sample(1.0, bad, 3.0)]) is None
+    assert summarize_timing([_sample(1.0, 2.0, bad)]) is None
+
+
+def test_an_unusable_first_sample_does_not_consume_the_warm_up_discard():
+    bad = _sample(float("nan"), 1.0, 1.0)
+    timing = summarize_timing([bad, _sample(1, 50, 1), _sample(1, 10, 1)])
+    assert timing["frames_measured"] == 1
+    assert timing["inference_ms"]["mean"] == 10.0
+
+
+def test_all_zero_samples_give_zero_fps():
+    timing = summarize_timing([_sample(0, 0, 0), _sample(0, 0, 0)])
+    assert timing["model_fps"] == 0.0
+
+
+def test_result_is_strict_json_round_trippable():
+    import json
+
+    samples = [_sample(1.5, 9.0, 2.0), _sample(1.0, 8.0, 2.0), _sample(float("nan"), 1.0, 1.0)]
+    text = json.dumps(summarize_timing(samples), allow_nan=False)
+    assert "NaN" not in text and "Infinity" not in text
+    assert json.loads(text)["frames_measured"] == 1

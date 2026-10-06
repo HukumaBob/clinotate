@@ -11,6 +11,12 @@ import math
 _STAGES = ("preprocess", "inference", "postprocess")
 
 
+def _is_usable_number(value: object) -> bool:
+    # bool is an int subclass; NaN/inf would be written as bare NaN/Infinity,
+    # which is not valid JSON.
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def _stats(values: list[float]) -> dict:
     ordered = sorted(values)
     count = len(ordered)
@@ -30,14 +36,14 @@ def _stats(values: list[float]) -> dict:
 def summarize_timing(samples: list[dict]) -> dict | None:
     """One sample per measured frame: {"preprocess", "inference", "postprocess"} in ms.
 
-    Samples missing a stage (or carrying a non-number) are ignored. The first
+    Samples missing a stage (or carrying a non-finite number or a bool) are ignored. The first
     usable frame is discarded as GPU warm-up unless it is the only one.
     Returns None when nothing usable was measured.
     """
     usable = [
         sample
         for sample in samples
-        if all(isinstance(sample.get(stage), (int, float)) for stage in _STAGES)
+        if all(_is_usable_number(sample.get(stage)) for stage in _STAGES)
     ]
     if not usable:
         return None
