@@ -7,13 +7,13 @@ const STAGES: { key: "preprocess_ms" | "inference_ms" | "postprocess_ms" | "tota
   { key: "total_ms", label: "Total" },
 ];
 
-const fmt = (value: number) => value.toFixed(1);
+const fmt = (value: number | undefined) => (typeof value === "number" ? value.toFixed(1) : "—");
 
-export function LatencyPanel({ timing }: { timing: Timing | undefined }) {
+export function LatencyPanel({ timing }: { timing: Timing | null | undefined }) {
   return (
     <section aria-label="Latency" className="flex flex-col gap-2 text-sm text-gray-300">
       <h2 className="text-sm font-semibold text-gray-200">Latency</h2>
-      {timing === undefined ? (
+      {timing == null ? (
         <p className="text-xs text-gray-500">Not recorded for this run</p>
       ) : (
         <>
@@ -29,14 +29,14 @@ export function LatencyPanel({ timing }: { timing: Timing | undefined }) {
             </thead>
             <tbody>
               {STAGES.map(({ key, label }) => {
-                const stats: TimingStats = timing[key];
+                const stats: TimingStats | undefined = timing[key];
                 return (
                   <tr key={key}>
                     <td>{label}</td>
-                    <td className="text-right">{fmt(stats.mean)}</td>
-                    <td className="text-right">{fmt(stats.p50)}</td>
-                    <td className="text-right">{fmt(stats.p95)}</td>
-                    <td className="text-right">{fmt(stats.max)}</td>
+                    <td className="text-right">{fmt(stats?.mean)}</td>
+                    <td className="text-right">{fmt(stats?.p50)}</td>
+                    <td className="text-right">{fmt(stats?.p95)}</td>
+                    <td className="text-right">{fmt(stats?.max)}</td>
                   </tr>
                 );
               })}

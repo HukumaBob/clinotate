@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { LatencyPanel } from "./LatencyPanel";
@@ -25,14 +25,27 @@ describe("LatencyPanel", () => {
     render(<LatencyPanel timing={timing} />);
     expect(screen.getByRole("columnheader", { name: "p95" })).toBeInTheDocument();
     const inference = screen.getByRole("row", { name: /Inference/ });
-    expect(inference).toHaveTextContent("9.4");
-    expect(inference).toHaveTextContent("12.4");
-    expect(inference).toHaveTextContent("19.4");
+    const cells = within(inference).getAllByRole("cell");
+    ["Inference", "9.4", "9.4", "12.4", "19.4"].forEach((text, i) => {
+      expect(cells[i]).toHaveTextContent(new RegExp(`^${text}$`));
+    });
     expect(screen.getAllByRole("row")).toHaveLength(5); // header + 4 stages
   });
 
   it("shows the model speed and how many frames were measured", () => {
     render(<LatencyPanel timing={timing} />);
     expect(screen.getByText("Model speed: 80 fps (659 frames measured)")).toBeInTheDocument();
+  });
+
+  it("treats a null timing as not recorded", () => {
+    render(<LatencyPanel timing={null as never} />);
+    expect(screen.getByText("Not recorded for this run")).toBeInTheDocument();
+  });
+
+  it("renders dashes instead of throwing when a stage block is missing", () => {
+    const partial = { ...timing, inference_ms: undefined } as never;
+    render(<LatencyPanel timing={partial} />);
+    const cells = within(screen.getByRole("row", { name: /Inference/ })).getAllByRole("cell");
+    expect(cells.map((c) => c.textContent)).toEqual(["Inference", "—", "—", "—", "—"]);
   });
 });

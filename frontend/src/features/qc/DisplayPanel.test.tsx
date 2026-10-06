@@ -91,4 +91,46 @@ describe("DisplayPanel", () => {
     setup();
     expect(screen.queryByText(/too coarse/i)).not.toBeInTheDocument();
   });
+
+  describe("flicker window draft", () => {
+    it("emits nothing when the field is cleared", async () => {
+      const user = userEvent.setup();
+      const props = setup();
+      await user.clear(screen.getByLabelText("Flicker window"));
+      expect(props.onChange).not.toHaveBeenCalled();
+    });
+
+    it("clear then typing 5 emits 5, not 15", async () => {
+      const user = userEvent.setup();
+      const props = setup();
+      const field = screen.getByLabelText("Flicker window");
+      await user.clear(field);
+      await user.type(field, "5");
+      expect(props.onChange).toHaveBeenLastCalledWith({ ...DEFAULT_VIEW_PARAMS, flickerN: 5 });
+    });
+
+    it("restores the shown value on blur after clearing", async () => {
+      const user = userEvent.setup();
+      setup();
+      const field = screen.getByLabelText("Flicker window");
+      await user.clear(field);
+      await user.tab();
+      expect(field).toHaveValue(DEFAULT_VIEW_PARAMS.flickerN);
+    });
+
+    it("follows the parent when params change from outside (Reset)", () => {
+      const props = {
+        params: { ...DEFAULT_VIEW_PARAMS, flickerN: 7 },
+        onChange: vi.fn(),
+        onReset: vi.fn(),
+        blinkCount: 0,
+        dropoutCount: 0,
+        isCoarse: false,
+      };
+      const { rerender } = render(<DisplayPanel {...props} />);
+      expect(screen.getByLabelText("Flicker window")).toHaveValue(7);
+      rerender(<DisplayPanel {...props} params={{ ...DEFAULT_VIEW_PARAMS, flickerN: 3 }} />);
+      expect(screen.getByLabelText("Flicker window")).toHaveValue(3);
+    });
+  });
 });

@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { PARAM_LIMITS } from "./analysis/params";
 import { NMS_OFF, type ViewParams } from "./analysis/view";
 
@@ -20,6 +22,13 @@ export function DisplayPanel({
   dropoutCount,
   isCoarse,
 }: DisplayPanelProps) {
+  // The field keeps its own text so an empty or half-typed edit is not
+  // snapped back (and not emitted) on every keystroke.
+  const [draft, setDraft] = useState(String(params.flickerN));
+  useEffect(() => {
+    setDraft(String(params.flickerN));
+  }, [params.flickerN]);
+
   const set = (patch: Partial<ViewParams>) => onChange({ ...params, ...patch });
   const total = blinkCount + dropoutCount;
   const nmsText = params.nmsIou >= NMS_OFF ? "off" : params.nmsIou.toFixed(2);
@@ -82,8 +91,13 @@ export function DisplayPanel({
           min={PARAM_LIMITS.flickerN.min}
           max={PARAM_LIMITS.flickerN.max}
           step={PARAM_LIMITS.flickerN.step}
-          value={params.flickerN}
-          onChange={(e) => set({ flickerN: Number(e.target.value) })}
+          value={draft}
+          onChange={(e) => {
+            const value = e.target.value;
+            setDraft(value);
+            if (value !== "" && Number.isInteger(Number(value))) set({ flickerN: Number(value) });
+          }}
+          onBlur={() => setDraft(String(params.flickerN))}
         />
       </div>
 
