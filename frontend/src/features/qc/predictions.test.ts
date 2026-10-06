@@ -42,8 +42,12 @@ describe("detectionsAt", () => {
   });
 
   it("keeps showing the last frame's result past the end instead of flickering off", () => {
-    expect(detectionsAt(index, 99999)).toEqual([]); // the last frame has no detections
-    expect(detectionsAt(index, 1000)).toEqual([]);
+    const tail = buildFrameIndex({
+      ...doc,
+      frames: { "0": { timestamp_ms: 0, detections: [] }, "5": { timestamp_ms: 500, detections: [det(1, 0.7)] } },
+    });
+    expect(detectionsAt(tail, 99999)).toEqual([det(1, 0.7)]);
+    expect(detectionsAt(tail, 500)).toEqual([det(1, 0.7)]);
   });
 
   it("returns nothing before the first processed frame", () => {
@@ -58,6 +62,14 @@ describe("detectionsAt", () => {
 describe("countByClass", () => {
   it("counts only detections at or above the threshold", () => {
     expect(countByClass(buildFrameIndex(doc), 2, 0.25)).toEqual([1, 1]);
+  });
+
+  it("counts a detection exactly at the threshold", () => {
+    const edge = buildFrameIndex({
+      ...doc,
+      frames: { "0": { timestamp_ms: 0, detections: [det(0, 0.25)] } },
+    });
+    expect(countByClass(edge, 2, 0.25)).toEqual([1, 0]);
   });
 });
 

@@ -54,6 +54,18 @@ describe("drawDetections", () => {
     expect(calls).toEqual([]);
   });
 
+  it("draws a detection whose confidence equals the threshold", () => {
+    const { ctx, calls } = fakeContext();
+    drawDetections(
+      ctx,
+      rect,
+      [{ class_id: 0, confidence: 0.25, bbox: [0.1, 0.1, 0.1, 0.1] }],
+      ["polyp"],
+      0.25,
+    );
+    expect(calls.some((c) => c[0] === "strokeRect")).toBe(true);
+  });
+
   it("fills a polygon for a segmentation detection", () => {
     const { ctx, calls } = fakeContext();
     drawDetections(
