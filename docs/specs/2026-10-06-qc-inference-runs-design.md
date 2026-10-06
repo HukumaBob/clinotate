@@ -73,7 +73,7 @@ All UI copy is English.
   confidence.
 - Legend with per-class detection counts.
 - The display threshold is fixed at 0.25 (the Ultralytics default). The
-  slider is sub-project 2 and is deliberately absent.
+  slider is sub-project 2 and is deliberately absent (superseded by sub-project 2: the slider exists, see the inspection design).
 
 ## Backend
 

@@ -1,6 +1,6 @@
 # QC screen, sub-project 2: inspection
 
-Date: 2026-10-06. Status: design approved, implementation plan not yet written.
+Date: 2026-10-06. Status: implemented 2026-10-06; verified in a real browser.
 
 Extends [the inference-runs design](2026-10-06-qc-inference-runs-design.md)
 (sub-project 1, implemented). Source material for the whole module is
@@ -184,3 +184,58 @@ detect or segment model first." on `/qc` is a separate small fix.
 - The exact "coarse stride" constant (1000 ms in this design) may need tuning
   after real use.
 - The slider recompute budget is a target, to be confirmed on run #82.
+
+## Deviations from the first draft
+
+- `buildStrip` returns `{ level, maxConfidence }` per bucket, so the hover
+  tooltip can show the best confidence.
+- The previous/next event buttons are disabled only when there are no events;
+  clicking when none exists in that direction does nothing.
+- The loading state shows a text placeholder instead of disabled panels, and
+  the Latency panel is not rendered until the predictions load.
+- The strip and the event buttons render only when the duration is known and
+  positive (otherwise the same placeholder).
+- Aggregates keep two decimals.
+- `summarize_timing` ignores NaN, infinity and bool stage values, so the
+  predictions document can never contain bare `NaN`/`Infinity`.
+- The keys also match the physical bracket keys (`BracketLeft`/`BracketRight`)
+  so they work on any keyboard layout, ignore Ctrl/Meta/Alt, and a focused
+  range slider does not block them.
+- The flicker window field ignores an empty edit (it keeps a local draft and
+  restores the value on blur).
+- A null or partial `timing` is treated as not recorded.
+
+## Verification
+
+Run on the real stack on 2026-10-06 with a fresh run (stride 5, 3960 frames,
+`yolo11n-run268`; deleted afterwards) and the user's run #82 (stride 1, left
+untouched).
+
+Passed:
+- Timing: `timing` block present, 3959 frames measured (warm-up dropped),
+  inference mean 6.08 ms (p95 6.81, max 161.62), total mean 7.89 ms,
+  model_fps 126.8; stage means sum to the total.
+- Strip: one bucket per pixel, hover tooltip, click-to-seek, playhead.
+- Threshold slider at 0.05/0.25/0.5/0.9: the painted strip equals an
+  independent `buildStrip` in all cases; hidden detections are not painted
+  green. NMS slider: "off" at 0.70, counts fall at 0.5 and 0.3.
+- Flicker window N=1..10; the coarse notice appears from N=6 at stride 5;
+  events checked against the raw frames.
+- Navigation by buttons and by `[`/`]`; the keys are ignored while the
+  flicker field has focus.
+- Persistence across reload, Reset, and a corrupt stored value falling back to
+  defaults.
+- Old run #82 shows "Not recorded for this run".
+- Performance on #82 (19,800 frames, 33,822 detections), median of 5:
+  buildView 3.2 ms (worst case 6.4 ms), findFlickers 2.3 ms (580 events),
+  buildStrip 1.1 ms.
+- Resize to 1000x800 rebuilds the strip to its CSS width; 0 console errors or
+  warnings.
+
+Not verified: a segmentation run, hiDPI, touch, blocked storage in a real
+browser (unit-tested only), the coarse notice on a stride-30 run, playback CPU
+with hundreds of marks, and whether the database `duration_seconds` equals the
+real stream duration.
+
+Observations: at stride 1 the flicker marks overlap into a band along the
+strip; clustering them is a follow-up.

@@ -1393,7 +1393,7 @@ first for video 2178, so only the unit test covers the new message).
   segmentation model stores a contour per detection above the 0.05 floor;
   measure with a real segmentation model before trusting it. Deliberately not
   mitigated in code, because simplifying or threshold-gating polygons would
-  conflict with sub-project 2's confidence slider.
+  conflict with sub-project 2's confidence slider. (The fixed 0.25 display threshold of this sub-project was replaced by the sub-project 2 slider.)
 - QC videos are ordinary `Video` rows and could end up in a training dataset.
   How they are marked or excluded (`grouping_key`) must be settled before
   sub-project 3 commits frames back to datasets.
@@ -1402,10 +1402,10 @@ first for video 2178, so only the unit test covers the new message).
   SAM calls during a long run (same as training); a predictions object can be
   orphaned if a run is force-deleted at the moment the worker finishes.
 
-### Phase 3: QC screen, sub-project 2 (inspection) — NOT STARTED (design approved 2026-10-06)
+### Phase 3: QC screen, sub-project 2 (inspection) — DONE (2026-10-06, browser-verified; segmentation untested)
 
 Design: [docs/specs/2026-10-06-qc-inspection-design.md](docs/specs/2026-10-06-qc-inspection-design.md).
-Implementation plan: not written yet.
+Plan: [docs/plans/2026-10-06-qc-inspection.md](docs/plans/2026-10-06-qc-inspection.md).
 
 Second slice of the QC module (after inference runs). A confidence slider, a
 client-side NMS slider (0.30 to 0.70, stricter than the model's 0.7 only),
@@ -1415,6 +1415,25 @@ previous/next-event navigation, and a latency panel fed by a new optional
 client-side pure functions; the only backend change is the worker writing
 `timing` (no schema, API or migration change). Order of the module stays
 1, 2, 3; sub-projects 4 and 5 are backlog.
+
+**Verified in a real browser** (stride-5 run, 3960 frames; and the stride-1
+run #82): the `timing` block (3959 frames measured, inference mean 6.08 ms,
+model_fps 126.8), the strip (one bucket per pixel, hover, click-to-seek), the
+threshold, NMS and flicker-window controls against an independent
+recomputation, previous/next event navigation by buttons and keys,
+persistence across reload with Reset and a corrupt stored value, old runs
+showing "Not recorded for this run", resize, and 0 console errors. Recompute
+on 19,800 frames takes about 7-10 ms in total.
+
+**Review-found issues fixed in the final wave:** keys stopped working after a
+slider drag (a focused range input blocked them); keys did not work on
+non-US layouts or fired with Ctrl/Meta/Alt; NaN/inf in a timing sample wrote
+invalid JSON and broke the whole predictions document.
+
+**Still open:** segmentation runs, hiDPI, touch, blocked storage in a real
+browser, a stride-30 coarse notice, playback CPU with hundreds of marks,
+whether DB `duration_seconds` equals the real stream duration, and at stride 1
+the flicker marks overlap into a band (clustering is a follow-up).
 
 ---
 
