@@ -121,3 +121,121 @@ def _route_app_db_sessions_to_the_test_database(test_engine):
 
     db_module.engine = original_engine
     db_module.SessionLocal = original_session_local
+
+
+@pytest.fixture
+def committed_inference_rows():
+    """Committed rows the inference API tests need, deleted afterwards.
+
+    TestClient requests run on their own sessions, so rows seeded through
+    the rolled-back `db_session` would be invisible to them. Everything
+    here is deleted in teardown, children before parents.
+    """
+    from types import SimpleNamespace
+
+    from app.auth.models import User, UserRole
+    from app.datasets.models import Dataset, TaskType
+    from app.inference.models import InferenceRun
+    from app.jobs.models import Job
+    from app.media.models import Video
+    from app.training.models import ModelVersion, TrainingRun
+
+    session = db_module.SessionLocal()
+    user = User(email="inference-seed@example.com", hashed_password="x", role=UserRole.ADMIN)
+    session.add(user)
+    session.commit()
+    dataset = Dataset(
+        name="ds-inference-seed",
+        task_type=TaskType.DETECTION,
+        taxonomy_version=1,
+        split_config={"train": 80, "val": 20},
+        grouping_overrides={},
+        excluded_label_ids=[],
+        balance_metrics={},
+        created_by_id=user.id,
+    )
+    session.add(dataset)
+    session.commit()
+
+    def _video(title: str, playable: bool | None) -> Video:
+        video = Video(
+            storage_key=f"videos/{title}.mp4",
+            filename=f"{title}.mp4",
+            title=title,
+            fps=25.0,
+            duration_seconds=10.0,
+            size_bytes=1,
+            checksum=title,
+            browser_playable=playable,
+        )
+        session.add(video)
+        return video
+
+    playable = _video("inference-playable", True)
+    unplayable = _video("inference-unplayable", False)
+
+    training_run_ids: list[int] = []
+
+    def _version(task_type: TaskType) -> ModelVersion:
+        run = TrainingRun(
+            dataset_id=dataset.id,
+            adapter="ultralytics_yolo",
+            base_model="yolo11n.pt",
+            task_type=task_type,
+            config={},
+            total_epochs=1,
+            created_by_id=user.id,
+        )
+        session.add(run)
+        session.commit()
+        training_run_ids.append(run.id)
+        version = ModelVersion(
+            training_run_id=run.id,
+            name=f"seed-{task_type.value}",
+            task_type=task_type,
+            storage_key=f"models/{run.id}/best.pt",
+        )
+        session.add(version)
+        return version
+
+    detect = _version(TaskType.DETECTION)
+    segment = _version(TaskType.SEGMENTATION)
+    classify = _version(TaskType.CLASSIFICATION)
+    session.commit()
+
+    rows = SimpleNamespace(
+        user_id=user.id,
+        video_id=playable.id,
+        playable_video_id=playable.id,
+        unplayable_video_id=unplayable.id,
+        detect_version_id=detect.id,
+        segment_version_id=segment.id,
+        classify_version_id=classify.id,
+    )
+    dataset_id = dataset.id
+    yield rows
+
+    # Plain ints captured above: the test may have deleted ORM rows (e.g. a
+    # ModelVersion), and touching an expired deleted instance would raise.
+    session.rollback()
+    video_ids = [rows.playable_video_id, rows.unplayable_video_id]
+    runs = session.query(InferenceRun).filter(InferenceRun.video_id.in_(video_ids)).all()
+    job_ids = [run.job_id for run in runs if run.job_id is not None]
+    session.query(InferenceRun).filter(InferenceRun.video_id.in_(video_ids)).delete(
+        synchronize_session=False
+    )
+    if job_ids:
+        session.query(Job).filter(Job.id.in_(job_ids)).delete(synchronize_session=False)
+    session.query(ModelVersion).filter(
+        ModelVersion.id.in_(
+            [rows.detect_version_id, rows.segment_version_id, rows.classify_version_id]
+        )
+    ).delete(synchronize_session=False)
+    session.query(TrainingRun).filter(TrainingRun.id.in_(training_run_ids)).delete(
+        synchronize_session=False
+    )
+    session.query(Video).filter(Video.id.in_(video_ids)).delete(synchronize_session=False)
+    session.query(Dataset).filter(Dataset.id == dataset_id).delete()
+    session.query(User).filter(User.id == rows.user_id).delete()
+    session.commit()
+    session.close()

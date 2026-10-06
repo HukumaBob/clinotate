@@ -10,6 +10,8 @@ from app.settings.router import router as settings_router
 from app.taxonomy.router import router as taxonomy_router
 from app.training.router import router as training_router
 
+import app.inference.models  # noqa: F401 -- registers inference_runs on Base.metadata
+
 app = FastAPI(title="Endoscopy Annotation Platform API")
 app.add_middleware(
     CORSMiddleware,

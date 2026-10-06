@@ -56,8 +56,8 @@ All UI copy is English.
 ### `/qc`: launch and history
 
 - Run form: model select (detect/segment `ModelVersion`s, showing name, task
-  type and mAP50; classify models are not listed), video (drop zone or
-  select of uploaded videos), `Frame stride`, `Run`.
+  type and mAP50; classify models are not listed), video (the existing `VideoUploadFlow` form (title, procedure, file input); drag-and-drop is not added in this sub-project,
+  or a select of uploaded videos), `Frame stride`, `Run`.
 - Live status of the selected run: badge, progress bar, `frames done / total`.
 - History table: video, model, stride, status, date, `View`, `Delete`
   (arm/confirm, as in Train).
@@ -80,7 +80,8 @@ New module `backend/app/inference/` (`models.py`, `schemas.py`, `service.py`,
 ### `inference_runs` table
 
 `id`, `video_id` (FK `videos`), `model_version_id` (FK `model_versions`,
-nullable, `ON DELETE SET NULL`), `job_id` (FK `jobs`), `frame_stride`,
+nullable, `ON DELETE SET NULL`), `model_name` (copied from the model
+version at creation), `job_id` (FK `jobs`), `frame_stride`,
 `status` (pending, running, succeeded, failed), `frames_total`,
 `frames_processed`, `predictions_key`, `error`, `created_by_id`,
 `started_at`, `finished_at`, `created_at`.
@@ -89,7 +90,7 @@ No `stopped` status: cancelling a run is out of scope.
 
 The model's task type and class list are copied into the result JSON. A run
 must stay viewable after its `ModelVersion` is deleted, so the overlay never
-needs the live model row, and the history shows the model name from the JSON.
+needs the live model row, and the history shows `model_name`, which is also copied at creation.
 
 ### API (prefix `/inference`)
 
@@ -101,7 +102,8 @@ needs the live model row, and the history shows the model name from the JSON.
 - `GET /runs/{id}/predictions` returns a presigned URL to the JSON, in the
   style of `download_model`. The JSON is not proxied through the API.
 - `DELETE /runs/{id}` removes the row and the JSON object together (the
-  lesson from model artifacts that outlived their version).
+  lesson from model artifacts that outlived their version). Refused with 409
+  while the run is `pending` or `running`.
 - After any schema or route change regenerate `openapi.json` (see CLAUDE.md).
 
 ### `ml-worker`
@@ -125,7 +127,7 @@ needs the live model row, and the history shows the model name from the JSON.
 
 ```json
 {
-  "task_type": "detect | segment",
+  "task_type": "detection | segmentation",
   "model": {"name": "...", "version_id": 12},
   "fps": 25.0,
   "frame_stride": 5,
@@ -146,6 +148,8 @@ needs the live model row, and the history shows the model name from the JSON.
 Boxes are normalised 0..1 as `[x, y, w, h]`; `polygon` is present only for
 segment models. `task_type` leaves room for classify without a migration.
 
+`task_type` uses the `TaskType` enum values. `bbox` is `[x, y, w, h]` normalised to 0..1 with `(x, y)` the **top-left** corner.
+
 Edge cases:
 
 - A processed frame with no detections has `detections: []`. The key is
@@ -164,7 +168,7 @@ libraries.
   create, delete, and predictions. Pending or running runs poll with
   `refetchInterval`, as on Train, and stop on `succeeded` or `failed`.
 - `features/qc/QcPage.tsx`, `RunForm.tsx`, `RunStatus.tsx`, `RunsTable.tsx`.
-  The drop zone reuses `VideoUploadFlow` and selects the new video on
+  The upload form is the existing `VideoUploadFlow` form (title, procedure, file input); drag-and-drop is not added in this sub-project. It selects the new video on
   success.
 - `features/qc/RunViewPage.tsx`, `PredictionOverlay.tsx`, and
   `predictionsAtTime.ts`, a pure function from time to the nearest processed
@@ -172,9 +176,7 @@ libraries.
 - `AppHeader.tsx` and `App.tsx`: the `Results` entry becomes `QC`.
 - The overlay positions shapes inside the real picture rectangle, because
   the video is letterboxed. It reuses `features/media/computeVideoMediaRect.ts`.
-  Redraw is driven by `requestVideoFrameCallback` with a
-  `requestAnimationFrame`/`timeupdate` fallback, so boxes keep up while
-  scrubbing and when paused.
+  The overlay redraws from a `requestAnimationFrame` loop that draws only when the video time or the element size changed, which also covers paused and scrubbed states.
 - The predictions JSON is downloaded once and held in the React Query cache.
   Long videos make it large (tens of MB); chunked loading is a sub-project 2
   concern if it proves necessary.
@@ -213,8 +215,6 @@ Test-first, per CLAUDE.md.
 
 ## Open items for the implementation plan
 
-- Whether the new `JobType` value and the new table need an Alembic
-  migration, and how migrations are done in this repository.
-- Whether `VideoReviewPlayer` is a suitable base for the QC player.
+- Resolved: an Alembic migration is needed (new `JobType` value and table), and `VideoReviewPlayer` is coupled to sequences and cropping, so the QC player is a new component.
 - How QC videos are marked or excluded from training datasets (see the
   leakage note).
