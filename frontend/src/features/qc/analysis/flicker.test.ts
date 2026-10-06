@@ -47,6 +47,21 @@ describe("findFlickers", () => {
     ]);
   });
 
+  it("sorts interleaved classes globally by start time, ties by class id", () => {
+    // class 1 drops out at 40 ms, before class 0 blinks at 80 ms.
+    const interleaved = findFlickers(view([[1], [], [0, 1], [1], [1]]), 2, 1);
+    expect(interleaved.events.map((e) => [e.classId, e.kind, e.startMs])).toEqual([
+      [1, "dropout", 40],
+      [0, "blink", 80],
+    ]);
+    // both blink at 80 ms: the lower class id comes first.
+    const tied = findFlickers(view([[], [], [0, 1], [], []]), 2, 1);
+    expect(tied.events.map((e) => [e.classId, e.startMs])).toEqual([
+      [0, 80],
+      [1, 80],
+    ]);
+  });
+
   it("a larger N admits longer runs", () => {
     const frames = [[], [0], [0], [0], []];
     expect(findFlickers(view(frames), 1, 2).events).toHaveLength(0);
@@ -66,6 +81,12 @@ describe("findFlickers", () => {
     const frames = [[], [0], []];
     expect(findFlickers(view(frames, 1000), 1, 2).isCoarse).toBe(true);
     expect(findFlickers(view(frames, 40), 1, 2).isCoarse).toBe(false);
+  });
+
+  it("is not coarse exactly at the boundary (500 ms x 2 = 1000), and is just above it", () => {
+    const frames = [[], [0], []];
+    expect(findFlickers(view(frames, 500), 1, 2).isCoarse).toBe(false);
+    expect(findFlickers(view(frames, 501), 1, 2).isCoarse).toBe(true);
     expect(COARSE_WINDOW_MS).toBe(1000);
   });
 });

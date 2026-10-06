@@ -64,7 +64,7 @@ describe("buildView", () => {
     ]);
   });
 
-  it("applies the threshold before NMS, so a hidden strong box cannot suppress a visible one", () => {
+  it("a hidden box never suppresses a visible one", () => {
     const view = buildView(
       doc({ "0": { timestamp_ms: 0, detections: [det(0, 0.9), det(0, 0.4)] } }),
       { threshold: 0.5, nmsIou: 0.5 },

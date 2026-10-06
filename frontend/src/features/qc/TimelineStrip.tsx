@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FlickerEvent } from "./analysis/flicker";
 import { LEVEL_COLORS, buildStrip, formatClock, type StripLevel } from "./analysis/strip";
@@ -22,6 +22,33 @@ const LEGEND: { level: StripLevel; label: string }[] = [
   { level: "weak", label: "below threshold" },
   { level: "none", label: "nothing" },
 ];
+
+// Memoised: the playhead re-renders the strip every frame, and there can be
+// hundreds of marks that do not change with it.
+const FlickerMarks = memo(function FlickerMarks({
+  events,
+  durationMs,
+}: {
+  events: FlickerEvent[];
+  durationMs: number;
+}) {
+  return (
+    <>
+      {events.map((event, i) => (
+        <span
+          key={`${event.classId}-${event.kind}-${event.startMs}-${i}`}
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 h-2 w-2 -translate-x-1/2 rounded-full border-2"
+          style={{
+            left: `${Math.min(Math.max(event.startMs / durationMs, 0), 1) * 100}%`,
+            borderColor: colorForClass(event.classId),
+            backgroundColor: event.kind === "blink" ? colorForClass(event.classId) : "transparent",
+          }}
+        />
+      ))}
+    </>
+  );
+});
 
 /** A full-width timeline under the player: coloured by the best confidence
  * in each slice of time, flicker marks on top, a playhead, click to seek.
@@ -85,19 +112,7 @@ export function TimelineStrip({ videoRef, doc, threshold, events, durationMs, on
       >
         <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full rounded" />
 
-        {events.map((event, i) => (
-          <span
-            key={`${event.classId}-${event.kind}-${event.startMs}-${i}`}
-            aria-hidden="true"
-            title={`${event.kind} · ${formatClock(event.startMs)}`}
-            className="pointer-events-none absolute top-0 h-2 w-2 -translate-x-1/2 rounded-full border-2"
-            style={{
-              left: percent(event.startMs),
-              borderColor: colorForClass(event.classId),
-              backgroundColor: event.kind === "blink" ? colorForClass(event.classId) : "transparent",
-            }}
-          />
-        ))}
+        <FlickerMarks events={events} durationMs={durationMs} />
 
         <div
           aria-hidden="true"
@@ -108,7 +123,7 @@ export function TimelineStrip({ videoRef, doc, threshold, events, durationMs, on
         {hover && (
           <div
             className="pointer-events-none absolute -top-7 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-100"
-            style={{ left: hover.x }}
+            style={{ left: width > 0 ? Math.min(Math.max(hover.x, 40), width - 40) : hover.x }}
           >
             {formatClock(hover.ms)}
             {hoveredBucket ? ` · max ${hoveredBucket.maxConfidence.toFixed(2)}` : ""}
