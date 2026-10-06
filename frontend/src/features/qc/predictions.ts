@@ -6,6 +6,25 @@ export interface Detection {
   polygon?: [number, number][];
 }
 
+export interface TimingStats {
+  mean: number;
+  p50: number;
+  p95: number;
+  max: number;
+}
+
+/** Aggregates of the model's per-frame timings, in milliseconds. Absent on
+ * runs made before timing was recorded. Model time only: video decoding is
+ * not included. */
+export interface Timing {
+  frames_measured: number;
+  preprocess_ms: TimingStats;
+  inference_ms: TimingStats;
+  postprocess_ms: TimingStats;
+  total_ms: TimingStats;
+  model_fps: number;
+}
+
 export interface PredictionsDocument {
   task_type: "detection" | "segmentation";
   model: { name: string; version_id: number | null };
@@ -13,6 +32,7 @@ export interface PredictionsDocument {
   frame_stride: number;
   classes: string[];
   frames: Record<string, { timestamp_ms: number; detections: Detection[] }>;
+  timing?: Timing;
 }
 
 /** Processed frames sorted by time, so playback can binary-search them. */
