@@ -3955,6 +3955,212 @@
         }
       }
     },
+    "/inference/runs": {
+      "get": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "List Runs",
+        "operationId": "list_runs_inference_runs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InferenceRunRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Runs Inference Runs Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Create Run",
+        "operationId": "create_run_inference_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InferenceRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InferenceRunRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/inference/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Get Run",
+        "operationId": "get_run_inference_runs__run_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InferenceRunRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Delete Run",
+        "operationId": "delete_run_inference_runs__run_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inference/runs/{run_id}/predictions": {
+      "get": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Get Predictions",
+        "operationId": "get_predictions_inference_runs__run_id__predictions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionsRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -4940,6 +5146,152 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "InferenceRunCreate": {
+        "properties": {
+          "video_id": {
+            "type": "integer",
+            "title": "Video Id"
+          },
+          "model_version_id": {
+            "type": "integer",
+            "title": "Model Version Id"
+          },
+          "frame_stride": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Frame Stride",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "video_id",
+          "model_version_id"
+        ],
+        "title": "InferenceRunCreate"
+      },
+      "InferenceRunRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "video_id": {
+            "type": "integer",
+            "title": "Video Id"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "frame_stride": {
+            "type": "integer",
+            "title": "Frame Stride"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InferenceRunStatus"
+          },
+          "frames_total": {
+            "type": "integer",
+            "title": "Frames Total"
+          },
+          "frames_processed": {
+            "type": "integer",
+            "title": "Frames Processed"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "video_id",
+          "model_version_id",
+          "model_name",
+          "job_id",
+          "frame_stride",
+          "status",
+          "frames_total",
+          "frames_processed",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "InferenceRunRead"
+      },
+      "InferenceRunStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed"
+        ],
+        "title": "InferenceRunStatus",
+        "description": "No STOPPED: cancelling a run is out of scope for the first QC slice."
+      },
       "JobRead": {
         "properties": {
           "id": {
@@ -5072,7 +5424,8 @@
           "rank_quality",
           "find_similar",
           "dataset_export",
-          "model_train"
+          "model_train",
+          "inference_run"
         ],
         "title": "JobType"
       },
@@ -5476,6 +5829,19 @@
           "created_at"
         ],
         "title": "ModelVersionRead"
+      },
+      "PredictionsRead": {
+        "properties": {
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "download_url"
+        ],
+        "title": "PredictionsRead"
       },
       "ProcedureCreate": {
         "properties": {
