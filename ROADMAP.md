@@ -1419,11 +1419,31 @@ client-side pure functions; the only backend change is the worker writing
 **Verified in a real browser** (stride-5 run, 3960 frames; and the stride-1
 run #82): the `timing` block (3959 frames measured, inference mean 6.08 ms,
 model_fps 126.8), the strip (one bucket per pixel, hover, click-to-seek), the
-threshold, NMS and flicker-window controls against an independent
-recomputation, previous/next event navigation by buttons and keys,
+threshold slider (the strip's painted pixels equal an independent
+`buildStrip` at four thresholds), the NMS slider (class count falls
+1621 -> 1268 -> 1099; label "off" at 0.70) and the flicker window (event count
+changes with N; first blink and first dropout confirmed against the raw
+per-frame confidences), previous/next event navigation by buttons and keys,
 persistence across reload with Reset and a corrupt stored value, old runs
 showing "Not recorded for this run", resize, and 0 console errors. Recompute
 on 19,800 frames takes about 7-10 ms in total.
+
+Post-fix browser verification (run #82, after the fix wave):
+- `]`/`[` step to the correct next/previous event, checked against
+  `findFlickers` over the raw document (from 120 s: 139767 ms next, 119367 ms
+  previous), while a range slider (the NMS slider) has focus.
+- The keys work with a Russian layout (key "ъ"/"х" with code
+  BracketRight/BracketLeft); Ctrl+] is ignored; `]` is ignored while the
+  Flicker window number field has focus.
+- Clearing the Flicker window field leaves the events unchanged; typing "5"
+  afterwards gives N=5 (763 events), not 15.
+- The hover tooltip stays inside the strip at both ends (left clamped to 40 px
+  and to 1528 px on a 1568 px strip; "0:00 · max 0.41" and "10:59 · max 0.13").
+- The flicker marks no longer carry a title attribute.
+Still not measured or observed: the playback CPU effect of the memoisation,
+hiDPI, touch, and a physical Russian-layout keyboard (the layout was simulated
+with synthetic KeyboardEvents carrying the Russian characters and the physical
+`code`).
 
 **Review-found issues fixed in the final wave:** keys stopped working after a
 slider drag (a focused range input blocked them); keys did not work on

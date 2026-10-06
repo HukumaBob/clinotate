@@ -218,9 +218,13 @@ Passed:
 - Strip: one bucket per pixel, hover tooltip, click-to-seek, playhead.
 - Threshold slider at 0.05/0.25/0.5/0.9: the painted strip equals an
   independent `buildStrip` in all cases; hidden detections are not painted
-  green. NMS slider: "off" at 0.70, counts fall at 0.5 and 0.3.
-- Flicker window N=1..10; the coarse notice appears from N=6 at stride 5;
-  events checked against the raw frames.
+  green. NMS slider: verified by the class count changing (1621 -> 1268 at 0.5
+  -> 1099 at 0.3) and the label reading "off" at 0.70 and "0.50" at 0.5, not
+  against an independent recomputation.
+- Flicker window N=1..10: event count changes with N (147/207/263/273/283/311
+  for N=1,2,5,6,7,10); the coarse notice first appears at N=6 at stride 5; the
+  first blink (4000 ms) and first dropout (9500 ms) were confirmed against the
+  raw per-frame confidences.
 - Navigation by buttons and by `[`/`]`; the keys are ignored while the
   flicker field has focus.
 - Persistence across reload, Reset, and a corrupt stored value falling back to
@@ -231,6 +235,23 @@ Passed:
   buildStrip 1.1 ms.
 - Resize to 1000x800 rebuilds the strip to its CSS width; 0 console errors or
   warnings.
+
+Post-fix verification (real stack, run #82, after the fix wave):
+- `]`/`[` step to the correct next/previous event, checked against
+  `findFlickers` over the raw document (from 120 s: 139767 ms next, 119367 ms
+  previous), while a range slider (the NMS slider) has focus.
+- The keys work with a Russian layout (key "ъ"/"х" with code
+  BracketRight/BracketLeft); Ctrl+] is ignored; `]` is ignored while the
+  Flicker window number field has focus.
+- Clearing the Flicker window field leaves the events unchanged; typing "5"
+  afterwards gives N=5 (763 events), not 15.
+- The hover tooltip stays inside the strip at both ends (left clamped to 40 px
+  and to 1528 px on a 1568 px strip; "0:00 · max 0.41" and "10:59 · max 0.13").
+- The flicker marks no longer carry a title attribute.
+Still not measured or observed: the playback CPU effect of the memoisation,
+hiDPI, touch, and a physical Russian-layout keyboard (the layout was simulated
+with synthetic KeyboardEvents carrying the Russian characters and the physical
+`code`).
 
 Not verified: a segmentation run, hiDPI, touch, blocked storage in a real
 browser (unit-tested only), the coarse notice on a stride-30 run, playback CPU
