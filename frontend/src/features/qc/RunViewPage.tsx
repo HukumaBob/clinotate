@@ -1,24 +1,41 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { useInferenceRun, usePredictions } from "../../entities/useInferenceRuns";
+import {
+  useCommitQcFlags,
+  useDeleteQcFlag,
+  usePutQcFlag,
+  useQcFlags,
+  useVideoSent,
+  type QcFlag,
+  type QcFlagKind,
+} from "../../entities/useQcFlags";
 import { useVideo } from "../../entities/useVideo";
 import { TranscodePrompt } from "../media/TranscodePrompt";
 import { nextEvent, prevEvent } from "./analysis/events";
 import { findFlickers, type FlickerEvent } from "./analysis/flicker";
 import { useViewParams } from "./analysis/useViewParams";
 import { buildView } from "./analysis/view";
+import { formatClock } from "./analysis/strip";
+import { CommitDialog } from "./CommitDialog";
 import { DisplayPanel } from "./DisplayPanel";
 import { EventNav } from "./EventNav";
-import { eventDirectionFor, isTypingTarget } from "./eventKeys";
+import { errorMessage } from "./errorMessage";
+import { eventDirectionFor, flagKindFor, isTypingTarget } from "./eventKeys";
+import { FlagButtons } from "./FlagButtons";
+import { FlagsPanel } from "./FlagsPanel";
+import { decideFlagAction } from "./flagDecision";
 import { LatencyPanel } from "./LatencyPanel";
 import { PredictionOverlay } from "./PredictionOverlay";
+import { buildProcessedFrames, processedFrameAt } from "./processedFrame";
 import { colorForClass, countByClass } from "./predictions";
 import { RunStatus } from "./RunStatus";
 import { TimelineStrip } from "./TimelineStrip";
 
 // A stable empty list, so callbacks that depend on `events` keep their identity.
 const NO_EVENTS: FlickerEvent[] = [];
+const NO_FLAGS: QcFlag[] = [];
 
 export function RunViewPage() {
   const params = useParams();
@@ -48,6 +65,22 @@ export function RunViewPage() {
     [document, view],
   );
 
+  const succeeded = run?.status === "succeeded";
+  const flagsQuery = useQcFlags(succeeded ? runId : null);
+  const flags = flagsQuery.data ?? NO_FLAGS;
+  const putFlag = usePutQcFlag(runId);
+  const deleteFlag = useDeleteQcFlag(runId);
+  const commit = useCommitQcFlags(runId, run?.video_id ?? null);
+  const sentQuery = useVideoSent(succeeded ? (run?.video_id ?? null) : null);
+  const processedFrames = useMemo(
+    () => (document ? buildProcessedFrames(document) : []),
+    [document],
+  );
+  const [snapNote, setSnapNote] = useState<string | null>(null);
+  const [flagError, setFlagError] = useState<string | null>(null);
+  const [commitOpen, setCommitOpen] = useState(false);
+  const [lastSequence, setLastSequence] = useState<{ id: number; name: string } | null>(null);
+
   const video = videoQuery.data;
   const { refetch: refetchVideo } = videoQuery;
   const handleTranscodeComplete = useCallback(() => {
@@ -76,18 +109,97 @@ export function RunViewPage() {
     [events, seekTo],
   );
 
+  const { mutate: putFlagMutate } = putFlag;
+  const { mutate: deleteFlagMutate } = deleteFlag;
+  const flagFrame = useCallback(
+    (kind: QcFlagKind) => {
+      const el = videoRef.current;
+      if (!el || processedFrames.length === 0) return;
+      const frame = processedFrameAt(processedFrames, el.currentTime * 1000);
+      if (!frame) {
+        setSnapNote("No processed frame at this time");
+        return;
+      }
+      // Pause and snap to the frame the overlay shows, so what is flagged is
+      // exactly what the model saw.
+      el.pause();
+      el.currentTime = frame.timestampMs / 1000;
+      setSnapNote(`Snapped to processed frame ${formatClock(frame.timestampMs)}`);
+      setFlagError(null);
+
+      const existing = flags.find((f) => f.frame_index === frame.frameIndex);
+      const action = decideFlagAction(
+        existing ? { kind: existing.kind, committed: existing.committed_at !== null } : undefined,
+        kind,
+      );
+      const onError = (error: unknown) =>
+        setFlagError(errorMessage(error, "Could not save the flag"));
+      if (action === "blocked") {
+        setFlagError("This frame was already sent to training");
+      } else if (action === "remove" && existing) {
+        deleteFlagMutate(existing.id, { onError });
+      } else {
+        putFlagMutate(
+          {
+            frame_index: frame.frameIndex,
+            timestamp_ms: frame.timestampMs,
+            kind,
+            note: existing?.note ?? null,
+          },
+          { onError },
+        );
+      }
+    },
+    [processedFrames, flags, putFlagMutate, deleteFlagMutate],
+  );
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return;
+      if (commitOpen || isTypingTarget(event.target)) return;
       const direction = eventDirectionFor(event);
-      if (direction) jump(direction);
+      if (direction) {
+        jump(direction);
+        return;
+      }
+      // A held flag key must not toggle the flag repeatedly.
+      if (event.repeat) return;
+      const kind = flagKindFor(event);
+      if (kind) flagFrame(kind);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [jump]);
+  }, [jump, flagFrame, commitOpen]);
 
   const blinkCount = events.filter((e) => e.kind === "blink").length;
   const dropoutCount = events.length - blinkCount;
+
+  const pendingFlags = flags.filter((f) => f.committed_at === null);
+  const fpCount = pendingFlags.filter((f) => f.kind === "fp").length;
+  const fnCount = pendingFlags.length - fpCount;
+  const defaultSequenceName = `QC · ${video?.title ?? "video"} · run #${runId} · ${new Date()
+    .toISOString()
+    .slice(0, 10)}`;
+  const sent = sentQuery.data;
+
+  const handleNoteChange = (flag: QcFlag, note: string) =>
+    putFlagMutate(
+      { frame_index: flag.frame_index, timestamp_ms: flag.timestamp_ms, kind: flag.kind, note: note || null },
+      { onError: (error) => setFlagError(errorMessage(error, "Could not save the note")) },
+    );
+  const openCommit = () => {
+    commit.reset();
+    setCommitOpen(true);
+  };
+  const handleConfirm = (name: string) =>
+    commit.mutate(
+      { name },
+      {
+        onSuccess: (sequence) => {
+          setCommitOpen(false);
+          if (sequence) setLastSequence({ id: sequence.id, name: sequence.name });
+        },
+      },
+    );
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -99,6 +211,14 @@ export function RunViewPage() {
           ← Back to QC
         </Link>
       </div>
+
+      {sent && sent.frames > 0 && (
+        <p className="rounded border border-yellow-700 bg-yellow-950 px-2 py-1 text-xs text-yellow-200">
+          {`${sent.frames} ${sent.frames === 1 ? "frame" : "frames"} of this video ${
+            sent.frames === 1 ? "was" : "were"
+          } sent to training, so it is no longer an unbiased test.`}
+        </p>
+      )}
 
       {runQuery.isError && <p className="text-sm text-red-400">This run could not be loaded.</p>}
 
@@ -140,10 +260,17 @@ export function RunViewPage() {
                   doc={document}
                   threshold={deferred.threshold}
                   events={events}
+                  flags={flags}
                   durationMs={durationMs}
                   onSeek={seekTo}
                 />
                 <EventNav count={events.length} onPrev={() => jump("prev")} onNext={() => jump("next")} />
+                <FlagButtons
+                  disabled={processedFrames.length === 0}
+                  onFlag={flagFrame}
+                  snapNote={snapNote}
+                  error={flagError}
+                />
               </>
             ) : (
               <div aria-hidden="true" className="h-5 rounded bg-gray-800/50" />
@@ -164,6 +291,23 @@ export function RunViewPage() {
               predictionsQuery.isPending && (
                 <p className="text-xs text-gray-500">Display controls appear when predictions load.</p>
               )
+            )}
+
+            {document && (
+              <FlagsPanel
+                flags={flags}
+                loadFailed={flagsQuery.isError}
+                onRetry={() => void flagsQuery.refetch()}
+                onSeek={seekTo}
+                onRemove={(id) =>
+                  deleteFlagMutate(id, {
+                    onError: (error) => setFlagError(errorMessage(error, "Could not remove the flag")),
+                  })
+                }
+                onNoteChange={handleNoteChange}
+                onSend={openCommit}
+                lastSequence={lastSequence}
+              />
             )}
 
             <section aria-label="Classes">
@@ -191,6 +335,18 @@ export function RunViewPage() {
             {document && <LatencyPanel timing={document.timing} />}
           </aside>
         </div>
+      )}
+
+      {commitOpen && (
+        <CommitDialog
+          fpCount={fpCount}
+          fnCount={fnCount}
+          defaultName={defaultSequenceName}
+          error={commit.error ? errorMessage(commit.error, "Could not create the sequence") : null}
+          submitting={commit.isPending}
+          onConfirm={handleConfirm}
+          onCancel={() => setCommitOpen(false)}
+        />
       )}
     </div>
   );

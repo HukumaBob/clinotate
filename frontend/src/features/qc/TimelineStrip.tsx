@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
+import type { QcFlag } from "../../entities/useQcFlags";
 import type { FlickerEvent } from "./analysis/flicker";
 import { LEVEL_COLORS, buildStrip, formatClock, type StripLevel } from "./analysis/strip";
 import { colorForClass, type PredictionsDocument } from "./predictions";
@@ -10,6 +11,7 @@ interface TimelineStripProps {
   doc: PredictionsDocument;
   threshold: number;
   events: FlickerEvent[];
+  flags: QcFlag[];
   durationMs: number;
   onSeek: (ms: number) => void;
 }
@@ -50,10 +52,46 @@ const FlickerMarks = memo(function FlickerMarks({
   );
 });
 
+// Red marks for flagged frames: a square for FP, a diamond for FN (shape, not
+// only colour). Pending marks are filled, sent ones outlined. A click seeks to
+// the flag's frame instead of to the click position.
+const FlagMarks = memo(function FlagMarks({
+  flags,
+  durationMs,
+  onSeek,
+}: {
+  flags: QcFlag[];
+  durationMs: number;
+  onSeek: (ms: number) => void;
+}) {
+  return (
+    <>
+      {flags.map((flag) => {
+        const sent = flag.committed_at !== null;
+        return (
+          <span
+            key={flag.id}
+            aria-hidden="true"
+            data-testid={`flag-mark-${flag.id}`}
+            className={`absolute bottom-0 h-2.5 w-2.5 -translate-x-1/2 cursor-pointer border-2 border-red-500 ${
+              flag.kind === "fn" ? "rotate-45" : ""
+            } ${sent ? "bg-transparent" : "bg-red-500"}`}
+            style={{ left: `${Math.min(Math.max(flag.timestamp_ms / durationMs, 0), 1) * 100}%` }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSeek(flag.timestamp_ms);
+            }}
+          />
+        );
+      })}
+    </>
+  );
+});
+
 /** A full-width timeline under the player: coloured by the best confidence
  * in each slice of time, flicker marks on top, a playhead, click to seek.
  * The native controls cannot be decorated, hence a strip of our own. */
-export function TimelineStrip({ videoRef, doc, threshold, events, durationMs, onSeek }: TimelineStripProps) {
+export function TimelineStrip({ videoRef, doc, threshold, events, flags, durationMs, onSeek }: TimelineStripProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
@@ -104,7 +142,7 @@ export function TimelineStrip({ videoRef, doc, threshold, events, durationMs, on
       <div
         ref={containerRef}
         role="img"
-        aria-label="Detection timeline. Colour shows the best confidence over time; marks show flicker events. Click to seek."
+        aria-label="Detection timeline. Colour shows the best confidence over time; marks show flicker events; red marks are flagged frames. Click to seek."
         className="relative h-5 w-full cursor-pointer overflow-visible rounded bg-gray-900"
         onClick={(e) => onSeek(msAt(e.clientX).ms)}
         onMouseMove={(e) => setHover(msAt(e.clientX))}
@@ -113,6 +151,7 @@ export function TimelineStrip({ videoRef, doc, threshold, events, durationMs, on
         <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full rounded" />
 
         <FlickerMarks events={events} durationMs={durationMs} />
+        <FlagMarks flags={flags} durationMs={durationMs} onSeek={onSeek} />
 
         <div
           aria-hidden="true"
@@ -143,6 +182,12 @@ export function TimelineStrip({ videoRef, doc, threshold, events, durationMs, on
         </li>
         <li className="flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded-full border-2 border-gray-300" /> dropout
+        </li>
+        <li className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 bg-red-500" /> false positive
+        </li>
+        <li className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rotate-45 bg-red-500" /> missed object
         </li>
       </ul>
     </div>
