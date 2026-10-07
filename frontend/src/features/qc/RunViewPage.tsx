@@ -24,6 +24,7 @@ import { EventNav } from "./EventNav";
 import { errorMessage } from "./errorMessage";
 import { eventDirectionFor, flagKindFor, isTypingTarget } from "./eventKeys";
 import { FlagButtons } from "./FlagButtons";
+import { localIsoDate } from "./localDate";
 import { FlagsPanel } from "./FlagsPanel";
 import { decideFlagAction } from "./flagDecision";
 import { LatencyPanel } from "./LatencyPanel";
@@ -144,7 +145,8 @@ export function RunViewPage() {
             frame_index: frame.frameIndex,
             timestamp_ms: frame.timestampMs,
             kind,
-            note: existing?.note ?? null,
+            // No note: the server keeps the stored one, so a kind change
+            // cannot overwrite a note saved a moment ago.
           },
           { onError },
         );
@@ -176,9 +178,7 @@ export function RunViewPage() {
   const pendingFlags = flags.filter((f) => f.committed_at === null);
   const fpCount = pendingFlags.filter((f) => f.kind === "fp").length;
   const fnCount = pendingFlags.length - fpCount;
-  const defaultSequenceName = `QC · ${video?.title ?? "video"} · run #${runId} · ${new Date()
-    .toISOString()
-    .slice(0, 10)}`;
+  const defaultSequenceName = `QC · ${video?.title ?? "video"} · run #${runId} · ${localIsoDate(new Date())}`;
   const sent = sentQuery.data;
 
   const handleNoteChange = (flag: QcFlag, note: string) =>
@@ -342,7 +342,7 @@ export function RunViewPage() {
           fpCount={fpCount}
           fnCount={fnCount}
           defaultName={defaultSequenceName}
-          error={commit.error ? errorMessage(commit.error, "Could not create the sequence") : null}
+          error={commit.error ? errorMessage(commit.error, "Could not create the sequence, nothing was changed") : null}
           submitting={commit.isPending}
           onConfirm={handleConfirm}
           onCancel={() => setCommitOpen(false)}

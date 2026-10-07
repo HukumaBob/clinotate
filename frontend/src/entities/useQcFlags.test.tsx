@@ -116,6 +116,37 @@ describe("useCommitQcFlags", () => {
   });
 });
 
+describe("useCommitQcFlags on a 409", () => {
+  it("still refreshes the flags and run counters", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({ error: { detail: "no pending flags" } } as never);
+    const { wrapper, invalidate } = setup();
+    const { result } = renderHook(() => useCommitQcFlags(7, 99), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.mutateAsync({ name: "QC" })).rejects.toBeTruthy();
+    });
+
+    const keys = invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
+    expect(keys).toContain(JSON.stringify(["qc-flags", 7]));
+    expect(keys).toContain(JSON.stringify(["inference-run", 7]));
+  });
+});
+
+describe("usePutQcFlag partial update", () => {
+  it("sends no note key when none is given, so the server keeps the stored note", async () => {
+    vi.mocked(apiClient.PUT).mockResolvedValue({ data: { id: 1 } } as never);
+    const { wrapper } = setup();
+    const { result } = renderHook(() => usePutQcFlag(7), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ frame_index: 5, timestamp_ms: 500, kind: "fn" });
+    });
+
+    const body = vi.mocked(apiClient.PUT).mock.calls[0][1]?.body as Record<string, unknown>;
+    expect("note" in body).toBe(false);
+  });
+});
+
 describe("useVideoSent", () => {
   it("reads how much of the video was sent", async () => {
     vi.mocked(apiClient.GET).mockResolvedValue({ data: { sequences: 1, frames: 3 } } as never);

@@ -80,6 +80,8 @@ export function useCommitQcFlags(runId: number | null, videoId: number | null) {
       void queryClient.invalidateQueries({ queryKey: ["video-sent", videoId] });
       void queryClient.invalidateQueries({ queryKey: ["video-sequences", videoId] });
     },
+    // A 409 ("no pending flags", sent from another tab) means the list is stale.
+    onError: refresh,
   });
 }
 

@@ -96,4 +96,24 @@ describe("CommitDialog", () => {
     rerender(<CommitDialog {...base} submitting={true} onCancel={() => {}} />);
     expect(screen.getByLabelText("Sequence name")).not.toHaveFocus();
   });
+
+  it("ignores Escape and disables Cancel while submitting", async () => {
+    const user = userEvent.setup();
+    const props = setup({ submitting: true });
+    await user.keyboard("{Escape}");
+    expect(props.onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  });
+
+  it("returns focus to the opener when it closes", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const base = { fpCount: 1, fnCount: 0, defaultName: "n", error: null, submitting: false };
+    const { unmount } = render(<CommitDialog {...base} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByLabelText("Sequence name")).toHaveFocus();
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
 });

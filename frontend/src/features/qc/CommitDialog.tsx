@@ -25,16 +25,20 @@ export function CommitDialog({
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // Return focus to whatever opened the dialog once it closes.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     nameRef.current?.focus();
+    return () => opener?.focus();
   }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
+      // While the commit runs, closing would hide its error.
+      if (event.key === "Escape" && !submitting) onCancel();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onCancel]);
+  }, [onCancel, submitting]);
 
   const canConfirm = name.trim().length > 0 && !submitting;
 
@@ -83,8 +87,9 @@ export function CommitDialog({
         <div className="flex justify-end gap-2">
           <button
             type="button"
+            disabled={submitting}
             onClick={onCancel}
-            className="rounded border border-gray-700 px-3 py-1 text-xs text-gray-300 hover:text-gray-100"
+            className="rounded border border-gray-700 px-3 py-1 text-xs text-gray-300 hover:text-gray-100 disabled:opacity-50"
           >
             Cancel
           </button>
