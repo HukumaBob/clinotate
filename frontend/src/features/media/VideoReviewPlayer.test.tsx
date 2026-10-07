@@ -230,6 +230,77 @@ describe("VideoReviewPlayer", () => {
     expect(await screen.findByLabelText(/left %/i)).toHaveValue(15);
   });
 
+  describe("QC sequences", () => {
+    function mockWithQcSequence() {
+      vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+        if (path === "/media/videos/{video_id}") {
+          return {
+            data: {
+              id: 5, filename: "a.mp4", title: "A", procedure_id: 1, fps: 1,
+              duration_seconds: 60, size_bytes: 100,
+              browser_playable: true, container: "mov,mp4,m4a,3gp,3g2,mj2", video_codec: "h264",
+              stream_url: "https://minio.local/videos/a.mp4?signed=1",
+            },
+            error: undefined,
+          } as never;
+        }
+        if (path === "/media/videos/{video_id}/sequences") {
+          return {
+            data: [
+              {
+                id: 1, name: "Larynx", video_id: 5, procedure_id: 1,
+                start_time: 0, duration: 10, annotation_count: 0,
+                crop_box: { left: 15, right: 0, top: 0, bottom: 0 },
+                origin_qc_run_id: null,
+              },
+              {
+                id: 2, name: "QC sequence", video_id: 5, procedure_id: 1,
+                start_time: 2, duration: 50, annotation_count: 0,
+                crop_box: null, origin_qc_run_id: 9,
+              },
+            ],
+            error: undefined,
+          } as never;
+        }
+        if (path === "/taxonomy/procedures") {
+          return { data: [{ id: 1, name: "EGD" }], error: undefined } as never;
+        }
+        if (path === "/media/sequences/suggest-name") {
+          return { data: { name: "EGD 2026-07-30 #1" }, error: undefined } as never;
+        }
+        return { data: undefined, error: undefined } as never;
+      });
+    }
+
+    it("does not draw QC sequences on the timeline", async () => {
+      mockWithQcSequence();
+      render(<VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
+
+      expect(await screen.findByTitle("Larynx")).toBeInTheDocument();
+      expect(screen.queryByTitle("QC sequence")).not.toBeInTheDocument();
+    });
+
+    it("ignores QC sequences when inheriting the crop for a new sequence", async () => {
+      mockWithQcSequence();
+      render(<VideoReviewPlayer videoId={5} onBack={vi.fn()} onOpenSequence={vi.fn()} />, { wrapper });
+
+      const video = await waitFor(() => {
+        const el = document.querySelector("video");
+        expect(el).toBeInTheDocument();
+        return el as HTMLVideoElement;
+      });
+      let currentTime = 20;
+      Object.defineProperty(video, "currentTime", { get: () => currentTime, configurable: true });
+      fireEvent.loadedMetadata(video);
+      await userEvent.click(await screen.findByRole("button", { name: /mark start/i }));
+      currentTime = 40;
+      await userEvent.click(screen.getByRole("button", { name: /mark end/i }));
+
+      // The QC sequence has the highest id and no crop; the regular crop must still win.
+      expect(await screen.findByLabelText(/left %/i)).toHaveValue(15);
+    });
+  });
+
   it("shows the marked timestamp next to Mark start/Mark end after clicking, and persists marks across a remount for the same video", async () => {
     vi.mocked(apiClient.GET).mockImplementation(async (path) => {
       if (path === "/media/videos/{video_id}") {

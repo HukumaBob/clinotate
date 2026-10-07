@@ -36,6 +36,12 @@ export function VideoReviewPlayer({
 }) {
   const videoQuery = useVideo(videoId);
   const sequencesQuery = useVideoSequences(videoId);
+  // QC sequences hold hand-picked frames scattered across the whole video;
+  // drawing them as time blocks would cover the regular sequences and block
+  // new marks, and their missing crop must not become the inherited one.
+  const regularSequences = (sequencesQuery.data ?? []).filter(
+    (s) => s.origin_qc_run_id === null || s.origin_qc_run_id === undefined,
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
   const [markStart, setMarkStart] = useState<number | null>(() => loadStoredMarks(videoId).markStart);
   const [markEnd, setMarkEnd] = useState<number | null>(() => loadStoredMarks(videoId).markEnd);
@@ -166,14 +172,14 @@ export function VideoReviewPlayer({
                 </div>
               </div>
               {editingSequenceId !== null && markStart !== null && markEnd !== null && (() => {
-                const target = sequencesQuery.data?.find((s) => s.id === editingSequenceId);
+                const target = regularSequences.find((s) => s.id === editingSequenceId);
                 return target ? (
                   <SequenceForm
                     sequence={target}
                     videoId={videoId}
                     markStart={markStart}
                     markEnd={markEnd}
-                    existingSequences={sequencesQuery.data ?? []}
+                    existingSequences={regularSequences}
                     onCropChange={setActiveCrop}
                     onDone={handleEditDone}
                     onOpenEditor={onOpenSequence}
@@ -186,7 +192,7 @@ export function VideoReviewPlayer({
                   markStart={markStart}
                   markEnd={markEnd}
                   procedureId={video.procedure_id ?? undefined}
-                  existingSequences={sequencesQuery.data ?? []}
+                  existingSequences={regularSequences}
                   onCropChange={setActiveCrop}
                   onDone={handleCreated}
                 />
@@ -198,7 +204,7 @@ export function VideoReviewPlayer({
           </div>
           <SequenceTimeline
             durationSeconds={video.duration_seconds}
-            sequences={sequencesQuery.data ?? []}
+            sequences={regularSequences}
             markStart={markStart}
             markEnd={markEnd}
             onSegmentClick={handleSegmentClick}

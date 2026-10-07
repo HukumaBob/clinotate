@@ -33,7 +33,7 @@ export function eventDirectionFor(
 }
 
 /** F (false positive) and N (missed object), by physical key so any layout
- * works (on a Russian layout the same keys give "а" and "т"). */
+ * works (on a Russian layout the same keys give different letters). */
 export function flagKindFor(
   event: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "metaKey" | "altKey">,
 ): "fp" | "fn" | null {
