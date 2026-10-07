@@ -166,6 +166,60 @@ def extract_frames(
     return results
 
 
+class FramesOutOfRange(Exception):
+    """Some requested frame numbers are past the end of the video."""
+
+    def __init__(self, indices: list[int]) -> None:
+        self.indices = indices
+        super().__init__(f"Frames past the end of the video: {indices}")
+
+
+def extract_frames_at(
+    video_bytes: bytes, frame_indices: list[int]
+) -> list[tuple[int, bytes, int, int]]:
+    """Cut exact frames by number in ONE sequential pass over the video.
+
+    Returns (frame_index, png_bytes, width, height) for each distinct
+    requested index, ascending. The pass uses grab()/retrieve() the way the
+    inference adapter does, so a frame number addresses the very frame the
+    model saw. Seeking (CAP_PROP_POS_FRAMES) is not used: on some codecs it
+    lands on the wrong frame, and these frames become training data.
+    """
+    wanted = sorted(set(frame_indices))
+    if not wanted:
+        return []
+
+    results: list[tuple[int, bytes, int, int]] = []
+    with tempfile.NamedTemporaryFile(suffix=".mp4") as tmp:
+        tmp.write(video_bytes)
+        tmp.flush()
+        capture = cv2.VideoCapture(tmp.name)
+        if not capture.isOpened():
+            capture.release()
+            raise ValueError("Could not open the video file")
+        try:
+            position = 0
+            index = 0
+            while position < len(wanted) and capture.grab():
+                if index == wanted[position]:
+                    success, frame = capture.retrieve()
+                    if not success:
+                        raise ValueError(f"Could not decode video frame {index}")
+                    encoded, buffer = cv2.imencode(".png", frame)
+                    if not encoded:
+                        raise ValueError(f"Could not encode video frame {index}")
+                    height, width = frame.shape[:2]
+                    results.append((index, buffer.tobytes(), width, height))
+                    position += 1
+                index += 1
+        finally:
+            capture.release()
+
+    if position < len(wanted):
+        raise FramesOutOfRange(wanted[position:])
+    return results
+
+
 def recut_sequence(
     session: Session,
     storage: StorageService,
