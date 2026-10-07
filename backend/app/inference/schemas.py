@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.inference.models import InferenceRunStatus
+from app.inference.models import InferenceRunStatus, QcFlagKind
 
 
 class InferenceRunCreate(BaseModel):
@@ -29,7 +29,32 @@ class InferenceRunRead(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    flags_pending: int = 0
+    flags_committed: int = 0
 
 
 class PredictionsRead(BaseModel):
     download_url: str
+
+
+class QcFlagPut(BaseModel):
+    frame_index: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
+    kind: QcFlagKind
+    note: str | None = Field(default=None, max_length=500)
+
+
+class QcFlagRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    run_id: int
+    kind: QcFlagKind
+    frame_index: int
+    timestamp_ms: int
+    note: str | None
+    created_by_id: int
+    committed_at: datetime | None
+    frame_id: int | None
+    # The sequence of the committed frame; None while pending.
+    sequence_id: int | None = None

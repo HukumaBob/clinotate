@@ -5,7 +5,13 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import get_session
 from app.inference import service
-from app.inference.schemas import InferenceRunCreate, InferenceRunRead, PredictionsRead
+from app.inference.schemas import (
+    InferenceRunCreate,
+    InferenceRunRead,
+    PredictionsRead,
+    QcFlagPut,
+    QcFlagRead,
+)
 from app.storage import StorageService, get_storage_service
 from app.training.service import ModelVersionNotFound
 
@@ -40,15 +46,65 @@ def create_run(
 
 @router.get("/runs", response_model=list[InferenceRunRead])
 def list_runs(session: Session = Depends(get_session)):
-    return service.list_runs(session)
+    return service.runs_read(session, service.list_runs(session))
 
 
 @router.get("/runs/{run_id}", response_model=InferenceRunRead)
 def get_run(run_id: int, session: Session = Depends(get_session)):
     try:
-        return service.get_run(session, run_id)
+        return service.run_read(session, service.get_run(session, run_id))
     except service.InferenceRunNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+def _flag_read(flag, sequence_id: int | None) -> QcFlagRead:
+    read = QcFlagRead.model_validate(flag)
+    read.sequence_id = sequence_id
+    return read
+
+
+@router.put("/runs/{run_id}/flags", response_model=QcFlagRead)
+def put_flag(
+    run_id: int,
+    body: QcFlagPut,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    try:
+        flag = service.put_flag(
+            session,
+            run_id,
+            frame_index=body.frame_index,
+            timestamp_ms=body.timestamp_ms,
+            kind=body.kind,
+            note=body.note,
+            user=current_user,
+        )
+    except service.InferenceRunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except (service.RunNotSucceeded, service.FlagAlreadyCommitted) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except service.NotAProcessedFrame as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    return _flag_read(flag, None)
+
+
+@router.get("/runs/{run_id}/flags", response_model=list[QcFlagRead])
+def list_flags(run_id: int, session: Session = Depends(get_session)):
+    try:
+        return [_flag_read(flag, seq) for flag, seq in service.list_flags(session, run_id)]
+    except service.InferenceRunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.delete("/runs/{run_id}/flags/{flag_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_flag(run_id: int, flag_id: int, session: Session = Depends(get_session)):
+    try:
+        service.delete_flag(session, run_id, flag_id)
+    except (service.InferenceRunNotFound, service.FlagNotFound) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except service.FlagAlreadyCommitted as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 @router.get("/runs/{run_id}/predictions", response_model=PredictionsRead)

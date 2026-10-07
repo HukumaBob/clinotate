@@ -8,15 +8,17 @@ ever hands out a presigned link to it.
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.celery_app import celery_app
 from app.datasets.models import TaskType
-from app.inference.models import InferenceRun, InferenceRunStatus
+from app.inference.models import InferenceRun, InferenceRunStatus, QcFlag, QcFlagKind
+from app.inference.schemas import InferenceRunRead
 from app.jobs.models import Job, JobStatus, JobType
-from app.media.models import Video
+from app.media.models import Frame, Video
 from app.storage import StorageService
 from app.training import service as training_service
 
@@ -178,3 +180,141 @@ def delete_run(
     if job is not None:
         session.delete(job)
     session.commit()
+
+
+class RunNotSucceeded(Exception):
+    """Flags and commits need a finished run."""
+
+
+class NotAProcessedFrame(Exception):
+    """The frame number is not one the model processed (not a multiple of the stride)."""
+
+
+class FlagNotFound(Exception):
+    """No such flag on this run."""
+
+
+class FlagAlreadyCommitted(Exception):
+    """The flag was already sent to training and can no longer change."""
+
+
+def _require_flaggable_run(session: Session, run_id: int) -> InferenceRun:
+    run = get_run(session, run_id)
+    if run.status != InferenceRunStatus.SUCCEEDED:
+        raise RunNotSucceeded(f"Inference run {run_id} is {run.status.value}")
+    return run
+
+
+def put_flag(
+    session: Session,
+    run_id: int,
+    *,
+    frame_index: int,
+    timestamp_ms: int,
+    kind: QcFlagKind,
+    note: str | None,
+    user: User,
+) -> QcFlag:
+    """Create the flag for this frame, or change a pending one.
+
+    The frame must be one the model processed: a "missed object" on a frame
+    it never saw would be a false statistic. The check uses the stride, so
+    the (large) predictions document is not downloaded per flag.
+    """
+    run = _require_flaggable_run(session, run_id)
+    if frame_index % run.frame_stride != 0:
+        raise NotAProcessedFrame(
+            f"Frame {frame_index} was not processed by this run (stride {run.frame_stride})"
+        )
+
+    def _existing() -> QcFlag | None:
+        return session.scalars(
+            select(QcFlag).where(QcFlag.run_id == run_id, QcFlag.frame_index == frame_index)
+        ).first()
+
+    flag = _existing()
+    if flag is not None and flag.committed_at is not None:
+        raise FlagAlreadyCommitted(f"Frame {frame_index} was already sent to training")
+    if flag is None:
+        flag = QcFlag(
+            run_id=run_id,
+            frame_index=frame_index,
+            timestamp_ms=timestamp_ms,
+            kind=kind,
+            note=note,
+            created_by_id=user.id,
+        )
+        session.add(flag)
+        try:
+            session.commit()
+        except IntegrityError:
+            # A concurrent request created it first: fall through to a change.
+            session.rollback()
+            flag = _existing()
+            if flag is None:
+                raise
+        else:
+            session.refresh(flag)
+            return flag
+    if flag.committed_at is not None:
+        raise FlagAlreadyCommitted(f"Frame {frame_index} was already sent to training")
+    flag.kind = kind
+    flag.note = note
+    flag.timestamp_ms = timestamp_ms
+    session.commit()
+    session.refresh(flag)
+    return flag
+
+
+def list_flags(session: Session, run_id: int) -> list[tuple[QcFlag, int | None]]:
+    """The run's flags by frame, each with the sequence of its committed frame."""
+    get_run(session, run_id)
+    rows = session.execute(
+        select(QcFlag, Frame.sequence_id)
+        .outerjoin(Frame, QcFlag.frame_id == Frame.id)
+        .where(QcFlag.run_id == run_id)
+        .order_by(QcFlag.frame_index)
+    ).all()
+    return [(flag, sequence_id) for flag, sequence_id in rows]
+
+
+def delete_flag(session: Session, run_id: int, flag_id: int) -> None:
+    get_run(session, run_id)
+    flag = session.get(QcFlag, flag_id)
+    if flag is None or flag.run_id != run_id:
+        raise FlagNotFound(f"Flag {flag_id} not found on run {run_id}")
+    if flag.committed_at is not None:
+        raise FlagAlreadyCommitted("A flag already sent to training cannot be removed")
+    session.delete(flag)
+    session.commit()
+
+
+def _flag_counts(session: Session, run_ids: list[int]) -> dict[int, tuple[int, int]]:
+    if not run_ids:
+        return {}
+    rows = session.execute(
+        select(
+            QcFlag.run_id,
+            func.count().filter(QcFlag.committed_at.is_(None)),
+            func.count().filter(QcFlag.committed_at.is_not(None)),
+        )
+        .where(QcFlag.run_id.in_(run_ids))
+        .group_by(QcFlag.run_id)
+    ).all()
+    return {run_id: (pending, committed) for run_id, pending, committed in rows}
+
+
+def runs_read(session: Session, runs: list[InferenceRun]) -> list[InferenceRunRead]:
+    counts = _flag_counts(session, [run.id for run in runs])
+    result = []
+    for run in runs:
+        pending, committed = counts.get(run.id, (0, 0))
+        read = InferenceRunRead.model_validate(run)
+        read.flags_pending = pending
+        read.flags_committed = committed
+        result.append(read)
+    return result
+
+
+def run_read(session: Session, run: InferenceRun) -> InferenceRunRead:
+    return runs_read(session, [run])[0]
