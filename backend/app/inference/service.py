@@ -6,7 +6,8 @@ ever hands out a presigned link to it.
 """
 
 import logging
-from datetime import datetime, timezone
+import math
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +19,8 @@ from app.datasets.models import TaskType
 from app.inference.models import InferenceRun, InferenceRunStatus, QcFlag, QcFlagKind
 from app.inference.schemas import InferenceRunRead
 from app.jobs.models import Job, JobStatus, JobType
-from app.media.models import Frame, Video
+from app.media.models import Frame, Sequence, Video
+from app.media.service import FramesOutOfRange, extract_frames_at
 from app.storage import StorageService
 from app.training import service as training_service
 
@@ -229,7 +231,9 @@ def put_flag(
 
     def _existing() -> QcFlag | None:
         return session.scalars(
-            select(QcFlag).where(QcFlag.run_id == run_id, QcFlag.frame_index == frame_index)
+            select(QcFlag)
+            .where(QcFlag.run_id == run_id, QcFlag.frame_index == frame_index)
+            .with_for_update()
         ).first()
 
     flag = _existing()
@@ -318,3 +322,130 @@ def runs_read(session: Session, runs: list[InferenceRun]) -> list[InferenceRunRe
 
 def run_read(session: Session, run: InferenceRun) -> InferenceRunRead:
     return runs_read(session, [run])[0]
+
+
+class NoPendingFlags(Exception):
+    """Nothing is waiting to be sent."""
+
+
+class FramesPastEnd(Exception):
+    def __init__(self, indices: list[int]) -> None:
+        self.indices = indices
+        super().__init__(f"Frames past the end of the video: {indices}")
+
+
+class VideoUnreadable(Exception):
+    """The stored video could not be opened or decoded."""
+
+
+def _default_sequence_name(video: Video, run: InferenceRun) -> str:
+    return f"QC · {video.title} · run #{run.id} · {date.today().isoformat()}"[:255]
+
+
+def commit_flags(
+    session: Session,
+    storage: StorageService,
+    run_id: int,
+    *,
+    name: str | None,
+    user: User,
+) -> Sequence:
+    """Send the pending flags to training as one new Sequence (all or nothing).
+
+    The pending flags are locked (FOR UPDATE) so two commits cannot send the
+    same frame twice: the second finds nothing pending. Frames are cut in
+    one pass by exact number; objects are uploaded and the rows written
+    only after that succeeds, and a failure after uploading deletes what
+    was uploaded and rolls the database back.
+    """
+    run = _require_flaggable_run(session, run_id)
+    flags = list(
+        session.scalars(
+            select(QcFlag)
+            .where(QcFlag.run_id == run_id, QcFlag.committed_at.is_(None))
+            .order_by(QcFlag.frame_index)
+            .with_for_update()
+        )
+    )
+    if not flags:
+        session.rollback()
+        raise NoPendingFlags(f"Inference run {run_id} has no pending flags")
+
+    video = session.get(Video, run.video_id)
+    try:
+        extracted = extract_frames_at(
+            storage.download(video.storage_key), [flag.frame_index for flag in flags]
+        )
+    except FramesOutOfRange as exc:
+        session.rollback()
+        raise FramesPastEnd(exc.indices) from exc
+    except ValueError as exc:
+        session.rollback()
+        raise VideoUnreadable(str(exc)) from exc
+
+    now = datetime.now(timezone.utc)
+    first_ms = min(flag.timestamp_ms for flag in flags)
+    last_ms = max(flag.timestamp_ms for flag in flags)
+    uploaded: list[str] = []
+    try:
+        sequence = Sequence(
+            video_id=video.id,
+            procedure_id=video.procedure_id,
+            name=name or _default_sequence_name(video, run),
+            start_time=first_ms // 1000,
+            duration=math.ceil((last_ms - first_ms) / 1000),
+            origin_qc_run_id=run.id,
+        )
+        session.add(sequence)
+        session.flush()
+
+        created: list[tuple[QcFlag, Frame]] = []
+        for position, (flag, (_, png, width, height)) in enumerate(zip(flags, extracted)):
+            key = f"frames/{sequence.id}/{position}.png"
+            storage.upload(key, png, content_type="image/png")
+            uploaded.append(key)
+            frame = Frame(
+                sequence_id=sequence.id,
+                storage_key=key,
+                frame_index=position,
+                width=width,
+                height=height,
+                size_bytes=len(png),
+            )
+            if flag.kind == QcFlagKind.FP:
+                frame.no_findings_reviewed = True
+                frame.no_findings_reviewed_by_id = user.id
+                frame.no_findings_reviewed_at = now
+            session.add(frame)
+            created.append((flag, frame))
+        session.flush()
+        for flag, frame in created:
+            flag.committed_at = now
+            flag.frame_id = frame.id
+        session.commit()
+    except Exception:
+        session.rollback()
+        for key in uploaded:
+            try:
+                storage.delete(key)
+            except Exception:  # noqa: BLE001 -- best effort; the DB is already rolled back
+                logger.warning("commit_flags: could not remove %s", key)
+        raise
+    session.refresh(sequence)
+    return sequence
+
+
+def video_sent(session: Session, video_id: int) -> tuple[int, int]:
+    """How many sequences and frames of this video were already sent to training."""
+    if session.get(Video, video_id) is None:
+        raise VideoNotFound(f"Video {video_id} not found")
+    sequence_ids = [
+        row[0]
+        for row in session.query(Sequence.id)
+        .filter(Sequence.video_id == video_id, Sequence.origin_qc_run_id.is_not(None))
+        .all()
+    ]
+    if not sequence_ids:
+        return 0, 0
+    frames = session.query(Frame).filter(Frame.sequence_id.in_(sequence_ids)).count()
+    return len(sequence_ids), frames

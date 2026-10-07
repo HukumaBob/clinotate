@@ -4326,6 +4326,110 @@
         }
       }
     },
+    "/inference/runs/{run_id}/commit": {
+      "post": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Commit Flags",
+        "operationId": "commit_flags_inference_runs__run_id__commit_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QcCommitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inference/videos/{video_id}/sent": {
+      "get": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Video Sent",
+        "operationId": "video_sent_inference_videos__video_id__sent_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoSentRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -6108,6 +6212,24 @@
         ],
         "title": "PromptIn"
       },
+      "QcCommitRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "QcCommitRequest"
+      },
       "QcFlagKind": {
         "type": "string",
         "enum": [
@@ -7433,6 +7555,24 @@
           "stream_url"
         ],
         "title": "VideoRead"
+      },
+      "VideoSentRead": {
+        "properties": {
+          "sequences": {
+            "type": "integer",
+            "title": "Sequences"
+          },
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequences",
+          "frames"
+        ],
+        "title": "VideoSentRead"
       },
       "VideoUpdate": {
         "properties": {

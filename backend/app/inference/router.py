@@ -10,8 +10,11 @@ from app.inference.schemas import (
     InferenceRunRead,
     PredictionsRead,
     QcFlagPut,
+    QcCommitRequest,
     QcFlagRead,
+    VideoSentRead,
 )
+from app.media.schemas import SequenceRead
 from app.storage import StorageService, get_storage_service
 from app.training.service import ModelVersionNotFound
 
@@ -136,3 +139,43 @@ def delete_run(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except service.RunStillActive as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.post("/runs/{run_id}/commit", response_model=SequenceRead, status_code=status.HTTP_201_CREATED)
+def commit_flags(
+    run_id: int,
+    body: QcCommitRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+):
+    try:
+        sequence = service.commit_flags(
+            session, storage, run_id, name=body.name, user=current_user
+        )
+    except service.InferenceRunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except (service.RunNotSucceeded, service.NoPendingFlags) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except (service.FramesPastEnd, service.VideoUnreadable) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    return SequenceRead(
+        id=sequence.id,
+        name=sequence.name,
+        video_id=sequence.video_id,
+        procedure_id=sequence.procedure_id,
+        start_time=sequence.start_time,
+        duration=sequence.duration,
+        annotation_count=0,
+        crop_box=None,
+        origin_qc_run_id=sequence.origin_qc_run_id,
+    )
+
+
+@router.get("/videos/{video_id}/sent", response_model=VideoSentRead)
+def video_sent(video_id: int, session: Session = Depends(get_session)):
+    try:
+        sequences, frames = service.video_sent(session, video_id)
+    except service.VideoNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return VideoSentRead(sequences=sequences, frames=frames)

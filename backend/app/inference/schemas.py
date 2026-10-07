@@ -58,3 +58,12 @@ class QcFlagRead(BaseModel):
     frame_id: int | None
     # The sequence of the committed frame; None while pending.
     sequence_id: int | None = None
+
+
+class QcCommitRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+
+
+class VideoSentRead(BaseModel):
+    sequences: int
+    frames: int
