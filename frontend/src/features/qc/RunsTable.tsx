@@ -26,6 +26,7 @@ export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
           <th className="px-4 py-2 font-normal">Model</th>
           <th className="px-4 py-2 font-normal">Stride</th>
           <th className="px-4 py-2 font-normal">Status</th>
+          <th className="px-4 py-2 font-normal">Flags</th>
           <th className="px-4 py-2 font-normal">Date</th>
           <th className="px-4 py-2 text-right font-normal">Actions</th>
         </tr>
@@ -47,6 +48,11 @@ export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
                 )}
               </td>
               <td className="px-4 py-2 text-gray-400">
+                {run.flags_pending + run.flags_committed === 0
+                  ? "—"
+                  : `${run.flags_pending} pending · ${run.flags_committed} sent`}
+              </td>
+              <td className="px-4 py-2 text-gray-400">
                 {new Date(run.created_at).toLocaleDateString()}
               </td>
               <td className="px-4 py-2 text-right">
@@ -60,16 +66,23 @@ export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
                   </button>
                 )}
                 {armed === run.id ? (
-                  <button
-                    type="button"
-                    className="rounded bg-red-700 px-2 py-1 text-xs text-white"
-                    onClick={() => {
-                      onDelete(run.id, active);
-                      setArmed(null);
-                    }}
-                  >
-                    Confirm
-                  </button>
+                  <>
+                    {run.flags_pending > 0 && (
+                      <span className="mr-2 text-xs text-red-400">
+                        {`${run.flags_pending} pending ${run.flags_pending === 1 ? "flag" : "flags"} will be lost`}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="rounded bg-red-700 px-2 py-1 text-xs text-white"
+                      onClick={() => {
+                        onDelete(run.id, active);
+                        setArmed(null);
+                      }}
+                    >
+                      Confirm
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"

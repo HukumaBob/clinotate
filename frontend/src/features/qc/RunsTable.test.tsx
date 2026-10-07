@@ -20,6 +20,8 @@ const run = (over: Partial<InferenceRun>): InferenceRun => ({
   created_at: "2026-10-06T10:00:00Z",
   started_at: null,
   finished_at: null,
+  flags_pending: 0,
+  flags_committed: 0,
   ...over,
 });
 
@@ -85,5 +87,32 @@ describe("RunsTable", () => {
   it("shows an empty state", () => {
     renderTable([]);
     expect(screen.getByText(/no runs yet/i)).toBeInTheDocument();
+  });
+});
+
+describe("RunsTable flags column", () => {
+  it("shows pending and sent counts per run", () => {
+    renderTable([run({ id: 1, flags_pending: 2, flags_committed: 5 })]);
+    expect(screen.getByRole("columnheader", { name: "Flags" })).toBeInTheDocument();
+    expect(screen.getByText("2 pending · 5 sent")).toBeInTheDocument();
+  });
+
+  it("shows a dash for a run with no flags", () => {
+    renderTable([run({ id: 1, flags_pending: 0, flags_committed: 0 })]);
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("warns that pending flags are lost before a delete is confirmed", async () => {
+    const user = userEvent.setup();
+    renderTable([run({ id: 1, flags_pending: 3, flags_committed: 0 })]);
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.getByText("3 pending flags will be lost")).toBeInTheDocument();
+  });
+
+  it("does not warn when nothing is pending", async () => {
+    const user = userEvent.setup();
+    renderTable([run({ id: 1, flags_pending: 0, flags_committed: 4 })]);
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.queryByText(/will be lost/)).not.toBeInTheDocument();
   });
 });
