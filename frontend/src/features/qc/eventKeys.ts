@@ -31,3 +31,14 @@ export function eventDirectionFor(
   if (event.code === "BracketRight" || event.key === "]") return "next";
   return null;
 }
+
+/** F (false positive) and N (missed object), by physical key so any layout
+ * works (on a Russian layout the same keys give "а" and "т"). */
+export function flagKindFor(
+  event: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "metaKey" | "altKey">,
+): "fp" | "fn" | null {
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  if (event.code === "KeyF" || event.key === "f" || event.key === "F") return "fp";
+  if (event.code === "KeyN" || event.key === "n" || event.key === "N") return "fn";
+  return null;
+}

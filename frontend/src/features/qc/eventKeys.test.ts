@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { eventDirectionFor, isTypingTarget } from "./eventKeys";
+import { eventDirectionFor, flagKindFor, isTypingTarget } from "./eventKeys";
 
 const press = (key: string, code: string, mods: Partial<Record<"ctrlKey" | "metaKey" | "altKey", boolean>> = {}) => ({
   key,
@@ -72,5 +72,36 @@ describe("isTypingTarget", () => {
   it("is false for other elements and null", () => {
     expect(isTypingTarget(document.createElement("div"))).toBe(false);
     expect(isTypingTarget(null)).toBe(false);
+  });
+});
+
+describe("flagKindFor", () => {
+  const key = (init: Partial<KeyboardEvent>) =>
+    ({ key: "", code: "", ctrlKey: false, metaKey: false, altKey: false, ...init }) as KeyboardEvent;
+
+  it("maps F to a false positive and N to a missed object", () => {
+    expect(flagKindFor(key({ key: "f", code: "KeyF" }))).toBe("fp");
+    expect(flagKindFor(key({ key: "n", code: "KeyN" }))).toBe("fn");
+  });
+
+  it("accepts capital letters (Shift or Caps Lock)", () => {
+    expect(flagKindFor(key({ key: "F", code: "KeyF" }))).toBe("fp");
+    expect(flagKindFor(key({ key: "N", code: "KeyN" }))).toBe("fn");
+  });
+
+  it("works on a Russian layout, where the same physical keys give other letters", () => {
+    expect(flagKindFor(key({ key: "а", code: "KeyF" }))).toBe("fp");
+    expect(flagKindFor(key({ key: "т", code: "KeyN" }))).toBe("fn");
+  });
+
+  it("ignores the keys with Ctrl, Meta or Alt held", () => {
+    expect(flagKindFor(key({ key: "f", code: "KeyF", ctrlKey: true }))).toBeNull();
+    expect(flagKindFor(key({ key: "n", code: "KeyN", metaKey: true }))).toBeNull();
+    expect(flagKindFor(key({ key: "f", code: "KeyF", altKey: true }))).toBeNull();
+  });
+
+  it("ignores every other key", () => {
+    expect(flagKindFor(key({ key: "g", code: "KeyG" }))).toBeNull();
+    expect(flagKindFor(key({ key: "[", code: "BracketLeft" }))).toBeNull();
   });
 });
