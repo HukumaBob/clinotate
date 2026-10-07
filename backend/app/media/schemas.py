@@ -94,6 +94,7 @@ class SequenceRead(BaseModel):
     duration: int
     annotation_count: int
     crop_box: dict | None = None
+    origin_qc_run_id: int | None = None
 
 
 class SequenceStatsLabel(BaseModel):

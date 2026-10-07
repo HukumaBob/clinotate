@@ -643,6 +643,7 @@ def _sequence_read(sequence: Sequence, session: Session) -> SequenceRead:
         duration=sequence.duration,
         annotation_count=annotation_count,
         crop_box=sequence.crop_box,
+        origin_qc_run_id=sequence.origin_qc_run_id,
     )
 
 

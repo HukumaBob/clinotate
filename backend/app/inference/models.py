@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -44,6 +44,40 @@ class InferenceRun(Base):
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class QcFlagKind(str, enum.Enum):
+    """fp: nothing real in the frame (saved as a hard negative).
+    fn: a real object needs labelling (saved unannotated)."""
+
+    FP = "fp"
+    FN = "fn"
+
+
+class QcFlag(Base):
+    """A reviewer's mark on one processed frame of a run.
+
+    Pending until a commit turns it into a Frame (committed_at/frame_id).
+    Deleted with its run; the Sequence a commit created is not.
+    """
+
+    __tablename__ = "qc_flags"
+    __table_args__ = (UniqueConstraint("run_id", "frame_index", name="uq_qc_flags_run_frame"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("inference_runs.id", ondelete="CASCADE"))
+    kind: Mapped[QcFlagKind] = mapped_column(Enum(QcFlagKind))
+    frame_index: Mapped[int] = mapped_column(Integer)
+    timestamp_ms: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    frame_id: Mapped[int | None] = mapped_column(
+        ForeignKey("frames.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

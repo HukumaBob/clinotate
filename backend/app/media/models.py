@@ -36,6 +36,9 @@ class Sequence(Base):
     start_time: Mapped[int] = mapped_column(Integer, default=0)
     duration: Mapped[int] = mapped_column(Integer, default=0)
     crop_box: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # The QC run whose flagged frames this sequence was made from. A plain
+    # integer, not a foreign key: the origin must outlive deleting the run.
+    origin_qc_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

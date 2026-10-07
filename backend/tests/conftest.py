@@ -234,6 +234,18 @@ def committed_inference_rows():
     session.query(TrainingRun).filter(TrainingRun.id.in_(training_run_ids)).delete(
         synchronize_session=False
     )
+    from app.media.models import Frame, Sequence
+
+    sequence_ids = [
+        row[0] for row in session.query(Sequence.id).filter(Sequence.video_id.in_(video_ids)).all()
+    ]
+    if sequence_ids:
+        session.query(Frame).filter(Frame.sequence_id.in_(sequence_ids)).delete(
+            synchronize_session=False
+        )
+        session.query(Sequence).filter(Sequence.id.in_(sequence_ids)).delete(
+            synchronize_session=False
+        )
     session.query(Video).filter(Video.id.in_(video_ids)).delete(synchronize_session=False)
     session.query(Dataset).filter(Dataset.id == dataset_id).delete()
     session.query(User).filter(User.id == rows.user_id).delete()
