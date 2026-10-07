@@ -1455,6 +1455,24 @@ browser, a stride-30 coarse notice, playback CPU with hundreds of marks,
 whether DB `duration_seconds` equals the real stream duration, and at stride 1
 the flicker marks overlap into a band (clustering is a follow-up).
 
+### Phase 3: QC screen, sub-project 3 (flagging to training) — NOT STARTED (design approved 2026-10-07)
+
+Design: [docs/specs/2026-10-07-qc-flagging-design.md](docs/specs/2026-10-07-qc-flagging-design.md).
+Implementation plan: not written yet.
+
+Third slice of the QC module. A reviewer marks processed frames as `fp` (nothing
+real in the frame) or `fn` (a real object needs labelling); flags are saved on
+the server at once (table `qc_flags`). "Send to training" cuts the flagged
+frames in one pass over the video and creates an ordinary `Sequence` backed by
+the QC video (`origin_qc_run_id` records where it came from; FP frames are saved
+as `no_findings_reviewed` hard negatives; FN frames wait for labelling in the
+existing frame editor). No annotations are created automatically, because masks,
+not boxes, are the platform's ground truth and `BBOX` annotations are read by
+nothing. The contamination of the QC video is made visible (counts and a
+warning), not forbidden. Commit is synchronous like creating a sequence; its real
+time on a long video is to be measured during verification. Order of the module
+stays 1, 2, 3; sub-projects 4 and 5 are backlog.
+
 ---
 
 ## How to use this file
