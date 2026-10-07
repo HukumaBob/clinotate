@@ -82,6 +82,7 @@ export function FlagsPanel({
                       </button>
                     </div>
                     <input
+                      key={`${flag.id}:${flag.note ?? ""}`}
                       type="text"
                       aria-label={`Note for flag at ${time}`}
                       placeholder="Note (optional)"

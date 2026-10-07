@@ -34,7 +34,7 @@ export function FlagButtons({ disabled, onFlag, snapNote, error }: FlagButtonsPr
         >
           Missed object (N)
         </button>
-        {snapNote && <span className="text-xs text-gray-400">{snapNote}</span>}
+        {snapNote && <span role="status" className="text-xs text-gray-400">{snapNote}</span>}
       </div>
       {error && (
         <p role="alert" className="text-xs text-red-400">

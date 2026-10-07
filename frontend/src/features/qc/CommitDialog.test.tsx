@@ -69,4 +69,31 @@ describe("CommitDialog", () => {
     setup({ fpCount: 0 });
     expect(screen.queryByText(/false positive/i)).not.toBeInTheDocument();
   });
+
+  it("omits the missed-objects line when there are none", () => {
+    setup({ fnCount: 0 });
+    expect(screen.queryByText(/missed object/i)).not.toBeInTheDocument();
+  });
+
+  it("agrees in number for a single false positive", () => {
+    setup({ fpCount: 1 });
+    expect(screen.getByRole("dialog")).toHaveTextContent("1 false positive will be saved as a negative");
+  });
+
+  it("does not steal focus when the parent re-renders with a new onCancel", () => {
+    const base = {
+      fpCount: 1,
+      fnCount: 1,
+      defaultName: "n",
+      error: null,
+      onConfirm: vi.fn(),
+    };
+    const { rerender } = render(
+      <CommitDialog {...base} submitting={false} onCancel={() => {}} />,
+    );
+    expect(screen.getByLabelText("Sequence name")).toHaveFocus();
+    screen.getByRole("button", { name: "Cancel" }).focus();
+    rerender(<CommitDialog {...base} submitting={true} onCancel={() => {}} />);
+    expect(screen.getByLabelText("Sequence name")).not.toHaveFocus();
+  });
 });

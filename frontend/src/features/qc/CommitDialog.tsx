@@ -26,6 +26,9 @@ export function CommitDialog({
 
   useEffect(() => {
     nameRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onCancel();
     }
@@ -60,7 +63,7 @@ export function CommitDialog({
 
         <ul className="mb-3 list-disc pl-5 text-gray-300">
           {fpCount > 0 && (
-            <li>{plural(fpCount, "false positive", "false positives")} will be saved as negatives</li>
+            <li>{plural(fpCount, "false positive", "false positives")} will be saved as {fpCount === 1 ? "a negative" : "negatives"}</li>
           )}
           {fnCount > 0 && (
             <li>{plural(fnCount, "missed object", "missed objects")} will wait for annotation</li>

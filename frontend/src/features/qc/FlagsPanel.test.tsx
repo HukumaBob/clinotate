@@ -129,9 +129,40 @@ describe("FlagsPanel", () => {
 
   it("shows a retry when the flags could not be loaded", async () => {
     const user = userEvent.setup();
-    const props = setup([], { loadFailed: true });
+    const props = setup([flag({ id: 1 }), flag({ id: 2, committed_at: "2026-10-07T10:00:00Z", sequence_id: 4 })], {
+      loadFailed: true,
+    });
     expect(screen.getByText(/could not load the flags/i)).toBeInTheDocument();
+    expect(screen.queryByText(/pending/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sent/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /to training/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(props.onRetry).toHaveBeenCalled();
+  });
+
+  it("shows a note that changed on the server and does not erase it on a plain blur", async () => {
+    const user = userEvent.setup();
+    const onNoteChange = vi.fn();
+    const element = (f: QcFlag) => (
+      <MemoryRouter>
+        <FlagsPanel
+          flags={[f]}
+          loadFailed={false}
+          onRetry={vi.fn()}
+          onSeek={vi.fn()}
+          onRemove={vi.fn()}
+          onNoteChange={onNoteChange}
+          onSend={vi.fn()}
+          lastSequence={null}
+        />
+      </MemoryRouter>
+    );
+    const { rerender } = render(element(flag({ id: 1, note: null })));
+    rerender(element(flag({ id: 1, note: "from elsewhere" })));
+    const field = screen.getByLabelText("Note for flag at 3:22");
+    expect(field).toHaveValue("from elsewhere");
+    await user.click(field);
+    await user.tab();
+    expect(onNoteChange).not.toHaveBeenCalled();
   });
 });
