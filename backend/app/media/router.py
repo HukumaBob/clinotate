@@ -708,6 +708,11 @@ def update_sequence(
         session.commit()
         return _sequence_read(sequence, session)
 
+    if sequence.origin_qc_run_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This sequence was made from QC flags; re-cutting it would replace the flagged frames",
+        )
     if sequence.video_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

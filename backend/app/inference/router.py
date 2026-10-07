@@ -80,7 +80,8 @@ def put_flag(
             frame_index=body.frame_index,
             timestamp_ms=body.timestamp_ms,
             kind=body.kind,
-            note=body.note,
+            # Omitted note keeps the stored one; an explicit null/"" clears it.
+            note=body.note if "note" in body.model_fields_set else service.KEEP_NOTE,
             user=current_user,
         )
     except service.InferenceRunNotFound as exc:

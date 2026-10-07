@@ -207,6 +207,13 @@ def _require_flaggable_run(session: Session, run_id: int) -> InferenceRun:
     return run
 
 
+class _KeepNote:
+    """Sentinel: leave the stored note as it is."""
+
+
+KEEP_NOTE = _KeepNote()
+
+
 def put_flag(
     session: Session,
     run_id: int,
@@ -214,10 +221,13 @@ def put_flag(
     frame_index: int,
     timestamp_ms: int,
     kind: QcFlagKind,
-    note: str | None,
+    note: str | None | _KeepNote = KEEP_NOTE,
     user: User,
 ) -> QcFlag:
     """Create the flag for this frame, or change a pending one.
+
+    A partial update: an omitted note keeps the stored one; an explicit
+    None or empty string clears it.
 
     The frame must be one the model processed: a "missed object" on a frame
     it never saw would be a false statistic. The check uses the stride, so
@@ -245,7 +255,7 @@ def put_flag(
             frame_index=frame_index,
             timestamp_ms=timestamp_ms,
             kind=kind,
-            note=note,
+            note=None if isinstance(note, _KeepNote) else note,
             created_by_id=user.id,
         )
         session.add(flag)
@@ -263,7 +273,8 @@ def put_flag(
     if flag.committed_at is not None:
         raise FlagAlreadyCommitted(f"Frame {frame_index} was already sent to training")
     flag.kind = kind
-    flag.note = note
+    if not isinstance(note, _KeepNote):
+        flag.note = note
     flag.timestamp_ms = timestamp_ms
     session.commit()
     session.refresh(flag)
@@ -284,7 +295,8 @@ def list_flags(session: Session, run_id: int) -> list[tuple[QcFlag, int | None]]
 
 def delete_flag(session: Session, run_id: int, flag_id: int) -> None:
     get_run(session, run_id)
-    flag = session.get(QcFlag, flag_id)
+    # Locked like put_flag and commit_flags, so a DELETE cannot race a commit.
+    flag = session.scalars(select(QcFlag).where(QcFlag.id == flag_id).with_for_update()).first()
     if flag is None or flag.run_id != run_id:
         raise FlagNotFound(f"Flag {flag_id} not found on run {run_id}")
     if flag.committed_at is not None:
@@ -382,25 +394,31 @@ def commit_flags(
     except ValueError as exc:
         session.rollback()
         raise VideoUnreadable(str(exc)) from exc
+    if [index for index, *_ in extracted] != [flag.frame_index for flag in flags]:
+        session.rollback()
+        raise RuntimeError(
+            "Extracted frames do not match the flagged frame numbers; nothing was changed"
+        )
 
     now = datetime.now(timezone.utc)
     first_ms = min(flag.timestamp_ms for flag in flags)
     last_ms = max(flag.timestamp_ms for flag in flags)
+    start_time = first_ms // 1000
     uploaded: list[str] = []
     try:
         sequence = Sequence(
             video_id=video.id,
             procedure_id=video.procedure_id,
             name=name or _default_sequence_name(video, run),
-            start_time=first_ms // 1000,
-            duration=math.ceil((last_ms - first_ms) / 1000),
+            start_time=start_time,
+            duration=max(1, math.ceil(last_ms / 1000) - start_time),
             origin_qc_run_id=run.id,
         )
         session.add(sequence)
         session.flush()
 
         created: list[tuple[QcFlag, Frame]] = []
-        for position, (flag, (_, png, width, height)) in enumerate(zip(flags, extracted)):
+        for position, (flag, (_, png, width, height)) in enumerate(zip(flags, extracted, strict=True)):
             key = f"frames/{sequence.id}/{position}.png"
             storage.upload(key, png, content_type="image/png")
             uploaded.append(key)
@@ -424,12 +442,15 @@ def commit_flags(
             flag.frame_id = frame.id
         session.commit()
     except Exception:
-        session.rollback()
-        for key in uploaded:
-            try:
-                storage.delete(key)
-            except Exception:  # noqa: BLE001 -- best effort; the DB is already rolled back
-                logger.warning("commit_flags: could not remove %s", key)
+        try:
+            session.rollback()
+        finally:
+            # Runs even if the rollback itself fails.
+            for key in uploaded:
+                try:
+                    storage.delete(key)
+                except Exception:  # noqa: BLE001 -- best effort
+                    logger.warning("commit_flags: could not remove %s", key)
         raise
     session.refresh(sequence)
     return sequence

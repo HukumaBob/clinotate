@@ -530,3 +530,173 @@ def test_put_flag_falls_back_to_a_change_when_a_concurrent_insert_wins(
     listed = client.get(f"/inference/runs/{run_id}/flags", headers=headers).json()
     assert [(f["frame_index"], f["kind"]) for f in listed] == [(5, "fn")]
 
+
+
+# --- final fix wave ---------------------------------------------------------
+
+
+def test_put_without_a_note_keeps_the_stored_note(committed_inference_rows):
+    headers = _register_and_login("flag-partial@example.com")
+    run_id = _make_run(committed_inference_rows)
+    _put(headers, run_id, frame_index=5, kind="fp", note="keep me")
+
+    changed = _put(headers, run_id, frame_index=5, kind="fn")  # no "note" key at all
+
+    assert changed.json()["kind"] == "fn"
+    assert changed.json()["note"] == "keep me"
+
+
+def test_put_with_an_explicit_null_or_empty_note_clears_it(committed_inference_rows):
+    headers = _register_and_login("flag-clearnote@example.com")
+    run_id = _make_run(committed_inference_rows)
+    _put(headers, run_id, frame_index=5, note="first")
+
+    base = {"frame_index": 5, "timestamp_ms": 500, "kind": "fp"}
+    cleared = client.put(f"/inference/runs/{run_id}/flags", headers=headers, json={**base, "note": None})
+    assert cleared.json()["note"] is None
+
+    _put(headers, run_id, frame_index=5, note="again")
+    emptied = client.put(f"/inference/runs/{run_id}/flags", headers=headers, json={**base, "note": ""})
+    assert emptied.json()["note"] in ("", None)
+
+
+def test_deleting_a_flag_reads_it_with_a_row_lock(committed_inference_rows):
+    from sqlalchemy import event
+
+    headers = _register_and_login("flag-deletelock@example.com")
+    run_id = _make_run(committed_inference_rows)
+    flag_id = _put(headers, run_id).json()["id"]
+    statements: list[str] = []
+
+    def capture(conn, cursor, statement, *args):
+        statements.append(statement)
+
+    event.listen(db_module.engine, "before_cursor_execute", capture)
+    try:
+        assert client.delete(f"/inference/runs/{run_id}/flags/{flag_id}", headers=headers).status_code == 204
+    finally:
+        event.remove(db_module.engine, "before_cursor_execute", capture)
+
+    assert any("FROM qc_flags" in s and "FOR UPDATE" in s for s in statements)
+
+
+def test_a_qc_sequence_cannot_be_recut_but_can_be_renamed(committed_inference_rows, fake_storage):
+    headers = _register_and_login("qc-recut@example.com")
+    run_id = _make_run(committed_inference_rows)
+    _flag_three(headers, run_id)
+    sequence_id = _commit(headers, run_id).json()["id"]
+
+    recut = client.patch(
+        f"/media/sequences/{sequence_id}",
+        headers=headers,
+        json={"start_time": 0, "duration": 2, "fps": 1.0},
+    )
+    renamed = client.patch(f"/media/sequences/{sequence_id}", headers=headers, json={"name": "renamed"})
+
+    assert recut.status_code == 409
+    assert "QC flags" in recut.json()["detail"]
+    assert renamed.status_code == 200
+    assert renamed.json()["name"] == "renamed"
+    session = db_module.SessionLocal()
+    try:
+        assert session.query(Frame).filter_by(sequence_id=sequence_id).count() == 3
+    finally:
+        session.close()
+
+
+def test_the_commit_window_covers_the_last_flag(committed_inference_rows, fake_storage):
+    headers = _register_and_login("commit-window@example.com")
+    run_id = _make_run(committed_inference_rows)
+    _put(headers, run_id, frame_index=15)  # 1500 ms
+    _put(headers, run_id, frame_index=25)  # 2500 ms
+
+    sequence_id = _commit(headers, run_id).json()["id"]
+
+    session = db_module.SessionLocal()
+    try:
+        row = session.get(Sequence, sequence_id)
+        assert (row.start_time, row.duration) == (1, 2)  # 1 s .. 3 s covers 2.5 s
+    finally:
+        session.close()
+
+
+def test_a_single_flag_gets_a_duration_of_at_least_one_second(committed_inference_rows, fake_storage):
+    headers = _register_and_login("commit-single@example.com")
+    run_id = _make_run(committed_inference_rows)
+    _put(headers, run_id, frame_index=5)
+
+    sequence_id = _commit(headers, run_id).json()["id"]
+
+    session = db_module.SessionLocal()
+    try:
+        assert session.get(Sequence, sequence_id).duration == 1
+    finally:
+        session.close()
+
+
+def test_a_mismatched_extraction_is_refused_loudly_and_changes_nothing(
+    committed_inference_rows, fake_storage, monkeypatch
+):
+    import app.inference.service as service
+
+    headers = _register_and_login("commit-mismatch@example.com")
+    rows = committed_inference_rows
+    run_id = _make_run(rows)
+    _flag_three(headers, run_id)
+    real = service.extract_frames_at
+
+    def shifted(video_bytes, indices):
+        return [(index + 1, png, w, h) for index, png, w, h in real(video_bytes, indices)]
+
+    monkeypatch.setattr(service, "extract_frames_at", shifted)
+    failing_client = TestClient(app, raise_server_exceptions=False)
+    response = failing_client.post(f"/inference/runs/{run_id}/commit", headers=headers, json={})
+
+    assert response.status_code == 500
+    session = db_module.SessionLocal()
+    try:
+        assert session.query(Sequence).filter_by(video_id=rows.video_id).count() == 0
+        assert all(f.committed_at is None for f in session.query(QcFlag).filter_by(run_id=run_id))
+    finally:
+        session.close()
+
+
+def test_uploaded_objects_are_removed_even_if_the_rollback_fails(committed_inference_rows, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    headers = _register_and_login("commit-rollbackfail@example.com")
+    storage = FakeStorage({"videos/inference-playable.mp4": make_video()}, fail_on_upload=2)
+    app.dependency_overrides[get_storage_service] = lambda: storage
+    failing_client = TestClient(app, raise_server_exceptions=False)
+    try:
+        run_id = _make_run(committed_inference_rows)
+        _flag_three(headers, run_id)
+        objects_before = dict(storage.objects)
+
+        def broken_rollback(self):
+            raise RuntimeError("rollback failed")
+
+        monkeypatch.setattr(Session, "rollback", broken_rollback)
+        response = failing_client.post(f"/inference/runs/{run_id}/commit", headers=headers, json={})
+        monkeypatch.undo()
+
+        assert response.status_code == 500
+        assert storage.objects == objects_before
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+
+
+def test_a_decoder_error_is_a_422_not_a_500(committed_inference_rows, fake_storage, monkeypatch):
+    import app.media.service as media_service
+
+    headers = _register_and_login("commit-decoderr@example.com")
+    run_id = _make_run(committed_inference_rows)
+    _put(headers, run_id, frame_index=5)
+
+    def boom(*args, **kwargs):
+        raise cv2.error("decoder exploded")
+
+    monkeypatch.setattr(media_service.cv2, "imencode", boom)
+    response = _commit(headers, run_id)
+
+    assert response.status_code == 422

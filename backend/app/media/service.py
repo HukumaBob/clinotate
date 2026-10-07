@@ -212,6 +212,9 @@ def extract_frames_at(
                     results.append((index, buffer.tobytes(), width, height))
                     position += 1
                 index += 1
+        except cv2.error as exc:
+            # A decoder failure is an unreadable video, not a server bug.
+            raise ValueError(f"Could not decode the video: {exc}") from exc
         finally:
             capture.release()
 

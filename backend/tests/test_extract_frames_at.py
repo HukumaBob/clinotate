@@ -52,3 +52,14 @@ def test_an_empty_request_returns_nothing():
 def test_bytes_that_are_not_a_video_raise_value_error():
     with pytest.raises(ValueError, match="video"):
         extract_frames_at(b"this is not a video", [0])
+
+
+def test_a_decoder_error_becomes_a_value_error(monkeypatch):
+    import app.media.service as media_service
+
+    def boom(*args, **kwargs):
+        raise cv2.error("decoder exploded")
+
+    monkeypatch.setattr(media_service.cv2, "imencode", boom)
+    with pytest.raises(ValueError):
+        extract_frames_at(make_video(), [3])
