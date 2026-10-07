@@ -1,6 +1,7 @@
 # QC screen, sub-project 3: flagging errors and sending frames to training
 
-Date: 2026-10-07. Status: design approved, implementation plan not yet written.
+Date: 2026-10-07. Status: implemented and verified in a real browser on 2026-10-07
+(see [Implementation status](#implementation-status) at the end).
 
 Extends [the inference-runs design](2026-10-06-qc-inference-runs-design.md)
 (sub-project 1) and [the inspection design](2026-10-06-qc-inspection-design.md)
@@ -245,10 +246,80 @@ A/B comparison and stress tests (sub-project 4).
 
 ## Open items for the implementation plan
 
-- The time budget of Commit, to be set after measuring it on a long video.
+- The time budget of Commit: closed, measured at 16.3 s on the longest video (see below).
 - Which existing dialog in `features/datasets` is the right model.
 - Whether `F` on a focused `<video>` is intercepted by the browser's own
   shortcuts.
 - If the video was transcoded after the run, frame numbers refer to the file
   as it is now; whether that can shift frames (transcoding keeps the frame
   count and rate in practice) is checked in verification.
+
+## Implementation status
+
+Implemented on `master` (plan: [../plans/2026-10-07-qc-flagging.md](../plans/2026-10-07-qc-flagging.md))
+and verified in a real browser on 2026-10-07.
+
+**Commit time, measured.** On the longest video (5088 s, about 127k frames)
+with two flags near the end, Commit took 16.3 s: one sequential decode pass
+(`grab()` counting, no seeking) plus two PNG uploads. The decode pass
+dominates; the cost is the position of the last flag, not the number of flags.
+The time-budget open item is closed: synchronous Commit is acceptable for a
+single user; the background-job path stays the escape hatch.
+
+### Deviations from the design (final fix wave)
+
+- `PATCH /media/sequences/{id}` answers 409 ("This sequence was made from QC
+  flags; re-cutting it would replace the flagged frames") when it would re-cut
+  a sequence with `origin_qc_run_id`. Renaming and changing the procedure stay
+  allowed.
+- `delete_flag` reads the flag `FOR UPDATE`, like `put_flag` and the commit, so
+  a DELETE cannot race a Commit.
+- Commit window: `start_time = first_ms // 1000`, `duration = max(1,
+  ceil(last_ms / 1000) - start_time)`, so the window always covers the last
+  flag and a single flag does not give duration 0. Extracted frames are paired
+  with flags by `zip(strict=True)` and each extracted index is checked against
+  its flag's frame number (a mismatch is a loud 500 with nothing changed).
+  Uploaded-object cleanup runs even if the rollback itself fails. An OpenCV
+  decoder error inside `extract_frames_at` is raised as `ValueError`, so the
+  endpoint answers 422 instead of 500.
+- `PUT .../flags` is a partial update: an omitted `note` keeps the stored note;
+  an explicit `null` or `""` clears it. The UI no longer resends a cached note
+  on a kind change, which removes a race that could erase a just-saved note.
+- The Media screen's sequence timeline and `SequenceForm`'s crop inheritance
+  ignore sequences with `origin_qc_run_id` (a QC sequence spans first to last
+  flag and would otherwise cover regular sequences, block new marks, and
+  replace the inherited crop with `null`).
+- A commit 409 ("no pending flags", sent from another tab) now also refreshes
+  the flag list; the commit dialog returns focus to its opener on close, and
+  Escape/Cancel are ignored while the commit is submitting.
+- The default sequence name uses the local date, not the UTC date. The
+  storage-failure message reads "Could not create the sequence, nothing was
+  changed".
+
+### Verification
+
+- Backend: flag API, model and `extract_frames_at` suites in an isolated test
+  database, including the fix-wave cases above.
+- Frontend: full `vitest run` and `tsc --noEmit`.
+- Real browser against the real stack: flagging with `F`/`N`, panel, Commit on
+  the longest video, resulting sequence on the Sequences screen, the history
+  column and the delete warning.
+
+### Not verified / known limitations
+
+- hiDPI displays.
+- Snap exactness at 29.97 fps (review M7): the worker stores
+  `timestamp_ms` truncated to whole milliseconds, so seeking to exactly
+  `timestamp_ms / 1000` may show the previous video frame. The overlay and the
+  saved frame are still correct; seeking to `(timestampMs + 1) / 1000` is the
+  cheap guard if it matters.
+- Where QC sequences belong on the Media screen's timeline: they are hidden
+  there for now. That is a UI decision for the UI/UX spec, not an ad hoc lane.
+- SAM2 Track on a QC sequence is meaningless: its frames are seconds or
+  minutes apart, not consecutive.
+- Pre-existing, not introduced here: deleting a Sequence does not delete its
+  MinIO frame objects.
+- Deferred minors (note save racing "Remove" can resurrect a flag; a
+  hand-crafted frame index past the end blocks every commit until removed;
+  the run does not record the video checksum; QC frames are uncropped while
+  other sequences of the same video may carry a `crop_box`).

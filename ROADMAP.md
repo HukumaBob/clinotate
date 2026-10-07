@@ -1455,10 +1455,10 @@ browser, a stride-30 coarse notice, playback CPU with hundreds of marks,
 whether DB `duration_seconds` equals the real stream duration, and at stride 1
 the flicker marks overlap into a band (clustering is a follow-up).
 
-### Phase 3: QC screen, sub-project 3 (flagging to training) — NOT STARTED (design approved 2026-10-07)
+### Phase 3: QC screen, sub-project 3 (flagging to training) — DONE (2026-10-07, browser-verified)
 
 Design: [docs/specs/2026-10-07-qc-flagging-design.md](docs/specs/2026-10-07-qc-flagging-design.md).
-Implementation plan: not written yet.
+Plan: [docs/plans/2026-10-07-qc-flagging.md](docs/plans/2026-10-07-qc-flagging.md).
 
 Third slice of the QC module. A reviewer marks processed frames as `fp` (nothing
 real in the frame) or `fn` (a real object needs labelling); flags are saved on
@@ -1467,11 +1467,33 @@ frames in one pass over the video and creates an ordinary `Sequence` backed by
 the QC video (`origin_qc_run_id` records where it came from; FP frames are saved
 as `no_findings_reviewed` hard negatives; FN frames wait for labelling in the
 existing frame editor). No annotations are created automatically, because masks,
-not boxes, are the platform's ground truth and `BBOX` annotations are read by
-nothing. The contamination of the QC video is made visible (counts and a
-warning), not forbidden. Commit is synchronous like creating a sequence; its real
-time on a long video is to be measured during verification. Order of the module
-stays 1, 2, 3; sub-projects 4 and 5 are backlog.
+not boxes, are the platform's ground truth. The contamination of the QC video is
+made visible (counts and a warning), not forbidden. Order of the module stays
+1, 2, 3; sub-projects 4 and 5 are backlog.
+
+**Measured:** Commit took 16.3 s on the longest video (5088 s, 127k frames, two
+flags near the end, a single sequential decode pass), so the time-budget open
+item is closed; synchronous Commit stays.
+
+**Final fix wave (review-driven):** 409 on re-cutting a QC sequence;
+`delete_flag` row lock; Commit window `start_time = first_ms // 1000`,
+`duration = max(1, ceil(last_ms / 1000) - start_time)`, `zip(strict=True)` with
+a frame-number check, cleanup that survives a failed rollback, decoder errors
+as 422; `PUT` flag is a partial update (omitted note keeps the stored one);
+QC sequences are hidden from the Media timeline and from crop inheritance; a
+commit 409 refreshes the list; dialog focus restore and busy guard; local-date
+default name; English-only comment in `eventKeys.ts`. Details in the design
+doc's "Implementation status".
+
+**Still open / not verified:** hiDPI; snap exactness at 29.97 fps (worker
+timestamps truncated to whole ms, so the snap may show the previous frame;
+overlay and saved frame are correct); where QC sequences belong on the Media
+screen's timeline (hidden for now; belongs in the UI/UX spec); SAM2 Track on a
+QC sequence is meaningless (frames are not consecutive); a note save racing
+"Remove" can resurrect a flag; the run does not record the video checksum; QC
+frames are uncropped while other sequences of the video may be cropped, so
+datasets can mix both. Pre-existing: deleting a Sequence does not delete its
+MinIO frame objects.
 
 ---
 
