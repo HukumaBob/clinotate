@@ -70,6 +70,10 @@ def _cleanup(session, dataset_id: int) -> None:
     every later test run against this shared dev database.
     """
     session.rollback()
+    session.query(TrainingRun).filter(TrainingRun.dataset_id == dataset_id).update(
+        {TrainingRun.base_model_version_id: None}, synchronize_session=False
+    )
+    session.commit()
     run_ids = [
         row[0]
         for row in session.query(TrainingRun.id).filter(TrainingRun.dataset_id == dataset_id).all()
@@ -550,3 +554,205 @@ def test_an_out_of_range_artifact_index_is_404():
         cleanup_session = _session()
         _cleanup(cleanup_session, dataset_id)
         cleanup_session.close()
+
+
+def _user_id(session, email: str) -> int:
+    from app.auth.models import User
+
+    return session.query(User).filter(User.email == email).one().id
+
+
+def _make_parent_version(session, dataset: Dataset, user_id: int, name: str, task_type=TaskType.DETECTION):
+    run = TrainingRun(
+        dataset_id=dataset.id,
+        adapter="ultralytics_yolo",
+        base_model="yolo11n.pt",
+        task_type=task_type,
+        config={},
+        status=TrainingRunStatus.SUCCEEDED,
+        total_epochs=1,
+        created_by_id=user_id,
+    )
+    session.add(run)
+    session.commit()
+    version = ModelVersion(
+        training_run_id=run.id,
+        name=name,
+        task_type=task_type,
+        storage_key=f"models/{run.id}/best.pt",
+        metrics={"metrics/mAP50(B)": 0.61},
+    )
+    session.add(version)
+    session.commit()
+    session.refresh(version)
+    return version
+
+
+def _stub_send_task(monkeypatch):
+    sent = []
+    monkeypatch.setattr(service.celery_app, "send_task", lambda *a, **k: sent.append(a))
+    return sent
+
+
+def test_base_models_lists_five_pretrained_for_the_datasets_task_type():
+    email = "train-bm1@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    dataset = _make_dataset(session, _user_id(session, email))
+    try:
+        response = client.get(f"/training/base-models?dataset_id={dataset.id}", headers=headers)
+
+        assert response.status_code == 200
+        pretrained = [o for o in response.json() if o["kind"] == "pretrained"]
+        assert [o["weights"] for o in pretrained] == [
+            f"yolo11{s}.pt" for s in ("n", "s", "m", "l", "x")
+        ]
+        assert [o["note"] for o in pretrained][3:] == ["may not fit in 8 GB"] * 2
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_base_models_adds_only_versions_of_the_same_task_type():
+    email = "train-bm2@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    other = _make_dataset(session, user_id)
+    try:
+        mine = _make_parent_version(session, dataset, user_id, "det-v1", TaskType.DETECTION)
+        _make_parent_version(session, other, user_id, "seg-v1", TaskType.SEGMENTATION)
+
+        response = client.get(f"/training/base-models?dataset_id={dataset.id}", headers=headers)
+
+        versions = [o for o in response.json() if o["kind"] == "model_version"]
+        assert [(v["model_version_id"], v["label"]) for v in versions] == [(mine.id, "det-v1")]
+        assert versions[0]["weights"] is None
+        assert "mAP50 0.610" in versions[0]["note"]
+    finally:
+        _cleanup(session, dataset.id)
+        _cleanup(session, other.id)
+        session.close()
+
+
+def test_base_models_unknown_dataset_is_404():
+    headers = _register_and_login("train-bm3@example.com")
+
+    assert client.get("/training/base-models?dataset_id=99999999", headers=headers).status_code == 404
+
+
+def _create(headers, dataset_id, **overrides):
+    body = {"dataset_id": dataset_id, "epochs": 1, "batch": 2, **overrides}
+    return client.post("/training/runs", json=body, headers=headers)
+
+
+def test_create_run_requires_exactly_one_base(monkeypatch):
+    email = "train-bm4@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    _stub_send_task(monkeypatch)
+    try:
+        neither = _create(headers, dataset.id)
+        both = _create(headers, dataset.id, base_model="yolo11n.pt", base_model_version_id=1)
+
+        assert neither.status_code == 422
+        assert both.status_code == 422
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_create_run_rejects_a_name_not_in_the_catalog(monkeypatch):
+    email = "train-bm5@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    _stub_send_task(monkeypatch)
+    try:
+        response = _create(headers, dataset.id, base_model="yolo11n-cls.pt")  # wrong task
+
+        assert response.status_code == 422
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_create_run_normalises_the_legacy_name_for_segmentation(monkeypatch):
+    email = "train-bm6@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    dataset.task_type = TaskType.SEGMENTATION
+    session.commit()
+    _succeeded_export(session, dataset.id, user_id)
+    _stub_send_task(monkeypatch)
+    try:
+        response = _create(headers, dataset.id, base_model="yolo11s.pt")
+
+        assert response.status_code == 202
+        assert response.json()["base_model"] == "yolo11s-seg.pt"
+        assert response.json()["base_model_version_id"] is None
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_create_run_from_a_version_records_the_parent(monkeypatch):
+    email = "train-bm7@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    parent = _make_parent_version(session, dataset, user_id, "det-parent")
+    _stub_send_task(monkeypatch)
+    try:
+        response = _create(headers, dataset.id, base_model_version_id=parent.id)
+
+        assert response.status_code == 202
+        assert response.json()["base_model_version_id"] == parent.id
+        assert response.json()["base_model"] == "det-parent"
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_create_run_rejects_a_version_of_another_task_type(monkeypatch):
+    email = "train-bm8@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    seg_parent = _make_parent_version(session, dataset, user_id, "seg-parent", TaskType.SEGMENTATION)
+    _stub_send_task(monkeypatch)
+    try:
+        response = _create(headers, dataset.id, base_model_version_id=seg_parent.id)
+
+        assert response.status_code == 422
+        assert "segmentation" in response.json()["detail"].lower()
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_create_run_rejects_an_unknown_version(monkeypatch):
+    email = "train-bm9@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    _stub_send_task(monkeypatch)
+    try:
+        assert _create(headers, dataset.id, base_model_version_id=99999999).status_code == 422
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()

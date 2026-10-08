@@ -11,7 +11,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.datasets.models import TaskType
 from app.db import Base
@@ -44,6 +44,13 @@ class TrainingRun(Base):
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
     adapter: Mapped[str] = mapped_column(String(100))
     base_model: Mapped[str] = mapped_column(String(200))
+    # Set when the run starts from an earlier ModelVersion (fine-tuning);
+    # base_model then holds that version's name as a readable label. No
+    # ondelete cascade on purpose: deleting a parent that a run was trained
+    # from is refused by the service (409), so lineage never dangles.
+    base_model_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("model_versions.id"), nullable=True
+    )
     task_type: Mapped[TaskType] = mapped_column(Enum(TaskType))
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[TrainingRunStatus] = mapped_column(
@@ -93,3 +100,15 @@ class ModelVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    training_run: Mapped["TrainingRun"] = relationship(
+        foreign_keys=[training_run_id], lazy="joined"
+    )
+
+    @property
+    def base_model(self) -> str:
+        return self.training_run.base_model
+
+    @property
+    def base_model_version_id(self) -> int | None:
+        return self.training_run.base_model_version_id

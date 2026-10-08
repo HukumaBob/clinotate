@@ -14,14 +14,15 @@ from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.celery_app import celery_app
-from app.datasets.models import Dataset
+from app.datasets.models import Dataset, TaskType
 from app.jobs.models import Job, JobStatus, JobType
 from app.storage import StorageService
+from app.training import catalog
 from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 
 logger = logging.getLogger(__name__)
 
-ADAPTER_NAME = "ultralytics_yolo"
+ADAPTER_NAME = catalog.ADAPTER_NAME
 
 ACTIVE_STATUSES = (TrainingRunStatus.PENDING, TrainingRunStatus.RUNNING)
 
@@ -32,6 +33,14 @@ class DatasetNotExported(Exception):
 
 class RunAlreadyActive(Exception):
     """Another run is pending or running; ml-worker handles one at a time."""
+
+
+class DatasetNotFound(Exception):
+    """No such dataset."""
+
+
+class InvalidBaseModel(Exception):
+    """The requested starting point is not usable for this dataset."""
 
 
 class RunNotStoppable(Exception):
@@ -71,11 +80,65 @@ def find_export_job(session: Session, dataset_id: int) -> Job | None:
     return None
 
 
+def _headline(task_type: TaskType, metrics: dict) -> str | None:
+    if task_type == TaskType.CLASSIFICATION:
+        value, label = metrics.get("metrics/accuracy_top1"), "top-1"
+    else:
+        value, label = metrics.get("metrics/mAP50(B)"), "mAP50"
+    return f"{label} {value:.3f}" if isinstance(value, (int, float)) else None
+
+
+def list_base_models(session: Session, dataset_id: int) -> list[dict]:
+    dataset = session.get(Dataset, dataset_id)
+    if dataset is None:
+        raise DatasetNotFound(f"Dataset {dataset_id} not found")
+
+    options = [
+        {
+            "kind": "pretrained",
+            "weights": model.weights,
+            "label": model.weights,
+            "family": model.family,
+            "size": model.size,
+            "note": model.note,
+            "model_version_id": None,
+        }
+        for model in catalog.pretrained_models(ADAPTER_NAME, dataset.task_type)
+    ]
+    versions = session.scalars(
+        select(ModelVersion)
+        .join(TrainingRun, ModelVersion.training_run_id == TrainingRun.id)
+        .where(
+            ModelVersion.task_type == dataset.task_type,
+            TrainingRun.adapter == ADAPTER_NAME,
+        )
+        .order_by(ModelVersion.id.desc())
+    )
+    for version in versions:
+        parts = [
+            _headline(version.task_type, version.metrics or {}),
+            version.created_at.date().isoformat(),
+        ]
+        options.append(
+            {
+                "kind": "model_version",
+                "weights": None,
+                "label": version.name,
+                "family": None,
+                "size": None,
+                "note": " · ".join(p for p in parts if p),
+                "model_version_id": version.id,
+            }
+        )
+    return options
+
+
 def create_training_run(
     session: Session,
     *,
     dataset_id: int,
-    base_model: str,
+    base_model: str | None,
+    base_model_version_id: int | None,
     config: dict,
     created_by: User,
 ) -> TrainingRun:
@@ -97,10 +160,33 @@ def create_training_run(
         # explains itself where a silent "pending" does not.
         raise RunAlreadyActive(f"Training run {active.id} is still active")
 
+    parent_id = None
+    if base_model_version_id is not None:
+        parent = session.get(ModelVersion, base_model_version_id)
+        if parent is None:
+            raise InvalidBaseModel(f"Model version {base_model_version_id} not found")
+        parent_run = session.get(TrainingRun, parent.training_run_id)
+        if parent.task_type != dataset.task_type:
+            raise InvalidBaseModel(
+                f"Model version {parent.id} is a {parent.task_type.value} model; "
+                f"this dataset is {dataset.task_type.value}"
+            )
+        if parent_run is None or parent_run.adapter != ADAPTER_NAME:
+            raise InvalidBaseModel(f"Model version {parent.id} was not trained by {ADAPTER_NAME}")
+        parent_id = parent.id
+        resolved_base = parent.name
+    else:
+        resolved_base = catalog.resolve_pretrained(ADAPTER_NAME, dataset.task_type, base_model)
+        if resolved_base is None:
+            raise InvalidBaseModel(
+                f"{base_model!r} is not a {dataset.task_type.value} base model for {ADAPTER_NAME}"
+            )
+
     run = TrainingRun(
         dataset_id=dataset_id,
         adapter=ADAPTER_NAME,
-        base_model=base_model,
+        base_model=resolved_base,
+        base_model_version_id=parent_id,
         task_type=dataset.task_type,
         config=config,
         total_epochs=int(config.get("epochs", 1)),

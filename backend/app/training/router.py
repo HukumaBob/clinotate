@@ -8,6 +8,7 @@ from app.storage import StorageService, get_storage_service
 from app.training import service
 from app.training.models import TrainingRunStatus
 from app.training.schemas import (
+    BaseModelOption,
     ModelDownloadRead,
     ModelMetricsRead,
     ModelVersionRead,
@@ -36,6 +37,7 @@ def create_run(
             session,
             dataset_id=body.dataset_id,
             base_model=body.base_model,
+            base_model_version_id=body.base_model_version_id,
             config=config,
             created_by=current_user,
         )
@@ -43,6 +45,19 @@ def create_run(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except service.RunAlreadyActive as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except service.InvalidBaseModel as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+
+@router.get("/base-models", response_model=list[BaseModelOption])
+def list_base_models(
+    dataset_id: int = Query(),
+    session: Session = Depends(get_session),
+):
+    try:
+        return service.list_base_models(session, dataset_id)
+    except service.DatasetNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 @router.get("/runs", response_model=list[TrainingRunRead])

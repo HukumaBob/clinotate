@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.datasets.models import TaskType
 from app.training.models import TrainingRunStatus
@@ -8,13 +9,22 @@ from app.training.models import TrainingRunStatus
 
 class TrainingRunCreate(BaseModel):
     dataset_id: int
-    base_model: str = Field(min_length=1, max_length=200)
+    # Exactly one of base_model / base_model_version_id: a pretrained
+    # weights name, or an earlier ModelVersion to fine-tune from.
+    base_model: str | None = Field(default=None, min_length=1, max_length=200)
+    base_model_version_id: int | None = None
     # Bounded rather than free-form: an accidental 100000-epoch run would
     # hold this single-GPU host's only worker for days.
     epochs: int = Field(ge=1, le=1000)
     batch: int = Field(ge=1, le=256)
     imgsz: int = Field(default=640, ge=32, le=4096)
     advanced: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _exactly_one_base(self):
+        if (self.base_model is None) == (self.base_model_version_id is None):
+            raise ValueError("Provide exactly one of base_model and base_model_version_id")
+        return self
 
 
 class TrainingRunRead(BaseModel):
@@ -25,6 +35,7 @@ class TrainingRunRead(BaseModel):
     job_id: int | None
     adapter: str
     base_model: str
+    base_model_version_id: int | None
     task_type: TaskType
     config: dict
     status: TrainingRunStatus
@@ -54,6 +65,8 @@ class ModelVersionRead(BaseModel):
     id: int
     training_run_id: int
     name: str
+    base_model: str
+    base_model_version_id: int | None
     task_type: TaskType
     metrics: dict
     is_active: bool
@@ -85,3 +98,13 @@ class ModelMetricsRead(BaseModel):
     per_class: list[dict]
     confusion: dict | None
     artifacts: list[ArtifactRead]
+
+
+class BaseModelOption(BaseModel):
+    kind: Literal["pretrained", "model_version"]
+    weights: str | None
+    label: str
+    family: str | None
+    size: str | None
+    note: str | None
+    model_version_id: int | None
