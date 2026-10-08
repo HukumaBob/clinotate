@@ -8,6 +8,7 @@ import { useAuth } from "../features/auth/useAuth";
 import { DatasetsPage } from "../features/datasets/DatasetsPage";
 import { MediaPage } from "../features/media/MediaPage";
 import { QcPage } from "../features/qc/QcPage";
+import { AbComparePage } from "../features/qc/AbComparePage";
 import { RunViewPage } from "../features/qc/RunViewPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TagsPage } from "../features/tags/TagsPage";
@@ -38,6 +39,7 @@ export function App() {
           <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/train" element={<TrainPage />} />
           <Route path="/qc" element={<QcPage />} />
+          <Route path="/qc/compare/:runA/:runB" element={<AbComparePage />} />
           <Route path="/qc/:runId" element={<RunViewPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
