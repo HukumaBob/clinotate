@@ -4029,6 +4029,86 @@
         ]
       }
     },
+    "/inference/compare": {
+      "get": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Compare",
+        "operationId": "compare_inference_compare_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_a",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run A"
+            }
+          },
+          {
+            "name": "run_b",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run B"
+            }
+          },
+          {
+            "name": "conf_a",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1,
+              "minimum": 0,
+              "default": 0.25,
+              "title": "Conf A"
+            }
+          },
+          {
+            "name": "conf_b",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1,
+              "minimum": 0,
+              "default": 0.25,
+              "title": "Conf B"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QcCompareRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/inference/runs/{run_id}": {
       "get": {
         "tags": [
@@ -6282,6 +6362,66 @@
         },
         "type": "object",
         "title": "QcCommitRequest"
+      },
+      "QcCompareRead": {
+        "properties": {
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/QcDisagreementRead"
+            },
+            "type": "array",
+            "title": "Frames"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "disagreements": {
+            "type": "integer",
+            "title": "Disagreements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frames",
+          "total",
+          "disagreements"
+        ],
+        "title": "QcCompareRead"
+      },
+      "QcDisagreementRead": {
+        "properties": {
+          "frame": {
+            "type": "integer",
+            "title": "Frame"
+          },
+          "timestamp_ms": {
+            "type": "integer",
+            "title": "Timestamp Ms"
+          },
+          "only_a": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Only A"
+          },
+          "only_b": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Only B"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame",
+          "timestamp_ms",
+          "only_a",
+          "only_b"
+        ],
+        "title": "QcDisagreementRead"
       },
       "QcFlagKind": {
         "type": "string",

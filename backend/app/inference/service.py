@@ -5,6 +5,7 @@ predictions live in object storage as one JSON document; this module only
 ever hands out a presigned link to it.
 """
 
+import json
 import logging
 import math
 from datetime import date, datetime, timezone
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.celery_app import celery_app
 from app.datasets.models import TaskType
+from app.inference.compare import disagreements
 from app.inference.models import InferenceRun, InferenceRunStatus, QcFlag, QcFlagKind
 from app.inference.schemas import InferenceRunRead
 from app.jobs.models import Job, JobStatus, JobType
@@ -145,6 +147,35 @@ def get_run(session: Session, run_id: int) -> InferenceRun:
 
 def list_runs(session: Session) -> list[InferenceRun]:
     return list(session.scalars(select(InferenceRun).order_by(InferenceRun.id.desc())))
+
+
+class RunsNotComparable(Exception):
+    """The two runs cannot be put side by side."""
+
+
+def compare_runs(
+    session: Session,
+    storage: StorageService,
+    run_a_id: int,
+    run_b_id: int,
+    conf_a: float,
+    conf_b: float,
+) -> dict:
+    if run_a_id == run_b_id:
+        raise RunsNotComparable("Pick two different runs to compare")
+    run_a, run_b = get_run(session, run_a_id), get_run(session, run_b_id)
+    for run in (run_a, run_b):
+        if run.status != InferenceRunStatus.SUCCEEDED or not run.predictions_key:
+            raise RunsNotComparable(f"Run {run.id} is {run.status.value}, not finished")
+    if run_a.video_id != run_b.video_id:
+        raise RunsNotComparable("The runs are of different videos")
+    if run_a.frame_stride != run_b.frame_stride:
+        raise RunsNotComparable("The runs used different frame strides")
+    doc_a = json.loads(storage.download(run_a.predictions_key))
+    doc_b = json.loads(storage.download(run_b.predictions_key))
+    frames = disagreements(doc_a, doc_b, conf_a, conf_b)
+    total = len(set(doc_a["frames"]) & set(doc_b["frames"]))
+    return {"frames": frames, "total": total, "disagreements": len(frames)}
 
 
 def get_predictions_url(session: Session, storage: StorageService, run_id: int) -> str:

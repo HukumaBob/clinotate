@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import math
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -9,6 +11,7 @@ from app.inference.schemas import (
     InferenceRunCreate,
     InferenceRunRead,
     PredictionsRead,
+    QcCompareRead,
     QcFlagPut,
     QcCommitRequest,
     QcFlagRead,
@@ -51,6 +54,26 @@ def create_run(
 @router.get("/runs", response_model=list[InferenceRunRead])
 def list_runs(session: Session = Depends(get_session)):
     return service.runs_read(session, service.list_runs(session))
+
+
+@router.get("/compare", response_model=QcCompareRead)
+def compare(
+    run_a: int,
+    run_b: int,
+    conf_a: float = Query(0.25, ge=0, le=1),
+    conf_b: float = Query(0.25, ge=0, le=1),
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+):
+    # ge/le let NaN through (every comparison with it is false).
+    if math.isnan(conf_a) or math.isnan(conf_b):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Confidence must be a number")
+    try:
+        return service.compare_runs(session, storage, run_a, run_b, conf_a, conf_b)
+    except service.InferenceRunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except service.RunsNotComparable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 @router.get("/runs/{run_id}", response_model=InferenceRunRead)

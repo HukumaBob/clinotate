@@ -64,6 +64,20 @@ class PredictionsRead(BaseModel):
     download_url: str
 
 
+class QcDisagreementRead(BaseModel):
+    frame: int
+    timestamp_ms: int
+    only_a: list[str]
+    only_b: list[str]
+
+
+class QcCompareRead(BaseModel):
+    frames: list[QcDisagreementRead]
+    # Frames both documents processed.
+    total: int
+    disagreements: int
+
+
 class QcFlagPut(BaseModel):
     frame_index: int = Field(ge=0)
     timestamp_ms: int = Field(ge=0)
