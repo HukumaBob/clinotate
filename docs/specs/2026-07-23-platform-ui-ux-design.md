@@ -280,6 +280,12 @@ like the frame editor above.
 
 ## Train
 
+> **Superseded 2026-10-08:** this screen is redesigned as an experiment
+> workspace (dataset rail, runs history, parameter schema with presets, run
+> comparison), designed in
+> [2026-10-08-train-workspace-design.md](../superpowers/specs/2026-10-08-train-workspace-design.md).
+> The text below is kept for history.
+
 Tabs by model family (YOLO now; RT-DETRv2 and others follow in Phase 2b,
 per ROADMAP.md's explicit scope boundary — this screen's *structure* is
 being fixed now, not its full set of model-specific config fields for
