@@ -514,6 +514,26 @@ describe("TrainPage", () => {
       expect(await screen.findByRole("alert")).toHaveTextContent("Model is the parent of run 12.");
     });
 
+    it("clears a refused-delete message after a later delete succeeds", async () => {
+      vi.mocked(apiClient.DELETE)
+        .mockResolvedValueOnce({ data: undefined, error: { detail: "Model is the parent of run 12." } } as never)
+        .mockResolvedValueOnce({ data: undefined, error: undefined } as never);
+      render(<TrainPage />);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^Delete$/ }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /^Confirm$/ }));
+      });
+      expect(await screen.findByRole("alert")).toHaveTextContent("Model is the parent of run 12.");
+
+      fireEvent.click(await screen.findByRole("button", { name: /^Delete$/ }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /^Confirm$/ }));
+      });
+
+      await waitFor(() => expect(screen.queryByText("Model is the parent of run 12.")).toBeNull());
+    });
+
     it("keeps the latest dataset's catalog when responses arrive out of order", async () => {
       const resolvers: Record<number, (v: unknown) => void> = {};
       const two = { id: 2, name: "polyps-v2", task_type: "detection", exported: true };

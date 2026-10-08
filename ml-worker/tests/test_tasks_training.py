@@ -303,6 +303,31 @@ def test_fine_tune_downloads_the_parent_weights_and_passes_a_local_path(
     assert version.name == f"parent-model-ft-run{run.id}"
 
 
+def test_a_long_parent_name_is_truncated_so_the_version_name_fits(
+    db_session, parent_version, fake_storage
+):
+    from app.tasks import model_train
+
+    parent, job, run = parent_version
+    _download_by_key(fake_storage, {parent.storage_key: b"parent-weights"})
+    run.base_model = "g" * 200  # a deep fine-tune chain fills base_model to its limit
+    db_session.commit()
+
+    class _Spy:
+        def train(self, request, on_log, on_epoch, should_stop):
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            return TrainingResult(weights_path=weights)
+
+    model_train(job.id, adapter=_Spy())
+    db_session.refresh(run)
+
+    assert run.status == TrainingRunStatus.SUCCEEDED
+    version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
+    assert len(version.name) <= 200
+    assert version.name.endswith(f"-ft-run{run.id}")
+
+
 def test_a_pretrained_start_keeps_the_weights_name_and_old_version_name(
     db_session, make_job_and_run, fake_storage
 ):

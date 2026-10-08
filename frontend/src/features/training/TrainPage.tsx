@@ -245,6 +245,7 @@ export function TrainPage() {
       setSubmitError((error as { detail?: string }).detail ?? "Failed to delete the model.");
       return;
     }
+    setSubmitError(null);
     await refreshVersions();
   }
 

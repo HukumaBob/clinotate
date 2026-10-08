@@ -160,7 +160,7 @@ export function TrainConfigForm({
         {baseKey.startsWith("version:") && (
           <p className="text-xs text-gray-500">
             Matching layers are kept. If this dataset's classes differ from the parent's, the
-            detection head is re-initialised — see the log.
+            model's head is re-initialised — see the log.
           </p>
         )}
         {baseModelsError && <p className="text-xs text-red-300">{baseModelsError}</p>}

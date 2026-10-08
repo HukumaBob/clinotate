@@ -918,7 +918,10 @@ def model_train(job_id: int, adapter=None) -> None:
                 artifact_keys.append(artifact_key)
 
         if run.base_model_version_id is not None:
-            version_name = f"{run.base_model}-ft-run{run.id}"
+            suffix = f"-ft-run{run.id}"
+            # ModelVersion.name is String(200); a fine-tune chain grows the
+            # parent name each generation, so trim it, never the suffix.
+            version_name = f"{run.base_model[: 200 - len(suffix)]}{suffix}"
         else:
             version_name = f"{run.base_model.rsplit('.', 1)[0]}-run{run.id}"
         version = ModelVersion(
