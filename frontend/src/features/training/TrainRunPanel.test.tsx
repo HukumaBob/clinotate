@@ -12,6 +12,7 @@ const runningRun: TrainingRunRead = {
   dataset_id: 1,
   job_id: 1,
   adapter: "ultralytics",
+  base_model_version_id: null,
   base_model: "yolo11n.pt",
   task_type: "detection",
   config: {},

@@ -18,6 +18,8 @@ const testVersion: ModelVersionRead = {
   task_type: "detection",
   metrics: { "metrics/mAP50(B)": 0.712 },
   is_active: false,
+  base_model: "yolo11n.pt",
+  base_model_version_id: null,
   created_at: "2026-08-19T10:00:00Z",
 };
 

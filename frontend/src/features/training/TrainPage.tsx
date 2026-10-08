@@ -9,6 +9,7 @@ import { TrainRunPanel } from "./TrainRunPanel";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
 type ModelVersionRead = components["schemas"]["ModelVersionRead"];
+type BaseModelOption = components["schemas"]["BaseModelOption"];
 
 const POLL_INTERVAL_MS = 2000;
 const TERMINAL_STATUSES = new Set(["succeeded", "failed", "stopped"]);
@@ -20,6 +21,8 @@ function isActive(run: TrainingRunRead | null): boolean {
 export function TrainPage() {
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
   const [versions, setVersions] = useState<ModelVersionRead[]>([]);
+  const [baseModels, setBaseModels] = useState<BaseModelOption[]>([]);
+  const [baseModelsError, setBaseModelsError] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<TrainingRunRead | null>(null);
   const [logText, setLogText] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -62,6 +65,19 @@ export function TrainPage() {
   const refreshVersions = useCallback(async () => {
     const { data } = await apiClient.GET("/training/models");
     setVersions(data ?? []);
+  }, []);
+
+  const loadBaseModels = useCallback(async (datasetId: number) => {
+    setBaseModels([]);
+    setBaseModelsError(null);
+    const { data, error } = await apiClient.GET("/training/base-models", {
+      params: { query: { dataset_id: datasetId } },
+    });
+    if (error || !data) {
+      setBaseModelsError("Could not load base models.");
+      return;
+    }
+    setBaseModels(data);
   }, []);
 
   const refreshRuns = useCallback(async () => {
@@ -145,7 +161,9 @@ export function TrainPage() {
       const { data, error } = await apiClient.POST("/training/runs", {
         body: {
           dataset_id: values.datasetId,
-          base_model: values.baseModel,
+          ...(values.baseModelVersionId !== null
+            ? { base_model_version_id: values.baseModelVersionId }
+            : { base_model: values.baseModel }),
           epochs: values.epochs,
           batch: values.batch,
           imgsz: values.imgsz,
@@ -197,9 +215,13 @@ export function TrainPage() {
   }
 
   async function handleDelete(id: number) {
-    await apiClient.DELETE("/training/models/{version_id}", {
+    const { error } = await apiClient.DELETE("/training/models/{version_id}", {
       params: { path: { version_id: id } },
     });
+    if (error) {
+      setSubmitError((error as { detail?: string }).detail ?? "Failed to delete the model.");
+      return;
+    }
     await refreshVersions();
   }
 
@@ -231,7 +253,14 @@ export function TrainPage() {
 
       <div className="grid flex-1 grid-cols-3 gap-6 overflow-hidden">
         <div className="overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
-          <TrainConfigForm datasets={datasets} disabled={submitPending} onSubmit={handleSubmit} />
+          <TrainConfigForm
+            datasets={datasets}
+            disabled={submitPending}
+            onSubmit={handleSubmit}
+            baseModels={baseModels}
+            baseModelsError={baseModelsError}
+            onDatasetChange={loadBaseModels}
+          />
         </div>
 
         <div className="col-span-2 flex flex-col gap-6 overflow-hidden">

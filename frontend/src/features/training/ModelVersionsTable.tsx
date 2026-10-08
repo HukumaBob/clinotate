@@ -56,6 +56,7 @@ export function ModelVersionsTable({
         <tr className="border-b border-gray-800 text-gray-400">
           <th className="px-4 py-2 font-normal">Name</th>
           <th className="px-4 py-2 font-normal">Type</th>
+          <th className="px-4 py-2 font-normal">Base</th>
           <th className="px-4 py-2 font-normal">Score</th>
           <th className="px-4 py-2 font-normal">Created</th>
           <th className="px-4 py-2 text-right font-normal">Actions</th>
@@ -66,6 +67,11 @@ export function ModelVersionsTable({
           <tr key={version.id} className="border-b border-gray-900">
             <td className="px-4 py-2">{version.name}</td>
             <td className="px-4 py-2 text-gray-400">{version.task_type}</td>
+            <td className="px-4 py-2 text-gray-400">
+              {version.base_model_version_id !== null
+                ? `↳ ${version.base_model}`
+                : version.base_model}
+            </td>
             <td className="px-4 py-2 text-gray-400">
               {(() => {
                 const score = headlineScore(

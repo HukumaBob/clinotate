@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TrainPage } from "./TrainPage";
@@ -219,6 +219,22 @@ describe("TrainPage", () => {
       if (path === "/training/models") {
         return { data: [] };
       }
+      if (path === "/training/base-models") {
+        // The start button stays disabled until the catalog offers a model.
+        return {
+          data: [
+            {
+              kind: "pretrained",
+              weights: "yolo11n.pt",
+              label: "yolo11n.pt",
+              family: "yolo11",
+              size: "n",
+              note: null,
+              model_version_id: null,
+            },
+          ],
+        };
+      }
       return { data: [] };
     });
     vi.mocked(apiClient.POST).mockResolvedValue({ data: { id: 7, status: "pending" }, error: undefined });
@@ -345,6 +361,8 @@ describe("TrainPage", () => {
               task_type: "detection",
               metrics: { "metrics/mAP50(B)": 0.65 },
               is_active: false,
+              base_model: "yolo11n.pt",
+              base_model_version_id: null,
               created_at: "2026-08-21T00:00:00Z",
             },
           ],
@@ -387,5 +405,113 @@ describe("TrainPage", () => {
     });
 
     expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  describe("base models", () => {
+    const catalog = [
+      {
+        kind: "pretrained",
+        weights: "yolo11n.pt",
+        label: "yolo11n.pt",
+        family: "yolo11",
+        size: "n",
+        note: null,
+        model_version_id: null,
+      },
+      {
+        kind: "model_version",
+        weights: null,
+        label: "polyps-v1-run7",
+        family: null,
+        size: null,
+        note: "mAP50 0.650",
+        model_version_id: 7,
+      },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+        if (path === "/datasets") {
+          return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        }
+        if (path === "/training/runs") return { data: [] };
+        if (path === "/training/models") {
+          return {
+            data: [
+              {
+                id: 7,
+                training_run_id: 3,
+                name: "polyps-v1-run7",
+                task_type: "detection",
+                metrics: {},
+                is_active: false,
+                base_model: "yolo11n.pt",
+                base_model_version_id: null,
+                created_at: "2026-08-21T00:00:00Z",
+              },
+            ],
+          };
+        }
+        if (path === "/training/base-models") return { data: catalog };
+        return { data: null };
+      });
+      vi.mocked(apiClient.POST).mockResolvedValue({ data: { id: 9, status: "pending" }, error: undefined });
+    });
+
+    it("loads the catalog for the announced dataset and renders it in the select", async () => {
+      render(<TrainPage />);
+
+      expect(
+        await screen.findByRole("option", { name: /polyps-v1-run7 — mAP50 0\.650/ }),
+      ).toBeInTheDocument();
+      expect(vi.mocked(apiClient.GET)).toHaveBeenCalledWith("/training/base-models", {
+        params: { query: { dataset_id: 1 } },
+      });
+    });
+
+    it("posts base_model only for a pretrained choice", async () => {
+      render(<TrainPage />);
+      await screen.findByRole("option", { name: /polyps-v1-run7 — mAP50/ });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled(),
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /start training/i }));
+      });
+
+      const body = vi.mocked(apiClient.POST).mock.calls[0][1]!.body as Record<string, unknown>;
+      expect(body.base_model).toBe("yolo11n.pt");
+      expect(body).not.toHaveProperty("base_model_version_id");
+    });
+
+    it("posts base_model_version_id only for a version choice", async () => {
+      render(<TrainPage />);
+      await screen.findByRole("option", { name: /polyps-v1-run7 — mAP50/ });
+
+      fireEvent.change(screen.getByLabelText(/base model/i), { target: { value: "version:7" } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /start training/i }));
+      });
+
+      const body = vi.mocked(apiClient.POST).mock.calls[0][1]!.body as Record<string, unknown>;
+      expect(body.base_model_version_id).toBe(7);
+      expect(body).not.toHaveProperty("base_model");
+    });
+
+    it("shows the detail of a refused model delete in the alert banner", async () => {
+      vi.mocked(apiClient.DELETE).mockResolvedValue({
+        data: undefined,
+        error: { detail: "Model is the parent of run 12." },
+      } as never);
+      render(<TrainPage />);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^Delete$/ }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /^Confirm$/ }));
+      });
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Model is the parent of run 12.");
+    });
   });
 });

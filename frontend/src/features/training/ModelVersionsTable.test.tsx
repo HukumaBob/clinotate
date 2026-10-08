@@ -15,6 +15,8 @@ const versions: ModelVersionRead[] = [
     task_type: "detection",
     metrics: { "metrics/mAP50(B)": 0.712 },
     is_active: false,
+    base_model: "yolo11n.pt",
+    base_model_version_id: null,
     created_at: "2026-08-19T10:00:00Z",
   },
 ];
@@ -28,6 +30,8 @@ const twoVersions: ModelVersionRead[] = [
     task_type: "detection",
     metrics: { "metrics/mAP50(B)": 0.55 },
     is_active: false,
+    base_model: "yolo11n.pt",
+    base_model_version_id: null,
     created_at: "2026-08-19T11:00:00Z",
   },
 ];
@@ -184,5 +188,24 @@ describe("ModelVersionsTable", () => {
 
     expect(onDelete).toHaveBeenCalledWith(4);
     expect(onDelete).not.toHaveBeenCalledWith(5);
+  });
+
+  it("shows the pretrained weights for a fresh start and the parent for a fine-tune", () => {
+    const rows: ModelVersionRead[] = [
+      { ...versions[0], base_model: "yolo11n.pt", base_model_version_id: null },
+      {
+        ...versions[0],
+        id: 9,
+        name: "yolo11n-run7-ft-run9",
+        base_model: "yolo11n-run7",
+        base_model_version_id: 4,
+      },
+    ];
+    render(
+      <ModelVersionsTable versions={rows} onDownload={vi.fn()} onDelete={vi.fn()} onInfo={vi.fn()} />,
+    );
+
+    expect(screen.getByText("yolo11n.pt")).toBeInTheDocument();
+    expect(screen.getByText("↳ yolo11n-run7")).toBeInTheDocument();
   });
 });
