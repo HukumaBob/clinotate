@@ -1843,3 +1843,89 @@ and when verifying the delete, confirm the whole `models/<id>/artifacts/`
 prefix is empty afterwards rather than spot-checking one object — the
 per-key `try`/`except` logs a warning and continues, so a partial deletion
 still returns 204 and would look like success at the API level.
+
+### Phase 2b: Training base models and fine-tuning — DONE (2026-10-08, browser-verified; l/x not run)
+
+The Train screen's Base model field was a hardcoded list of three weights
+(`yolo11n/s/m.pt`) that ignored the dataset's task type: the worker silently
+rewrote the name to `-seg`/`-cls`, there was no `l`/`x`, and a trained
+`ModelVersion` could not be a starting point — which is what the QC loop
+(flag frames → "Send to training" → extended dataset) needs. Scope was YOLO11
+only; other architectures (RT-DETR first) wait for a second adapter.
+
+Spec [2026-10-08-training-base-models-design.md](docs/superpowers/specs/2026-10-08-training-base-models-design.md),
+plan [2026-10-08-training-base-models.md](docs/superpowers/plans/2026-10-08-training-base-models.md),
+8 commits `9d20a13`..`f13df72`, executed subagent-driven (per-task review plus
+a whole-branch review that found one real defect, below).
+
+- **Catalog in the backend** (`backend/app/training/catalog.py`), keyed by
+  adapter name, because the adapters live in `ml-worker` and the backend
+  cannot import them. Five sizes × three task types with the real weight names;
+  `l`/`x` carry the note "may not fit in 8 GB" (a warning, never a block — the
+  card is 8 GB and this host has hard-rebooted under VRAM pressure).
+  `GET /training/base-models?dataset_id=N` returns the pretrained entries plus
+  every same-task, same-adapter `ModelVersion`.
+- **Fine-tuning is a nullable FK** `TrainingRun.base_model_version_id`
+  (migration `c4d5e6f7a8b9`); `base_model` stays a readable label. `POST
+  /training/runs` takes exactly one of `base_model` / `base_model_version_id`
+  (422 otherwise); a pretrained name must be in the catalog for the dataset's
+  task (the legacy `yolo11s.pt` on a segmentation dataset is normalised to
+  `yolo11s-seg.pt`); a version must match task type and adapter.
+- **Worker:** downloads the parent's `.pt` into the run's temp dir and passes
+  the path to the unchanged `TrainingAdapter`; `weights_for_task` leaves local
+  paths untouched; new versions are named `<parent>-ft-run<id>` (capped at 200
+  characters); a missing parent object fails the run with a readable message.
+- **Frontend:** the Base model select is built from the catalog (two
+  `<optgroup>`s, notes on `l`/`x`, a static hint that the head is
+  re-initialised if the classes differ), resets on dataset change, ignores
+  out-of-order responses, reloads when versions change; the versions table
+  gained a Base column (`↳ parent` for fine-tunes).
+
+**Verified for real (2026-10-08):** form driven in a real browser for
+detection, segmentation and classification datasets; one short run each of
+YOLO11-n with 2 epochs, batch 4 — segmentation (run 404, `yolo11n-seg-run404`,
+mAP50(B) 0.097 after two epochs), classification (run 405, top-1 0.957) and a
+fine-tune of the existing detection version `yolo11n-run268` (run 406,
+`yolo11n-run268-ft-run406`; the log shows `model=…/parent.pt` and
+`Transferred 499/499 items from pretrained weights`). Segmentation and
+classification training had existed in code but had never produced a kept
+version before this. Deleting the parent while the child version existed
+returned 409 naming the child. Everything created was removed afterwards: the
+run, version and job tables and MinIO's `models/` prefix are identical to a
+backup taken beforehand.
+
+**Deviation log:**
+
+- **Delete guard deadlocked** (found by the whole-branch review, reproduced
+  in a test). The first version of the 409 refused deletion whenever *any* run
+  referenced the version, even a FAILED or STOPPED fine-tune. No endpoint
+  deletes training runs, so the parent version — and through `delete_dataset`'s
+  own rule, its dataset — would have become undeletable, with a message
+  pointing at an action that does not exist. The rule is now: refuse only when
+  a child run is PENDING/RUNNING or still owns a `ModelVersion`; otherwise
+  null the stale children's `base_model_version_id` (their `base_model` label
+  still names the parent). The spec was amended to match.
+- **Plan defects:** the plan's test helper `_make_version` collided with an
+  existing helper (renamed `_make_parent_version`); its missing-parent test
+  returned `b""` for the dataset key, which failed earlier with "File is not a
+  zip file" and never reached the case under test.
+- **Catalog race in the form:** quick dataset switching could let an older
+  dataset's catalog overwrite a newer one; fixed with a request counter, and
+  the catalog now reloads when the versions list changes so a new version is
+  selectable without reselecting the dataset.
+- **Pre-existing, untouched:** `test_training_models.py::test_training_run_defaults`
+  and `::test_model_version_links_to_run` fail on the baseline too (NOT NULL
+  `dataset_id`).
+
+**Not verified / open:**
+
+- `l` and `x` were never run; the VRAM note is a warning, not a measurement.
+- A fine-tune whose class set differs from its parent's (head re-initialised)
+  was not exercised — the one real fine-tune used the parent's own dataset.
+- Segmentation headline score is the box metric `mAP50(B)`, as in
+  `ModelVersionsTable.headlineScore`; the mask metric exists but is not shown.
+- Pretrained weights are still downloaded from GitHub on every run; no cache.
+- A worker that dies mid-run still leaves the `TrainingRun` RUNNING forever.
+- Deferred minors: the 409/422 check order in `create_training_run`; a missing
+  dataset reports "not exported" (pre-existing); the missing-parent worker test
+  does not assert the storage key.
