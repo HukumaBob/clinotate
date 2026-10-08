@@ -307,6 +307,10 @@ def get_model_version(session: Session, version_id: int) -> ModelVersion:
     return version
 
 
+class ModelVersionInUse(Exception):
+    """A training run was fine-tuned from this version."""
+
+
 def delete_model_version(session: Session, storage: StorageService, version_id: int) -> None:
     """Delete a model version and every object that names it.
 
@@ -317,6 +321,14 @@ def delete_model_version(session: Session, storage: StorageService, version_id: 
     before 857760d.
     """
     version = get_model_version(session, version_id)
+    child = session.scalars(
+        select(TrainingRun).where(TrainingRun.base_model_version_id == version_id)
+    ).first()
+    if child is not None:
+        raise ModelVersionInUse(
+            f"Model version {version_id} is the starting point of training run {child.id}; "
+            "delete that run's results first"
+        )
     for key in [*(version.artifact_keys or []), version.storage_key]:
         try:
             storage.delete(key)

@@ -160,3 +160,5 @@ def delete_model(
         service.delete_model_version(session, storage, version_id)
     except service.ModelVersionNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except service.ModelVersionInUse as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

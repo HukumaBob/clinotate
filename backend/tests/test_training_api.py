@@ -756,3 +756,52 @@ def test_create_run_rejects_an_unknown_version(monkeypatch):
     finally:
         _cleanup(session, dataset.id)
         session.close()
+
+
+def test_delete_version_with_a_fine_tuned_child_is_409_and_keeps_weights(monkeypatch):
+    email = "train-del1@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    parent = _make_parent_version(session, dataset, user_id, "parent")
+    _stub_send_task(monkeypatch)
+    deleted: list[str] = []
+
+    class _Storage:
+        def delete(self, key):
+            deleted.append(key)
+
+    app.dependency_overrides[get_storage_service] = lambda: _Storage()
+    try:
+        child = _create(headers, dataset.id, base_model_version_id=parent.id).json()
+
+        response = client.delete(f"/training/models/{parent.id}", headers=headers)
+
+        assert response.status_code == 409
+        assert str(child["id"]) in response.json()["detail"]
+        assert deleted == []
+        assert session.get(ModelVersion, parent.id) is not None
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_model_list_exposes_lineage(monkeypatch):
+    email = "train-del2@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    parent = _make_parent_version(session, dataset, user_id, "root-model")
+    try:
+        response = client.get("/training/models", headers=headers)
+
+        row = next(v for v in response.json() if v["id"] == parent.id)
+        assert row["base_model"] == "yolo11n.pt"
+        assert row["base_model_version_id"] is None
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()

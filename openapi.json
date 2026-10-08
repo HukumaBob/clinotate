@@ -3583,6 +3583,57 @@
         }
       }
     },
+    "/training/base-models": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "List Base Models",
+        "operationId": "list_base_models_training_base_models_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BaseModelOption"
+                  },
+                  "title": "Response List Base Models Training Base Models Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/training/runs/{run_id}": {
       "get": {
         "tags": [
@@ -4790,6 +4841,88 @@
           "task_type"
         ],
         "title": "BalanceRequest"
+      },
+      "BaseModelOption": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pretrained",
+              "model_version"
+            ],
+            "title": "Kind"
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weights"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "weights",
+          "label",
+          "family",
+          "size",
+          "note",
+          "model_version_id"
+        ],
+        "title": "BaseModelOption"
       },
       "Body_upload_photo_sequence_media_sequences_photos_post": {
         "properties": {
@@ -6188,6 +6321,21 @@
             "type": "string",
             "title": "Name"
           },
+          "base_model": {
+            "type": "string",
+            "title": "Base Model"
+          },
+          "base_model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Model Version Id"
+          },
           "task_type": {
             "$ref": "#/components/schemas/TaskType"
           },
@@ -6211,6 +6359,8 @@
           "id",
           "training_run_id",
           "name",
+          "base_model",
+          "base_model_version_id",
           "task_type",
           "metrics",
           "is_active",
@@ -7397,10 +7547,28 @@
             "title": "Dataset Id"
           },
           "base_model": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Base Model"
+          },
+          "base_model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Model Version Id"
           },
           "epochs": {
             "type": "integer",
@@ -7430,7 +7598,6 @@
         "type": "object",
         "required": [
           "dataset_id",
-          "base_model",
           "epochs",
           "batch"
         ],
@@ -7464,6 +7631,17 @@
           "base_model": {
             "type": "string",
             "title": "Base Model"
+          },
+          "base_model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Model Version Id"
           },
           "task_type": {
             "$ref": "#/components/schemas/TaskType"
@@ -7541,6 +7719,7 @@
           "job_id",
           "adapter",
           "base_model",
+          "base_model_version_id",
           "task_type",
           "config",
           "status",
