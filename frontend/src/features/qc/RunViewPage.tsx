@@ -31,8 +31,11 @@ import { LatencyPanel } from "./LatencyPanel";
 import { PredictionOverlay } from "./PredictionOverlay";
 import { buildProcessedFrames, processedFrameAt } from "./processedFrame";
 import { colorForClass, countByClass } from "./predictions";
+import { ReelsPanel } from "./ReelsPanel";
+import { buildReels, DEFAULT_GREY_BAND, type GreyBand } from "./reels";
 import { RunStatus } from "./RunStatus";
 import { TimelineStrip } from "./TimelineStrip";
+import { useReelLoop } from "./useReelLoop";
 
 // A stable empty list, so callbacks that depend on `events` keep their identity.
 const NO_EVENTS: FlickerEvent[] = [];
@@ -108,6 +111,30 @@ export function RunViewPage() {
       if (target) seekTo(target.startMs);
     },
     [events, seekTo],
+  );
+
+  const [greyBand, setGreyBand] = useState<GreyBand>(DEFAULT_GREY_BAND);
+  const [activeReel, setActiveReel] = useState<number | null>(null);
+  const reels = useMemo(
+    () => (document && durationMs > 0 ? buildReels(document, events, greyBand, durationMs) : []),
+    [document, events, greyBand, durationMs],
+  );
+  // The list changes when settings do: a stale index would point at another clip.
+  useEffect(() => setActiveReel(null), [reels]);
+  const activeClip = activeReel === null ? null : (reels[activeReel] ?? null);
+  useReelLoop(videoRef, activeClip);
+
+  const selectReel = useCallback(
+    (index: number | null) => {
+      setActiveReel(index);
+      const clip = index === null ? null : reels[index];
+      const el = videoRef.current;
+      if (clip && el) {
+        el.currentTime = clip.startMs / 1000;
+        void el.play();
+      }
+    },
+    [reels],
   );
 
   const { mutate: putFlagMutate } = putFlag;
@@ -307,6 +334,18 @@ export function RunViewPage() {
                 onNoteChange={handleNoteChange}
                 onSend={openCommit}
                 lastSequence={lastSequence}
+              />
+            )}
+
+            {document && (
+              <ReelsPanel
+                reels={reels}
+                flags={flags}
+                activeIndex={activeReel}
+                band={greyBand}
+                onBandChange={setGreyBand}
+                onSelect={selectReel}
+                isCoarse={flicker?.isCoarse ?? false}
               />
             )}
 
