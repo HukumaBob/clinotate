@@ -43,7 +43,12 @@ export function useInferenceRun(runId: number | null) {
 export function useCreateInferenceRun() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { video_id: number; model_version_id: number; frame_stride: number }) => {
+    mutationFn: async (body: {
+      video_id: number;
+      model_version_id: number;
+      frame_stride: number;
+      perturbation?: { kind: "gaussian_noise" | "blur" | "brightness" | "jpeg"; strength: number } | null;
+    }) => {
       const result = await apiClient.POST("/inference/runs", { body });
       if (result.error) throw result.error;
       return result.data;
