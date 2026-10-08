@@ -37,8 +37,8 @@ needed to decide who is right).
   optionally; kind and strength range are validated, a bad value is a 422.
   Alembic migration, nullable, no backfill.
 - `GET /inference/compare?run_a=&run_b=&conf_a=&conf_b=` returns
-  `{frames: [{frame, only_a: [class], only_b: [class]}], summary: {total,
-  disagreements, ...}}`. 409 with a plain reason when the runs have different
+  `{frames: [{frame, timestamp_ms, only_a: [class], only_b: [class]}], total,
+  disagreements}`. 409 with a plain reason when the runs have different
   videos, either is not `succeeded`, or `frame_stride` differs. Disagreements
   are computed server-side from the stored predictions; nothing is persisted.
 - Who is right comes from `qc_flags`, which already exist per run and frame.
