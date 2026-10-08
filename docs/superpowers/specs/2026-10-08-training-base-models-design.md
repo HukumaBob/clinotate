@@ -75,8 +75,14 @@ dataset's task type and the adapter, otherwise 422 with a readable message.
 `model_versions`) with an Alembic migration. `TrainingRunRead` and
 `ModelVersionRead` expose it so the table can show lineage.
 
-**Deletion.** `delete_model_version` returns 409 when any run references the
-version, naming the run (same pattern as `delete_dataset`).
+**Deletion.** `delete_model_version` returns 409 only when a run fine-tuned
+from the version is still PENDING/RUNNING (naming the run) or still owns a
+model version (naming that version). Stale child runs (failed, stopped, or
+succeeded without a version) never block: their `base_model_version_id` is
+set to NULL before the delete, and their `base_model` string keeps the
+parent's name as lineage. Without this, a failed fine-tune would make its
+parent, and through `delete_dataset` the dataset, permanently undeletable,
+since no endpoint deletes training runs.
 
 ## ml-worker
 

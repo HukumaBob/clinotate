@@ -321,19 +321,40 @@ def delete_model_version(session: Session, storage: StorageService, version_id: 
     before 857760d.
     """
     version = get_model_version(session, version_id)
-    child = session.scalars(
-        select(TrainingRun).where(TrainingRun.base_model_version_id == version_id)
-    ).first()
-    if child is not None:
-        raise ModelVersionInUse(
-            f"Model version {version_id} is the starting point of training run {child.id}; "
-            "delete that run's results first"
-        )
+    children = session.scalars(
+        select(TrainingRun)
+        .where(TrainingRun.base_model_version_id == version_id)
+        .order_by(TrainingRun.id)
+    ).all()
+    # Refuse only for a child that is still live: an active run needs the
+    # weights, and a child that owns a version is real lineage. Stale
+    # children (failed/stopped/never produced a version) must not make the
+    # parent -- and through delete_dataset, its dataset -- undeletable,
+    # since no endpoint deletes training runs.
+    for child in children:
+        if child.status in ACTIVE_STATUSES:
+            raise ModelVersionInUse(
+                f"Model version {version_id} is the starting point of training run "
+                f"{child.id}, which is still active; stop it first"
+            )
+        owned = session.scalars(
+            select(ModelVersion)
+            .where(ModelVersion.training_run_id == child.id)
+            .order_by(ModelVersion.id)
+        ).first()
+        if owned is not None:
+            raise ModelVersionInUse(
+                f"Model version {version_id} is the starting point of model version "
+                f"'{owned.name}'; delete that version first"
+            )
     for key in [*(version.artifact_keys or []), version.storage_key]:
         try:
             storage.delete(key)
         except Exception:  # noqa: BLE001 -- a missing object must not block the delete
             logger.warning("delete_model_version: could not remove %s", key)
+    for child in children:
+        # The child's base_model string keeps the parent's name as lineage.
+        child.base_model_version_id = None
     session.delete(version)
     session.commit()
 

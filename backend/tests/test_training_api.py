@@ -789,6 +789,85 @@ def test_delete_version_with_a_fine_tuned_child_is_409_and_keeps_weights(monkeyp
         session.close()
 
 
+def _delete_guard_setup(monkeypatch, email):
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    parent = _make_parent_version(session, dataset, user_id, "parent")
+    _stub_send_task(monkeypatch)
+    deleted: list[str] = []
+
+    class _Storage:
+        def delete(self, key):
+            deleted.append(key)
+
+    app.dependency_overrides[get_storage_service] = lambda: _Storage()
+    return headers, session, user_id, dataset, parent, deleted
+
+
+def test_delete_version_with_a_failed_child_succeeds_and_detaches_it(monkeypatch):
+    headers, session, user_id, dataset, parent, deleted = _delete_guard_setup(
+        monkeypatch, "train-del3@example.com"
+    )
+    try:
+        child = _create(headers, dataset.id, base_model_version_id=parent.id).json()
+        label = child["base_model"]
+        session.query(TrainingRun).filter(TrainingRun.id == child["id"]).update(
+            {TrainingRun.status: TrainingRunStatus.FAILED}
+        )
+        session.commit()
+        parent_id = parent.id
+
+        response = client.delete(f"/training/models/{parent_id}", headers=headers)
+
+        assert response.status_code == 204
+        assert deleted != []
+        session.expire_all()
+        assert session.get(ModelVersion, parent_id) is None
+        refreshed = session.get(TrainingRun, child["id"])
+        assert refreshed.base_model_version_id is None
+        assert refreshed.base_model == label
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_delete_version_whose_child_owns_a_version_is_409_naming_that_version(monkeypatch):
+    headers, session, user_id, dataset, parent, deleted = _delete_guard_setup(
+        monkeypatch, "train-del4@example.com"
+    )
+    try:
+        child = _create(headers, dataset.id, base_model_version_id=parent.id).json()
+        session.query(TrainingRun).filter(TrainingRun.id == child["id"]).update(
+            {TrainingRun.status: TrainingRunStatus.SUCCEEDED}
+        )
+        session.add(
+            ModelVersion(
+                training_run_id=child["id"],
+                name="child-ft-version",
+                task_type=TaskType.DETECTION,
+                storage_key=f"models/{child['id']}/best.pt",
+            )
+        )
+        session.commit()
+
+        response = client.delete(f"/training/models/{parent.id}", headers=headers)
+
+        assert response.status_code == 409
+        assert "child-ft-version" in response.json()["detail"]
+        assert deleted == []
+        session.expire_all()
+        assert session.get(ModelVersion, parent.id) is not None
+        assert session.get(TrainingRun, child["id"]).base_model_version_id == parent.id
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+        _cleanup(session, dataset.id)
+        session.close()
+
+
 def test_model_list_exposes_lineage(monkeypatch):
     email = "train-del2@example.com"
     headers = _register_and_login(email)
