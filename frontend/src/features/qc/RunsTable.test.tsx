@@ -25,10 +25,16 @@ const run = (over: Partial<InferenceRun>): InferenceRun => ({
   ...over,
 });
 
-function renderTable(runs: InferenceRun[], onDelete = vi.fn()) {
+function renderTable(runs: InferenceRun[], onDelete = vi.fn(), onToggleSelect = vi.fn(), selected: number[] = []) {
   render(
     <MemoryRouter>
-      <RunsTable runs={runs} videoTitles={{ 9: "Colonoscopy A" }} onDelete={onDelete} />
+      <RunsTable
+        runs={runs}
+        videoTitles={{ 9: "Colonoscopy A" }}
+        onDelete={onDelete}
+        selected={selected}
+        onToggleSelect={onToggleSelect}
+      />
     </MemoryRouter>,
   );
   return onDelete;
@@ -114,5 +120,19 @@ describe("RunsTable flags column", () => {
     renderTable([run({ id: 1, flags_pending: 0, flags_committed: 4 })]);
     await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.queryByText(/will be lost/)).not.toBeInTheDocument();
+  });
+
+  it("badges a stress run with its perturbation", () => {
+    renderTable([run({ perturbation: { kind: "jpeg", strength: 30 } })]);
+    expect(screen.getByText("Stress: jpeg 30")).toBeInTheDocument();
+  });
+
+  it("selects finished runs for comparison and disables unfinished ones", async () => {
+    const user = userEvent.setup();
+    const onToggleSelect = vi.fn();
+    renderTable([run({ id: 3 }), run({ id: 4, status: "running" })], vi.fn(), onToggleSelect);
+    await user.click(screen.getByLabelText("Select run 3 for comparison"));
+    expect(onToggleSelect).toHaveBeenCalledWith(3);
+    expect(screen.getByLabelText("Select run 4 for comparison")).toBeDisabled();
   });
 });

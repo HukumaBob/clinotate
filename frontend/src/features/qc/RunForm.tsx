@@ -11,12 +11,31 @@ export interface VideoOption {
   title: string;
 }
 
+export type PerturbationKind = "gaussian_noise" | "blur" | "brightness" | "jpeg";
+export interface PerturbationValue {
+  kind: PerturbationKind;
+  strength: number;
+}
+
+// Ranges mirror backend/app/inference/schemas.py PERTURBATION_RANGES.
+const PERTURBATIONS: Record<PerturbationKind, { label: string; min: number; max: number; def: number }> = {
+  gaussian_noise: { label: "Noise", min: 1, max: 100, def: 10 },
+  blur: { label: "Blur", min: 0.5, max: 20, def: 2 },
+  brightness: { label: "Brightness", min: -100, max: 100, def: 30 },
+  jpeg: { label: "JPEG quality", min: 5, max: 95, def: 30 },
+};
+
 interface RunFormProps {
   models: ModelOption[];
   videos: VideoOption[];
   videoId: number | null;
   onVideoChange: (id: number | null) => void;
-  onSubmit: (values: { modelVersionId: number; videoId: number; frameStride: number }) => void;
+  onSubmit: (values: {
+    modelVersionId: number;
+    videoId: number;
+    frameStride: number;
+    perturbation: PerturbationValue | null;
+  }) => void;
   submitting: boolean;
   error: string | null;
 }
@@ -35,13 +54,31 @@ export function RunForm({
 }: RunFormProps) {
   const [modelId, setModelId] = useState<number | null>(null);
   const [stride, setStride] = useState(1);
+  const [kind, setKind] = useState<PerturbationKind | "">("");
+  const [strength, setStrength] = useState(0);
 
-  const canRun = modelId !== null && videoId !== null && stride >= 1 && !submitting;
+  const spec = kind ? PERTURBATIONS[kind] : null;
+  const strengthProblem =
+    spec && kind
+      ? !Number.isFinite(strength) ||
+        strength < spec.min ||
+        strength > spec.max ||
+        (kind === "brightness" && strength === 0)
+        ? `${spec.label} strength must be ${spec.min} to ${spec.max}${kind === "brightness" ? ", not 0" : ""}`
+        : null
+      : null;
+
+  const canRun = modelId !== null && videoId !== null && stride >= 1 && !strengthProblem && !submitting;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (modelId === null || videoId === null) return;
-    onSubmit({ modelVersionId: modelId, videoId, frameStride: stride });
+    onSubmit({
+      modelVersionId: modelId,
+      videoId,
+      frameStride: stride,
+      perturbation: kind ? { kind, strength } : null,
+    });
   }
 
   return (
@@ -107,6 +144,46 @@ export function RunForm({
         <p id="frame-stride-help" className="text-xs text-gray-500">
           1 runs every frame; 5 runs every fifth frame, which is much faster on a long video.
         </p>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 text-sm text-gray-300">
+          Perturbation
+          <select
+            value={kind}
+            onChange={(e) => {
+              const next = e.target.value as PerturbationKind | "";
+              setKind(next);
+              if (next) setStrength(PERTURBATIONS[next].def);
+            }}
+            className={FIELD}
+          >
+            <option value="">None</option>
+            {(Object.keys(PERTURBATIONS) as PerturbationKind[]).map((k) => (
+              <option key={k} value={k}>
+                {PERTURBATIONS[k].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {spec && (
+          <label className="flex flex-col gap-1 text-sm text-gray-300">
+            Perturbation strength
+            <input
+              type="number"
+              step="any"
+              value={Number.isNaN(strength) ? "" : strength}
+              onChange={(e) => setStrength(e.target.value === "" ? NaN : Number(e.target.value))}
+              className={FIELD}
+            />
+          </label>
+        )}
+        {strengthProblem && <p className="text-xs text-red-400">{strengthProblem}</p>}
+        {spec && !strengthProblem && (
+          <p className="text-xs text-gray-500">
+            The frames are degraded before the model sees them (a stress test).
+          </p>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}

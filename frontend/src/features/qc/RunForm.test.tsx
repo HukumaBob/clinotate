@@ -38,7 +38,12 @@ describe("RunForm", () => {
     await user.clear(screen.getByLabelText("Frame stride"));
     await user.type(screen.getByLabelText("Frame stride"), "5");
     await user.click(screen.getByRole("button", { name: "Run" }));
-    expect(props.onSubmit).toHaveBeenCalledWith({ modelVersionId: 5, videoId: 9, frameStride: 5 });
+    expect(props.onSubmit).toHaveBeenCalledWith({
+      modelVersionId: 5,
+      videoId: 9,
+      frameStride: 5,
+      perturbation: null,
+    });
   });
 
   it("defaults the stride to 1", () => {
@@ -54,5 +59,31 @@ describe("RunForm", () => {
   it("shows a submit error", () => {
     setup({ error: "Video 9 is not browser-playable" });
     expect(screen.getByText("Video 9 is not browser-playable")).toBeInTheDocument();
+  });
+
+  it("sends the chosen perturbation with its default strength", async () => {
+    const user = userEvent.setup();
+    const props = setup({ videoId: 9 });
+    await user.selectOptions(screen.getByLabelText("Model"), "4");
+    await user.selectOptions(screen.getByLabelText("Perturbation"), "blur");
+    expect(screen.getByLabelText("Perturbation strength")).toHaveValue(2);
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(props.onSubmit).toHaveBeenCalledWith({
+      modelVersionId: 4,
+      videoId: 9,
+      frameStride: 1,
+      perturbation: { kind: "blur", strength: 2 },
+    });
+  });
+
+  it("blocks an out-of-range strength and says why", async () => {
+    const user = userEvent.setup();
+    setup({ videoId: 9 });
+    await user.selectOptions(screen.getByLabelText("Model"), "4");
+    await user.selectOptions(screen.getByLabelText("Perturbation"), "blur");
+    await user.clear(screen.getByLabelText("Perturbation strength"));
+    await user.type(screen.getByLabelText("Perturbation strength"), "99");
+    expect(screen.getByRole("button", { name: "Run" })).toBeDisabled();
+    expect(screen.getByText("Blur strength must be 0.5 to 20")).toBeInTheDocument();
   });
 });

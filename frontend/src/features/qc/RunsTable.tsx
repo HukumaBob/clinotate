@@ -7,11 +7,14 @@ interface RunsTableProps {
   runs: InferenceRun[];
   videoTitles: Record<number, string>;
   onDelete: (id: number, force: boolean) => void;
+  /** Run ids picked for an A/B comparison. */
+  selected: number[];
+  onToggleSelect: (id: number) => void;
 }
 
 const BUTTON = "rounded border border-gray-700 px-2 py-1 text-xs text-gray-300";
 
-export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
+export function RunsTable({ runs, videoTitles, onDelete, selected, onToggleSelect }: RunsTableProps) {
   const [armed, setArmed] = useState<number | null>(null);
 
   if (runs.length === 0) {
@@ -22,6 +25,9 @@ export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
     <table className="w-full text-left text-sm text-gray-200">
       <thead>
         <tr className="border-b border-gray-800 text-gray-400">
+          <th className="px-4 py-2 font-normal">
+            <span className="sr-only">Compare</span>
+          </th>
           <th className="px-4 py-2 font-normal">Video</th>
           <th className="px-4 py-2 font-normal">Model</th>
           <th className="px-4 py-2 font-normal">Stride</th>
@@ -36,8 +42,24 @@ export function RunsTable({ runs, videoTitles, onDelete }: RunsTableProps) {
           const active = run.status === "pending" || run.status === "running";
           return (
             <tr key={run.id} className="border-b border-gray-900">
+              <td className="px-4 py-2">
+                <input
+                  type="checkbox"
+                  aria-label={`Select run ${run.id} for comparison`}
+                  checked={selected.includes(run.id)}
+                  disabled={run.status !== "succeeded"}
+                  onChange={() => onToggleSelect(run.id)}
+                />
+              </td>
               <td className="px-4 py-2">{videoTitles[run.video_id] ?? `Video ${run.video_id}`}</td>
-              <td className="px-4 py-2 text-gray-400">{run.model_name}</td>
+              <td className="px-4 py-2 text-gray-400">
+                {run.model_name}
+                {run.perturbation && (
+                  <span className="ml-2 rounded bg-amber-900/50 px-1.5 py-0.5 text-xs text-amber-200">
+                    {`Stress: ${run.perturbation.kind} ${run.perturbation.strength}`}
+                  </span>
+                )}
+              </td>
               <td className="px-4 py-2 text-gray-400">{run.frame_stride}</td>
               <td className="px-4 py-2 text-gray-400">
                 <div>{run.status}</div>
