@@ -272,3 +272,30 @@ def test_the_document_has_no_timing_key_when_nothing_was_measured(
 
     document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
     assert "timing" not in document
+
+
+def test_the_perturbation_reaches_the_adapter_and_the_document(
+    db_session, make_inference_job, fake_storage
+):
+    from app.tasks import inference_run
+
+    spec = {"kind": "blur", "strength": 3.0}
+    job, run = make_inference_job(perturbation=spec)
+    adapter = _StubAdapter()
+
+    inference_run(job.id, adapter=adapter)
+
+    assert adapter.requests[0].perturbation == spec
+    document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
+    assert document["perturbation"] == spec
+
+
+def test_a_run_without_perturbation_records_none(db_session, make_inference_job, fake_storage):
+    from app.tasks import inference_run
+
+    job, run = make_inference_job()
+    adapter = _StubAdapter()
+    inference_run(job.id, adapter=adapter)
+    assert adapter.requests[0].perturbation is None
+    document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
+    assert document["perturbation"] is None

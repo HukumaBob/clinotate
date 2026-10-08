@@ -417,7 +417,7 @@ def make_inference_job(db_session):
 
     created: list[tuple[int, int, int]] = []
 
-    def _make(frame_stride: int = 2):
+    def _make(frame_stride: int = 2, perturbation: dict | None = None):
         user_id = _existing_row_id(db_session, "users")
         video_id = db_session.execute(
             text(
@@ -451,6 +451,7 @@ def make_inference_job(db_session):
                 "weights_key": "models/1/best.pt",
                 "task_type": "detection",
                 "frame_stride": frame_stride,
+                "perturbation": perturbation,
             },
             created_by_id=user_id,
         )

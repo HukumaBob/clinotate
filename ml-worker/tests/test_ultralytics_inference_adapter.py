@@ -190,3 +190,23 @@ def test_a_malformed_speed_is_ignored_instead_of_failing_the_run(tmp_path):
     result = _adapter(model).infer(_request(video, 1), lambda done, total: None)
     assert result.timing is None
     assert len(result.frames) == 3
+
+
+class _MeanRecordingModel(_FakeModel):
+    def __init__(self):
+        super().__init__()
+        self.means = []
+
+    def __call__(self, image, conf, verbose):
+        self.means.append(float(image.mean()))
+        return super().__call__(image, conf, verbose)
+
+
+def test_the_perturbation_is_applied_before_the_model_sees_the_frame(tmp_path):
+    video = _write_video(tmp_path / "v.avi", frames=3)
+    plain, bright = _MeanRecordingModel(), _MeanRecordingModel()
+    _adapter(plain).infer(_request(video), lambda done, total: None)
+    request = _request(video)
+    request.perturbation = {"kind": "brightness", "strength": 50}
+    _adapter(bright).infer(request, lambda done, total: None)
+    assert all(b > p + 20 for b, p in zip(bright.means, plain.means))

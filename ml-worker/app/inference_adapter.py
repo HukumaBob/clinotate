@@ -21,6 +21,8 @@ class InferenceRequest:
     # Deliberately low: the screen filters by confidence on the client, so
     # anything the model might still call a detection has to be stored.
     confidence_floor: float = 0.05
+    # Stress test: {"kind", "strength"} applied to each frame before the model.
+    perturbation: dict | None = None
 
 
 @dataclass

@@ -14,6 +14,7 @@ import cv2
 
 from app.inference_adapter import InferenceRequest, InferenceResult
 from app.inference_timing import summarize_timing
+from app.perturbation import apply_perturbation
 
 _BOX_DIGITS = 5
 _CONFIDENCE_DIGITS = 4
@@ -89,6 +90,7 @@ class UltralyticsInferenceAdapter:
                 if index % request.frame_stride == 0:
                     ok, image = capture.retrieve()
                     if ok:
+                        image = apply_perturbation(image, request.perturbation, seed=index)
                         position_ms = capture.get(cv2.CAP_PROP_POS_MSEC)
                         if position_ms and position_ms > 0:
                             timestamp_ms = int(position_ms)

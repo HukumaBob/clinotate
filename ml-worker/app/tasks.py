@@ -1026,6 +1026,7 @@ def inference_run(job_id: int, adapter=None) -> None:
                     weights_path=weights_path,
                     task_type=job.payload["task_type"],
                     frame_stride=job.payload["frame_stride"],
+                    perturbation=job.payload.get("perturbation"),
                 ),
                 on_progress=_on_progress,
             )
@@ -1038,6 +1039,7 @@ def inference_run(job_id: int, adapter=None) -> None:
             },
             "fps": result.fps,
             "frame_stride": job.payload["frame_stride"],
+            "perturbation": job.payload.get("perturbation"),
             "classes": result.classes,
             "frames": result.frames,
         }
