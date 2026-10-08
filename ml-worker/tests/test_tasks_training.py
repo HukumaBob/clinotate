@@ -229,3 +229,125 @@ def test_log_buffer_is_thread_safe_under_concurrent_calls(db_session, training_j
     for prefix in ("a", "b"):
         for i in range(lines_per_thread):
             assert f"{prefix}-{i}" in logged
+
+
+import pytest
+
+
+@pytest.fixture
+def parent_version(db_session, make_job_and_run):
+    """A finished ModelVersion plus a pending child run pointing at it."""
+    from app.models import ModelVersion, TaskType
+
+    parent_job, parent_run = make_job_and_run()
+    parent = ModelVersion(
+        training_run_id=parent_run.id,
+        name="parent-model",
+        task_type=TaskType.DETECTION,
+        storage_key=f"models/{parent_run.id}/best.pt",
+    )
+    db_session.add(parent)
+    db_session.commit()
+    db_session.refresh(parent)
+
+    job, run = make_job_and_run()
+    run.base_model = parent.name
+    run.base_model_version_id = parent.id
+    db_session.commit()
+    yield parent, job, run
+
+    # make_job_and_run's teardown deletes the parent run (and its version)
+    # before the child; the child's FK has no cascade, so detach it first.
+    db_session.rollback()
+    db_session.query(TrainingRun).filter_by(id=run.id).update(
+        {"base_model_version_id": None}
+    )
+    db_session.commit()
+
+
+def _download_by_key(fake_storage, blobs):
+    original = fake_storage.download
+
+    def download(key):
+        if key in blobs:
+            return blobs[key]
+        return original(key)
+
+    fake_storage.download = download
+
+
+def test_fine_tune_downloads_the_parent_weights_and_passes_a_local_path(
+    db_session, parent_version, fake_storage
+):
+    from app.tasks import model_train
+
+    parent, job, run = parent_version
+    _download_by_key(fake_storage, {parent.storage_key: b"parent-weights"})
+    seen = {}
+
+    class _Spy:
+        def train(self, request, on_log, on_epoch, should_stop):
+            seen["base_model"] = request.base_model
+            seen["bytes"] = Path(request.base_model).read_bytes()
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            return TrainingResult(weights_path=weights)
+
+    model_train(job.id, adapter=_Spy())
+    db_session.refresh(run)
+
+    assert run.status == TrainingRunStatus.SUCCEEDED
+    assert Path(seen["base_model"]).name == "parent.pt"
+    assert seen["bytes"] == b"parent-weights"
+    version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
+    assert version.name == f"parent-model-ft-run{run.id}"
+
+
+def test_a_pretrained_start_keeps_the_weights_name_and_old_version_name(
+    db_session, make_job_and_run, fake_storage
+):
+    from app.tasks import model_train
+
+    job, run = make_job_and_run()
+    seen = {}
+
+    class _Spy:
+        def train(self, request, on_log, on_epoch, should_stop):
+            seen["base_model"] = request.base_model
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            return TrainingResult(weights_path=weights)
+
+    model_train(job.id, adapter=_Spy())
+
+    assert seen["base_model"] == "yolo11n.pt"
+    version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
+    assert version.name == f"yolo11n-run{run.id}"
+
+
+def test_a_missing_parent_weights_object_fails_the_run_readably(
+    db_session, parent_version, fake_storage
+):
+    from app.tasks import model_train
+
+    parent, job, run = parent_version
+
+    original = fake_storage.download
+
+    def missing(key):
+        if key == parent.storage_key:
+            raise FileNotFoundError(key)
+        return original(key)
+
+    fake_storage.download = missing
+
+    class _NeverCalled:
+        def train(self, *a, **k):
+            raise AssertionError("must not start training without the parent weights")
+
+    model_train(job.id, adapter=_NeverCalled())
+    db_session.refresh(run)
+
+    assert run.status == TrainingRunStatus.FAILED
+    assert "parent-model" in run.error
+    assert "weights" in run.error.lower()

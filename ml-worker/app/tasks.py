@@ -851,11 +851,29 @@ def model_train(job_id: int, adapter=None) -> None:
             with zipfile.ZipFile(archive_path) as archive:
                 archive.extractall(dataset_dir)
 
+            base_model = run.base_model
+            if run.base_model_version_id is not None:
+                parent = session.get(ModelVersion, run.base_model_version_id)
+                if parent is None:
+                    raise RuntimeError(
+                        f"Parent model version {run.base_model_version_id} no longer exists"
+                    )
+                try:
+                    parent_bytes = storage.download(parent.storage_key)
+                except Exception as exc:  # noqa: BLE001 -- re-raised with context
+                    raise RuntimeError(
+                        f"Could not fetch the weights of parent model {parent.name!r} "
+                        f"({parent.storage_key}): {exc}"
+                    ) from exc
+                parent_path = work / "parent.pt"
+                parent_path.write_bytes(parent_bytes)
+                base_model = str(parent_path)
+
             result = adapter.train(
                 TrainingRequest(
                     dataset_dir=dataset_dir,
                     task_type=run.task_type.value,
-                    base_model=run.base_model,
+                    base_model=base_model,
                     config=run.config,
                     output_dir=output_dir,
                 ),
@@ -899,9 +917,13 @@ def model_train(job_id: int, adapter=None) -> None:
                 )
                 artifact_keys.append(artifact_key)
 
+        if run.base_model_version_id is not None:
+            version_name = f"{run.base_model}-ft-run{run.id}"
+        else:
+            version_name = f"{run.base_model.rsplit('.', 1)[0]}-run{run.id}"
         version = ModelVersion(
             training_run_id=run.id,
-            name=f"{run.base_model.rsplit('.', 1)[0]}-run{run.id}",
+            name=version_name,
             task_type=run.task_type,
             storage_key=storage_key,
             metrics=result.metrics,

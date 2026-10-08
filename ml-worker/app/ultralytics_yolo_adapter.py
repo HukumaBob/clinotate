@@ -155,8 +155,14 @@ def weights_for_task(base_model: str, task_type: str) -> str:
     """Return `base_model` carrying the suffix its task requires.
 
     A caller that already named a task-specific checkpoint keeps it, so an
-    explicit yolo11m-seg.pt is never rewritten.
+    explicit yolo11m-seg.pt is never rewritten. A local path is returned
+    untouched.
     """
+    if "/" in base_model or "\\" in base_model:
+        # A local file (a fine-tune parent downloaded by the worker) names
+        # exactly the weights to load; appending a task suffix would point
+        # at a file that does not exist.
+        return base_model
     suffix = _TASK_SUFFIX.get(task_type, "")
     if not suffix:
         return base_model

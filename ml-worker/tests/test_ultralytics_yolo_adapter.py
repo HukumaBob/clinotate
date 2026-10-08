@@ -385,3 +385,10 @@ def test_train_reports_metrics_per_epoch_and_returns_collections(tmp_path):
     assert result.per_class[0]["class"] == "polyp"
     assert result.confusion["labels"][-1] == "background"
     assert [p.name for p in result.artifacts] == ["results.csv"]
+
+
+def test_weights_for_task_leaves_a_local_path_untouched():
+    from app.ultralytics_yolo_adapter import weights_for_task
+
+    assert weights_for_task("/tmp/xyz/parent.pt", "segmentation") == "/tmp/xyz/parent.pt"
+    assert weights_for_task("/tmp/xyz/parent.pt", "classification") == "/tmp/xyz/parent.pt"

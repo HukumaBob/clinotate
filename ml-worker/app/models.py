@@ -187,6 +187,10 @@ class TrainingRun(Base):
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
     adapter: Mapped[str] = mapped_column(String(100))
     base_model: Mapped[str] = mapped_column(String(200))
+    # Plain int, not a ForeignKey("model_versions.id"): the real constraint
+    # lives in the backend's migration; declaring it here would add a
+    # self-referential mapper dependency ml-worker has no need for.
+    base_model_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     task_type: Mapped[TaskType] = mapped_column(Enum(TaskType))
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[TrainingRunStatus] = mapped_column(
