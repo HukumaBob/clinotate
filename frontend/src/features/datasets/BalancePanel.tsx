@@ -121,6 +121,18 @@ export function BalancePanel({
         )}
       </div>
 
+      {(report.qc_origin ?? []).length > 0 && (
+        <div
+          data-testid="qc-origin-warning"
+          className="rounded border border-amber-700 bg-amber-950 px-3 py-2 text-xs text-amber-200"
+        >
+          {(report.qc_origin ?? []).reduce((sum, o) => sum + o.frame_count, 0)} frames from QC
+          videos (run{" "}
+          {(report.qc_origin ?? []).map((o) => `#${o.run_id}`).join(", ")}) are included.
+          Evaluating a model on those videos will be optimistic.
+        </div>
+      )}
+
       <div className="flex gap-4 text-xs text-gray-400">
         <span data-testid="total-frames">Frames: {report.total_frames}</span>
         <span data-testid="negative-frames">Negatives: {report.negative_frames}</span>

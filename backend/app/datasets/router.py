@@ -15,7 +15,7 @@ from app.datasets.schemas import (
     ExportDownloadRead,
     ExportRequest,
 )
-from app.datasets.service import compute_balance, create_dataset
+from app.datasets.service import compute_balance, create_dataset, qc_origin_for_sequences
 from app.db import get_session
 from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
@@ -128,6 +128,7 @@ def dataset_balance(payload: BalanceRequest, session: Session = Depends(get_sess
         "recommendations": [
             {"kind": r.kind, "message": r.message} for r in report.recommendations
         ],
+        "qc_origin": qc_origin_for_sequences(session, payload.sequence_ids),
     }
 
 

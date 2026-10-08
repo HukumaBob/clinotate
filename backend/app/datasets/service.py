@@ -759,3 +759,25 @@ def grouping_keys_for_sequences(
         .all()
     )
     return {row.id: grouping_key(row.video_id, row.id) for row in rows}
+
+
+def qc_origin_for_sequences(session: Session, sequence_ids: list[int]) -> list[dict]:
+    """Sequences in the selection that were committed from a QC run.
+
+    Training on them puts frames of a QC video into train, so an evaluation of
+    a model on that video is optimistic. Reported, never blocked.
+    """
+    if not sequence_ids:
+        return []
+    rows = (
+        session.query(Sequence.id, Sequence.origin_qc_run_id, func.count(Frame.id))
+        .outerjoin(Frame, Frame.sequence_id == Sequence.id)
+        .filter(Sequence.id.in_(sequence_ids), Sequence.origin_qc_run_id.is_not(None))
+        .group_by(Sequence.id, Sequence.origin_qc_run_id)
+        .order_by(Sequence.id)
+        .all()
+    )
+    return [
+        {"sequence_id": sid, "run_id": run_id, "frame_count": count}
+        for sid, run_id, count in rows
+    ]

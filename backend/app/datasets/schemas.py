@@ -33,6 +33,12 @@ class RecommendationRead(BaseModel):
     message: str
 
 
+class QcOriginRead(BaseModel):
+    sequence_id: int
+    run_id: int
+    frame_count: int
+
+
 class BalanceReportRead(BaseModel):
     classes: list[ClassCountRead]
     total_frames: int
@@ -41,6 +47,7 @@ class BalanceReportRead(BaseModel):
     threshold: int
     metrics: dict
     recommendations: list[RecommendationRead] = Field(default_factory=list)
+    qc_origin: list[QcOriginRead] = Field(default_factory=list)
 
 
 class DatasetCreate(BaseModel):

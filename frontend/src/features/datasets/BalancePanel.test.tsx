@@ -31,6 +31,22 @@ function renderPanel(overrides = {}) {
   return props;
 }
 
+describe("BalancePanel QC warning", () => {
+  it("warns when selected sequences came from QC runs, without disabling anything", () => {
+    renderPanel({
+      report: { ...REPORT, qc_origin: [{ sequence_id: 5, run_id: 7, frame_count: 12 }] },
+    });
+    const warning = screen.getByTestId("qc-origin-warning");
+    expect(warning).toHaveTextContent("12 frames");
+    expect(warning).toHaveTextContent("#7");
+  });
+
+  it("shows no warning without QC-origin sequences", () => {
+    renderPanel({ report: { ...REPORT, qc_origin: [] } });
+    expect(screen.queryByTestId("qc-origin-warning")).toBeNull();
+  });
+});
+
 describe("BalancePanel", () => {
   it("leads with the under-threshold classes", () => {
     renderPanel();

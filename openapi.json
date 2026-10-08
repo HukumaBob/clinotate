@@ -4650,6 +4650,13 @@
             },
             "type": "array",
             "title": "Recommendations"
+          },
+          "qc_origin": {
+            "items": {
+              "$ref": "#/components/schemas/QcOriginRead"
+            },
+            "type": "array",
+            "title": "Qc Origin"
           }
         },
         "type": "object",
@@ -6359,6 +6366,29 @@
           "frame_id"
         ],
         "title": "QcFlagRead"
+      },
+      "QcOriginRead": {
+        "properties": {
+          "sequence_id": {
+            "type": "integer",
+            "title": "Sequence Id"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "frame_count": {
+            "type": "integer",
+            "title": "Frame Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence_id",
+          "run_id",
+          "frame_count"
+        ],
+        "title": "QcOriginRead"
       },
       "RankQualityRequest": {
         "properties": {
