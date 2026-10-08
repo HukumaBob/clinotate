@@ -1512,6 +1512,44 @@ MinIO frame objects.
 - On phase completion, change its heading to `— DONE (YYYY-MM-DD)` and add
   a one-line summary + the deviation log, following the Phase 1 example.
 
+### Phase 3: QC screen, sub-project 4 (A/B comparison and stress tests) — DONE (2026-10-08, browser-verified)
+
+Design: [docs/specs/2026-10-08-qc-ab-stress-design.md](docs/specs/2026-10-08-qc-ab-stress-design.md).
+Plan: [docs/plans/2026-10-08-qc-ab-stress.md](docs/plans/2026-10-08-qc-ab-stress.md).
+
+Two finished runs of one video are compared frame by frame on `/qc/compare/:runA/:runB`.
+A frame disagrees when the sets of class *names* found by A and B differ (no IoU);
+each side uses its own confidence threshold. "A wrong" / "B wrong" create an
+ordinary FP/FN flag on that run (FP if the wrong side found a class the other did
+not, FN if it missed one), so Commit is unchanged. A stress test is an ordinary run
+with a `perturbation` (`gaussian_noise`, `blur`, `brightness`, `jpeg`; ranges in
+`backend/app/inference/schemas.py`, mirrored in `ml-worker/app/perturbation.py`)
+applied to each frame before the model; it is compared against the clean run on the
+same screen. Also in this slice: the dataset balance panel warns when the selection
+includes QC-origin sequences (decided as "warn, never block"; commit `6706880`).
+
+**Measured on the real stack:** clean and blur-8 runs on the 660 s video at stride 50
+(396 frames) each took under 30 s; the compare endpoint found 50 disagreements out of
+396 frames. No VRAM trouble observed (about 1.2 GB used during both runs).
+
+**Deviations from the spec:**
+- The route is `GET /inference/compare` (not `/qc/compare`), under the existing router prefix.
+- Each disagreement carries `timestamp_ms`, so the page can seek and flag without another lookup.
+- The NMS slider is not part of the comparison; only confidence is (class presence is unaffected by NMS).
+
+**Things learned the hard way during verification:** the recreated `ml-worker` container
+had an image without `inference_run` (earlier sessions had copied code into the
+container by hand), so it dropped the job message with a `KeyError` and the run stayed
+`pending` until the code was copied in again; a `docker compose up` while another
+project held host ports 5432 and 6379 left our `postgres` and `redis` without a published
+port or network. Check `docker compose ps` ports and the worker's registered tasks before
+blaming the feature.
+
+**Deferred:** `AbComparePage` re-renders on every video clock tick, including the
+disagreement ticks of the timeline; on a very long video with tens of thousands of
+disagreements this may jank (extract the ticks into a memoised component). Sub-project 5
+(Grad-CAM/reels) stays backlog. Runs #120-#122 on the dev database are not from this work.
+
 ### Phase 2b: Train screen — DONE (2026-08-20)
 
 Brainstorming began on the Train screen and the `training` module. No spec

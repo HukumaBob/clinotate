@@ -1,6 +1,6 @@
 # QC screen, sub-project 4: A/B comparison and stress tests
 
-Date: 2026-10-08. Status: design approved, plan not written. Follows
+Date: 2026-10-08. Status: implemented and browser-verified. Follows
 [inference runs](2026-10-06-qc-inference-runs-design.md),
 [inspection](2026-10-06-qc-inspection-design.md) and
 [flagging](2026-10-07-qc-flagging-design.md).
@@ -36,7 +36,7 @@ needed to decide who is right).
   "blur" | "brightness" | "jpeg", "strength": number}`. `POST /runs` accepts it
   optionally; kind and strength range are validated, a bad value is a 422.
   Alembic migration, nullable, no backfill.
-- `GET /qc/compare?run_a=&run_b=&conf_a=&conf_b=` returns
+- `GET /inference/compare?run_a=&run_b=&conf_a=&conf_b=` returns
   `{frames: [{frame, only_a: [class], only_b: [class]}], summary: {total,
   disagreements, ...}}`. 409 with a plain reason when the runs have different
   videos, either is not `succeeded`, or `frame_stride` differs. Disagreements
