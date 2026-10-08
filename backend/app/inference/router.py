@@ -35,6 +35,7 @@ def create_run(
             video_id=body.video_id,
             model_version_id=body.model_version_id,
             frame_stride=body.frame_stride,
+            perturbation=body.perturbation.model_dump() if body.perturbation else None,
             created_by=current_user,
         )
     except (service.VideoNotFound, ModelVersionNotFound) as exc:

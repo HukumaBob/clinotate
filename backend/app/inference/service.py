@@ -65,6 +65,7 @@ def create_inference_run(
     model_version_id: int,
     frame_stride: int,
     created_by: User,
+    perturbation: dict | None = None,
 ) -> InferenceRun:
     video = session.get(Video, video_id)
     if video is None:
@@ -88,6 +89,7 @@ def create_inference_run(
         model_version_id=version.id,
         model_name=version.name,
         frame_stride=frame_stride,
+        perturbation=perturbation,
         created_by_id=created_by.id,
     )
     session.add(run)
@@ -105,6 +107,7 @@ def create_inference_run(
             "weights_key": version.storage_key,
             "task_type": version.task_type.value,
             "frame_stride": frame_stride,
+            "perturbation": perturbation,
         },
         created_by_id=created_by.id,
     )

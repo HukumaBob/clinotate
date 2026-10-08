@@ -1,8 +1,33 @@
+import math
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.inference.models import InferenceRunStatus, QcFlagKind
+
+
+# Mirrored by ml-worker/app/perturbation.py; keep the kinds in step.
+PERTURBATION_RANGES = {
+    "gaussian_noise": (1.0, 100.0),
+    "blur": (0.5, 20.0),
+    "brightness": (-100.0, 100.0),
+    "jpeg": (5.0, 95.0),
+}
+
+
+class PerturbationSpec(BaseModel):
+    kind: Literal["gaussian_noise", "blur", "brightness", "jpeg"]
+    strength: float
+
+    @model_validator(mode="after")
+    def _strength_in_range(self):
+        low, high = PERTURBATION_RANGES[self.kind]
+        if not math.isfinite(self.strength) or not (low <= self.strength <= high):
+            raise ValueError(f"{self.kind} strength must be between {low} and {high}")
+        if self.kind == "brightness" and self.strength == 0:
+            raise ValueError("brightness strength must not be 0")
+        return self
 
 
 class InferenceRunCreate(BaseModel):
@@ -11,6 +36,7 @@ class InferenceRunCreate(BaseModel):
     # Upper bound is a sanity limit, not a product rule: a stride beyond
     # any plausible video length just yields frame 0.
     frame_stride: int = Field(default=1, ge=1, le=1000)
+    perturbation: PerturbationSpec | None = None
 
 
 class InferenceRunRead(BaseModel):
@@ -22,6 +48,7 @@ class InferenceRunRead(BaseModel):
     model_name: str
     job_id: int | None
     frame_stride: int
+    perturbation: dict | None = None
     status: InferenceRunStatus
     frames_total: int
     frames_processed: int

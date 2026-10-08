@@ -307,3 +307,35 @@ def test_delete_also_removes_the_job_row(committed_inference_rows):
         assert session.get(Job, run["job_id"]) is None
     finally:
         session.close()
+
+
+def test_create_run_stores_perturbation_and_puts_it_in_the_job_payload(committed_inference_rows, _no_celery):
+    headers = _register_and_login("perturb1@example.com")
+    response = _create(
+        headers, committed_inference_rows,
+        perturbation={"kind": "blur", "strength": 3},
+    )
+    assert response.status_code == 202
+    body = response.json()
+    assert body["perturbation"] == {"kind": "blur", "strength": 3.0}
+    session = db_module.SessionLocal()
+    try:
+        job = session.get(Job, body["job_id"])
+        assert job.payload["perturbation"] == {"kind": "blur", "strength": 3.0}
+    finally:
+        session.close()
+
+
+def test_create_run_without_perturbation_reads_back_null(committed_inference_rows, _no_celery):
+    headers = _register_and_login("perturb2@example.com")
+    response = _create(headers, committed_inference_rows)
+    assert response.json()["perturbation"] is None
+
+
+def test_create_run_rejects_a_bad_perturbation(committed_inference_rows):
+    headers = _register_and_login("perturb3@example.com")
+    response = _create(
+        headers, committed_inference_rows,
+        perturbation={"kind": "blur", "strength": 99},
+    )
+    assert response.status_code == 422

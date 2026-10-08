@@ -5438,6 +5438,16 @@
             "minimum": 1.0,
             "title": "Frame Stride",
             "default": 1
+          },
+          "perturbation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PerturbationSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -5486,6 +5496,18 @@
           "frame_stride": {
             "type": "integer",
             "title": "Frame Stride"
+          },
+          "perturbation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perturbation"
           },
           "status": {
             "$ref": "#/components/schemas/InferenceRunStatus"
@@ -6115,6 +6137,30 @@
           "created_at"
         ],
         "title": "ModelVersionRead"
+      },
+      "PerturbationSpec": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "gaussian_noise",
+              "blur",
+              "brightness",
+              "jpeg"
+            ],
+            "title": "Kind"
+          },
+          "strength": {
+            "type": "number",
+            "title": "Strength"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "strength"
+        ],
+        "title": "PerturbationSpec"
       },
       "PredictionsRead": {
         "properties": {
