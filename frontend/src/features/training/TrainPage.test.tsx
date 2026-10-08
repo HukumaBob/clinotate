@@ -513,5 +513,87 @@ describe("TrainPage", () => {
 
       expect(await screen.findByRole("alert")).toHaveTextContent("Model is the parent of run 12.");
     });
+
+    it("keeps the latest dataset's catalog when responses arrive out of order", async () => {
+      const resolvers: Record<number, (v: unknown) => void> = {};
+      const two = { id: 2, name: "polyps-v2", task_type: "detection", exported: true };
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: unknown) => {
+        if (path === "/datasets") {
+          return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }, two] };
+        }
+        if (path === "/training/runs" || path === "/training/models") return { data: [] };
+        if (path === "/training/base-models") {
+          const id = (opts as { params: { query: { dataset_id: number } } }).params.query.dataset_id;
+          return new Promise((resolve) => {
+            resolvers[id] = resolve;
+          });
+        }
+        return { data: null };
+      }) as never);
+      const opt = (w: string) => ({
+        kind: "pretrained", weights: w, label: w, family: "yolo11", size: "n", note: null,
+        model_version_id: null,
+      });
+      render(<TrainPage />);
+      await waitFor(() => expect(resolvers[1]).toBeDefined());
+      fireEvent.change(screen.getByLabelText(/dataset/i), { target: { value: "2" } });
+      await waitFor(() => expect(resolvers[2]).toBeDefined());
+
+      await act(async () => {
+        resolvers[2]({ data: [opt("new.pt")] });
+      });
+      await act(async () => {
+        resolvers[1]({ data: [opt("old.pt")] });
+      });
+
+      expect(screen.getByRole("option", { name: "new.pt" })).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: "old.pt" })).not.toBeInTheDocument();
+    });
+
+    it("shows an error when the base-models request throws", async () => {
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
+        if (path === "/datasets") {
+          return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        }
+        if (path === "/training/base-models") throw new Error("network down");
+        return { data: [] };
+      }) as never);
+      render(<TrainPage />);
+
+      expect(await screen.findByText("Could not load base models.")).toBeInTheDocument();
+    });
+
+    it("reloads the catalog when versions are refreshed, keeping a valid selection", async () => {
+      const models: unknown[] = [];
+      const base = catalog.slice(0, 1);
+      let current: unknown[] = base;
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
+        if (path === "/datasets") {
+          return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        }
+        if (path === "/training/runs") return { data: [] };
+        if (path === "/training/models") return { data: models };
+        if (path === "/training/base-models") return { data: current };
+        return { data: null };
+      }) as never);
+      vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
+      models.push({
+        id: 7, training_run_id: 3, name: "polyps-v1-run7", task_type: "detection", metrics: {},
+        is_active: false, base_model: "yolo11n.pt", base_model_version_id: null,
+        created_at: "2026-08-21T00:00:00Z",
+      });
+      render(<TrainPage />);
+      await screen.findByRole("option", { name: "yolo11n.pt" });
+      expect(screen.queryByRole("option", { name: /polyps-v1-run7/ })).not.toBeInTheDocument();
+
+      current = catalog; // backend now offers the new version
+      fireEvent.click(await screen.findByRole("button", { name: /^Delete$/ }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /^Confirm$/ }));
+      });
+
+      expect(await screen.findByRole("option", { name: /polyps-v1-run7/ })).toBeInTheDocument();
+      expect(screen.getByLabelText(/base model/i)).toHaveValue("pretrained:yolo11n.pt");
+    });
   });
 });

@@ -62,23 +62,46 @@ export function TrainPage() {
     );
   }, []);
 
+  // Only the newest base-models request may write state: a slower response for
+  // an earlier dataset would otherwise leave a wrong-task-type catalog selectable.
+  const baseModelsRequestRef = useRef(0);
+  const baseModelsDatasetRef = useRef<number | null>(null);
+
+  const loadBaseModels = useCallback(async (datasetId: number, reset = true) => {
+    const requestId = ++baseModelsRequestRef.current;
+    baseModelsDatasetRef.current = datasetId;
+    if (reset) {
+      setBaseModels([]);
+    }
+    setBaseModelsError(null);
+    try {
+      const { data, error } = await apiClient.GET("/training/base-models", {
+        params: { query: { dataset_id: datasetId } },
+      });
+      if (requestId !== baseModelsRequestRef.current) {
+        return;
+      }
+      if (error || !data) {
+        setBaseModelsError("Could not load base models.");
+        return;
+      }
+      setBaseModels(data);
+    } catch {
+      if (requestId === baseModelsRequestRef.current) {
+        setBaseModelsError("Could not load base models.");
+      }
+    }
+  }, []);
+
   const refreshVersions = useCallback(async () => {
     const { data } = await apiClient.GET("/training/models");
     setVersions(data ?? []);
-  }, []);
-
-  const loadBaseModels = useCallback(async (datasetId: number) => {
-    setBaseModels([]);
-    setBaseModelsError(null);
-    const { data, error } = await apiClient.GET("/training/base-models", {
-      params: { query: { dataset_id: datasetId } },
-    });
-    if (error || !data) {
-      setBaseModelsError("Could not load base models.");
-      return;
+    // The catalog's "Your models" group mirrors the versions list. Reload
+    // without clearing so a still-valid selection survives.
+    if (baseModelsDatasetRef.current !== null) {
+      loadBaseModels(baseModelsDatasetRef.current, false);
     }
-    setBaseModels(data);
-  }, []);
+  }, [loadBaseModels]);
 
   const refreshRuns = useCallback(async () => {
     const { data } = await apiClient.GET("/training/runs");
