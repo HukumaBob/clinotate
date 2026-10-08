@@ -1,6 +1,6 @@
 # QC screen, sub-project 5A: review reels
 
-Date: 2026-10-08. Status: design approved, plan not written. Follows
+Date: 2026-10-08. Status: implemented and browser-verified. Follows
 [flagging](2026-10-07-qc-flagging-design.md) and
 [inspection](2026-10-06-qc-inspection-design.md).
 

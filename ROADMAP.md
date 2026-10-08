@@ -1550,6 +1550,33 @@ disagreement ticks of the timeline; on a very long video with tens of thousands 
 disagreements this may jank (extract the ticks into a memoised component). Sub-project 5
 (Grad-CAM/reels) stays backlog. Runs #120-#122 on the dev database are not from this work.
 
+### Phase 3: QC screen, sub-project 5A (review reels) — DONE (2026-10-08, browser-verified)
+
+Design: [docs/specs/2026-10-08-qc-reels-design.md](docs/specs/2026-10-08-qc-reels-design.md).
+Plan: [docs/plans/2026-10-08-qc-reels.md](docs/plans/2026-10-08-qc-reels.md).
+
+A "Review reels" panel on `/qc/:runId`: clips around doubtful moments, built on the
+client from the stored predictions, the flicker events the screen already computes and
+a confidence grey zone (default 0.25 to 0.5, inclusive). Clicking a clip loops it;
+frames are flagged with the existing buttons and F/N keys; a clip shows "Reviewed" when
+a flag lies inside it. No backend changes. Sub-project 5 was split: B (auto-label
+export) waits for the user's questions, C (Grad-CAM) is deferred.
+
+**Ruling:** "clips closer than 2 s merge" is measured between raw moments, before the
+1 s padding.
+
+**Verified in the browser on run #82** (read-only; no flags were created, because #82 is
+the user's): 75 clips listed with reasons and frame counts; the "Reviewed" marks matched
+the flags already on the run; looping held the playhead inside the clip (it ran to the
+clip end and wrapped to the start); Next/Previous reel and deselecting worked; a new band
+changed the list and reset the active clip. Not exercised live: creating and removing a
+flag inside a clip (covered by the `isReviewed` unit test) and the empty state (a run with
+flicker events is never empty; covered by a unit test).
+
+**Deferred:** on a stride-1 run the merge chain produces some very long clips (the longest
+on #82 spans 47 s and 1416 frames), which is not "a clip" any more; consider capping the
+clip length or splitting long chains. Sub-project 5B and 5C as above.
+
 ### Phase 2b: Train screen — DONE (2026-08-20)
 
 Brainstorming began on the Train screen and the `training` module. No spec
