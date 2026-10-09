@@ -1,3 +1,4 @@
+import app.main  # noqa: F401 -- registers every model on Base.metadata for create_all
 import pytest
 
 from app.datasets.models import TaskType
