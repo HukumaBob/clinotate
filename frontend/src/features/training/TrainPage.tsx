@@ -4,6 +4,7 @@ import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
 import { ModelInfoPanel } from "./ModelInfoPanel";
 import { ModelVersionsTable } from "./ModelVersionsTable";
+import type { SettingsSchema } from "./settingsLogic";
 import { TrainConfigForm, type DatasetOption, type TrainConfigValues } from "./TrainConfigForm";
 import { TrainRunPanel } from "./TrainRunPanel";
 
@@ -23,6 +24,8 @@ export function TrainPage() {
   const [versions, setVersions] = useState<ModelVersionRead[]>([]);
   const [baseModels, setBaseModels] = useState<BaseModelOption[]>([]);
   const [baseModelsError, setBaseModelsError] = useState<string | null>(null);
+  const [settingsSchema, setSettingsSchema] = useState<SettingsSchema | null>(null);
+  const [settingsSchemaError, setSettingsSchemaError] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<TrainingRunRead | null>(null);
   const [logText, setLogText] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -58,6 +61,13 @@ export function TrainPage() {
         id: dataset.id,
         name: dataset.name,
         exported: Boolean((dataset as { exported?: boolean }).exported),
+        taskType: dataset.task_type,
+        itemCount: dataset.item_count,
+        splitCounts: dataset.split_counts,
+        classes: (
+          (dataset.balance_metrics as { classes?: { name: string; instances: number }[] })
+            .classes ?? []
+        ).map(({ name, instances }) => ({ name, instances })),
       })),
     );
   }, []);
@@ -92,6 +102,41 @@ export function TrainPage() {
       }
     }
   }, []);
+
+  // Same newest-request-wins rule as the catalog: a slow response for an
+  // earlier dataset must not replace the current dataset's settings.
+  const settingsSchemaRequestRef = useRef(0);
+
+  const loadSettingsSchema = useCallback(async (datasetId: number) => {
+    const requestId = ++settingsSchemaRequestRef.current;
+    setSettingsSchema(null);
+    setSettingsSchemaError(null);
+    try {
+      const { data, error } = await apiClient.GET("/training/settings-schema", {
+        params: { query: { dataset_id: datasetId } },
+      });
+      if (requestId !== settingsSchemaRequestRef.current) {
+        return;
+      }
+      if (error || !data) {
+        setSettingsSchemaError("Could not load training settings.");
+        return;
+      }
+      setSettingsSchema(data);
+    } catch {
+      if (requestId === settingsSchemaRequestRef.current) {
+        setSettingsSchemaError("Could not load training settings.");
+      }
+    }
+  }, []);
+
+  const handleDatasetChange = useCallback(
+    (datasetId: number) => {
+      loadBaseModels(datasetId);
+      loadSettingsSchema(datasetId);
+    },
+    [loadBaseModels, loadSettingsSchema],
+  );
 
   const refreshVersions = useCallback(async () => {
     const { data } = await apiClient.GET("/training/models");
@@ -187,10 +232,9 @@ export function TrainPage() {
           ...(values.baseModelVersionId !== null
             ? { base_model_version_id: values.baseModelVersionId }
             : { base_model: values.baseModel }),
-          epochs: values.epochs,
-          batch: values.batch,
-          imgsz: values.imgsz,
-          advanced: {},
+          ...(values.name ? { name: values.name } : {}),
+          ...(values.note ? { note: values.note } : {}),
+          settings: values.settings,
         },
       });
       if (error) {
@@ -275,19 +319,21 @@ export function TrainPage() {
         </div>
       )}
 
-      <div className="grid flex-1 grid-cols-3 gap-6 overflow-hidden">
-        <div className="overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
+      <div className="grid flex-1 grid-cols-5 gap-6 overflow-hidden">
+        <div className="col-span-2 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
           <TrainConfigForm
             datasets={datasets}
             disabled={submitPending}
             onSubmit={handleSubmit}
             baseModels={baseModels}
             baseModelsError={baseModelsError}
-            onDatasetChange={loadBaseModels}
+            settingsSchema={settingsSchema}
+            settingsSchemaError={settingsSchemaError}
+            onDatasetChange={handleDatasetChange}
           />
         </div>
 
-        <div className="col-span-2 flex flex-col gap-6 overflow-hidden">
+        <div className="col-span-3 flex flex-col gap-6 overflow-hidden">
           {/* Log and metrics are two views of the same run and are never
               needed at once, so they share this column as tabs rather than
               stacking: stacked, each got half the height and its own inner

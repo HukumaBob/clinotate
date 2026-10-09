@@ -1,7 +1,18 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { settingsSchemaFixture } from "./testFixtures";
 import { TrainPage } from "./TrainPage";
+
+const datasetRow = (id: number, name: string) => ({
+  id,
+  name,
+  task_type: "detection",
+  exported: true,
+  item_count: 110,
+  split_counts: { train: 80, val: 20, test: 10 },
+  balance_metrics: { classes: [{ name: "polyp", instances: 40, frames: 30 }] },
+});
 
 vi.mock("../../shared/api/client", () => ({
   apiClient: { GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
@@ -14,13 +25,16 @@ describe("TrainPage", () => {
     vi.clearAllMocks();
     vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
       if (path === "/datasets") {
-        return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        return { data: [datasetRow(1, "polyps-v1")] };
       }
       if (path === "/training/runs") {
         return { data: [] };
       }
       if (path === "/training/models") {
         return { data: [] };
+      }
+      if (path === "/training/settings-schema") {
+        return { data: settingsSchemaFixture };
       }
       return { data: null };
     });
@@ -44,7 +58,7 @@ describe("TrainPage", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
       if (path === "/datasets") {
-        return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        return { data: [datasetRow(1, "polyps-v1")] };
       }
       if (path === "/training/runs") {
         return {
@@ -77,6 +91,7 @@ describe("TrainPage", () => {
       if (path === "/training/runs/{run_id}/log") {
         return { data: { text: "epoch 1/10\n", offset: 12, status: "running" } };
       }
+      if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
       return { data: [] };
     });
 
@@ -108,7 +123,7 @@ describe("TrainPage", () => {
     let logOffset = 12;
     vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
       if (path === "/datasets") {
-        return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        return { data: [datasetRow(1, "polyps-v1")] };
       }
       if (path === "/training/runs") {
         return {
@@ -144,6 +159,7 @@ describe("TrainPage", () => {
         logOffset = responseOffset;
         return { data: { text, offset: responseOffset, status: "running" } };
       }
+      if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
       return { data: [] };
     });
 
@@ -182,7 +198,7 @@ describe("TrainPage", () => {
     let logCallCount = 0;
     vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
       if (path === "/datasets") {
-        return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        return { data: [datasetRow(1, "polyps-v1")] };
       }
       if (path === "/training/runs") {
         return {
@@ -235,6 +251,7 @@ describe("TrainPage", () => {
           ],
         };
       }
+      if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
       return { data: [] };
     });
     vi.mocked(apiClient.POST).mockResolvedValue({ data: { id: 7, status: "pending" }, error: undefined });
@@ -277,7 +294,7 @@ describe("TrainPage", () => {
     let runStatus = "running";
     vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
       if (path === "/datasets") {
-        return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        return { data: [datasetRow(1, "polyps-v1")] };
       }
       if (path === "/training/runs") {
         return {
@@ -313,6 +330,7 @@ describe("TrainPage", () => {
       if (path === "/training/runs/{run_id}/log") {
         return { data: { text: "epoch 1/10\n", offset: 12, status: runStatus } };
       }
+      if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
       return { data: [] };
     });
 
@@ -348,7 +366,7 @@ describe("TrainPage", () => {
   it("swaps the log for the metrics pane when a model's Info is opened", async () => {
     vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
       if (path === "/datasets") {
-        return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+        return { data: [datasetRow(1, "polyps-v1")] };
       }
       if (path === "/training/runs") return { data: [] };
       if (path === "/training/models") {
@@ -379,6 +397,7 @@ describe("TrainPage", () => {
           },
         };
       }
+      if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
       return { data: null };
     });
 
@@ -432,7 +451,7 @@ describe("TrainPage", () => {
     beforeEach(() => {
       vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
         if (path === "/datasets") {
-          return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+          return { data: [datasetRow(1, "polyps-v1")] };
         }
         if (path === "/training/runs") return { data: [] };
         if (path === "/training/models") {
@@ -453,6 +472,7 @@ describe("TrainPage", () => {
           };
         }
         if (path === "/training/base-models") return { data: catalog };
+        if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
         return { data: null };
       });
       vi.mocked(apiClient.POST).mockResolvedValue({ data: { id: 9, status: "pending" }, error: undefined });
@@ -481,8 +501,7 @@ describe("TrainPage", () => {
       });
 
       const body = vi.mocked(apiClient.POST).mock.calls[0][1]!.body as Record<string, unknown>;
-      expect(body.base_model).toBe("yolo11n.pt");
-      expect(body).not.toHaveProperty("base_model_version_id");
+      expect(body).toEqual({ dataset_id: 1, base_model: "yolo11n.pt", settings: {} });
     });
 
     it("posts base_model_version_id only for a version choice", async () => {
@@ -495,8 +514,115 @@ describe("TrainPage", () => {
       });
 
       const body = vi.mocked(apiClient.POST).mock.calls[0][1]!.body as Record<string, unknown>;
-      expect(body.base_model_version_id).toBe(7);
-      expect(body).not.toHaveProperty("base_model");
+      expect(body).toEqual({ dataset_id: 1, base_model_version_id: 7, settings: {} });
+    });
+
+    it("requests the settings schema for the announced dataset", async () => {
+      render(<TrainPage />);
+
+      await waitFor(() =>
+        expect(vi.mocked(apiClient.GET)).toHaveBeenCalledWith("/training/settings-schema", {
+          params: { query: { dataset_id: 1 } },
+        }),
+      );
+    });
+
+    it("sends changed settings, name and note", async () => {
+      render(<TrainPage />);
+      await screen.findByRole("option", { name: /polyps-v1-run7 — mAP50/ });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled(),
+      );
+
+      fireEvent.change(screen.getByLabelText("Epochs"), { target: { value: "25" } });
+      fireEvent.change(screen.getByLabelText(/run name/i), { target: { value: "big frames" } });
+      fireEvent.change(screen.getByLabelText(/note/i), { target: { value: "try 800 px" } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /start training/i }));
+      });
+
+      const body = vi.mocked(apiClient.POST).mock.calls[0][1]!.body;
+      expect(body).toEqual({
+        dataset_id: 1,
+        base_model: "yolo11n.pt",
+        name: "big frames",
+        note: "try 800 px",
+        settings: { epochs: 25 },
+      });
+    });
+
+    it("keeps the latest dataset's settings schema when responses arrive out of order", async () => {
+      const resolvers: Record<number, (v: unknown) => void> = {};
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: unknown) => {
+        if (path === "/datasets") {
+          return { data: [datasetRow(1, "polyps-v1"), datasetRow(2, "polyps-v2")] };
+        }
+        if (path === "/training/runs" || path === "/training/models") return { data: [] };
+        if (path === "/training/base-models") return { data: catalog };
+        if (path === "/training/settings-schema") {
+          const id = (opts as { params: { query: { dataset_id: number } } }).params.query.dataset_id;
+          return new Promise((resolve) => {
+            resolvers[id] = resolve;
+          });
+        }
+        return { data: null };
+      }) as never);
+      const schemaWithEpochs = (label: string) => ({
+        ...settingsSchemaFixture,
+        groups: settingsSchemaFixture.groups.map((group) => ({
+          ...group,
+          fields: group.fields.map((field) =>
+            field.key === "epochs" ? { ...field, label } : field,
+          ),
+        })),
+      });
+      render(<TrainPage />);
+      await waitFor(() => expect(resolvers[1]).toBeDefined());
+      fireEvent.change(screen.getByLabelText(/dataset/i), { target: { value: "2" } });
+      await waitFor(() => expect(resolvers[2]).toBeDefined());
+
+      await act(async () => {
+        resolvers[2]({ data: schemaWithEpochs("Epochs two") });
+      });
+      await act(async () => {
+        resolvers[1]({ data: schemaWithEpochs("Epochs one") });
+      });
+
+      expect(screen.getByLabelText("Epochs two")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Epochs one")).not.toBeInTheDocument();
+    });
+
+    it("shows an error and keeps Start disabled when the settings schema request fails", async () => {
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
+        if (path === "/datasets") return { data: [datasetRow(1, "polyps-v1")] };
+        if (path === "/training/base-models") return { data: catalog };
+        if (path === "/training/settings-schema") return { data: undefined, error: { detail: "x" } };
+        return { data: [] };
+      }) as never);
+      render(<TrainPage />);
+
+      expect(await screen.findByText("Could not load training settings.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
+    });
+
+    it("shows an error when the settings schema request throws", async () => {
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
+        if (path === "/datasets") return { data: [datasetRow(1, "polyps-v1")] };
+        if (path === "/training/base-models") return { data: catalog };
+        if (path === "/training/settings-schema") throw new Error("network down");
+        return { data: [] };
+      }) as never);
+      render(<TrainPage />);
+
+      expect(await screen.findByText("Could not load training settings.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
+    });
+
+    it("renders the selected dataset's card from the /datasets row", async () => {
+      render(<TrainPage />);
+
+      expect(await screen.findByText(/110 frames/, { selector: "span" })).toBeInTheDocument();
+      expect(screen.getByText("polyp")).toBeInTheDocument();
     });
 
     it("shows the detail of a refused model delete in the alert banner", async () => {
@@ -536,10 +662,10 @@ describe("TrainPage", () => {
 
     it("keeps the latest dataset's catalog when responses arrive out of order", async () => {
       const resolvers: Record<number, (v: unknown) => void> = {};
-      const two = { id: 2, name: "polyps-v2", task_type: "detection", exported: true };
+      const two = datasetRow(2, "polyps-v2");
       vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: unknown) => {
         if (path === "/datasets") {
-          return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }, two] };
+          return { data: [datasetRow(1, "polyps-v1"), two] };
         }
         if (path === "/training/runs" || path === "/training/models") return { data: [] };
         if (path === "/training/base-models") {
@@ -548,6 +674,7 @@ describe("TrainPage", () => {
             resolvers[id] = resolve;
           });
         }
+        if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
         return { data: null };
       }) as never);
       const opt = (w: string) => ({
@@ -573,9 +700,10 @@ describe("TrainPage", () => {
     it("shows an error when the base-models request throws", async () => {
       vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
         if (path === "/datasets") {
-          return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+          return { data: [datasetRow(1, "polyps-v1")] };
         }
         if (path === "/training/base-models") throw new Error("network down");
+        if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
         return { data: [] };
       }) as never);
       render(<TrainPage />);
@@ -589,11 +717,12 @@ describe("TrainPage", () => {
       let current: unknown[] = base;
       vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
         if (path === "/datasets") {
-          return { data: [{ id: 1, name: "polyps-v1", task_type: "detection", exported: true }] };
+          return { data: [datasetRow(1, "polyps-v1")] };
         }
         if (path === "/training/runs") return { data: [] };
         if (path === "/training/models") return { data: models };
         if (path === "/training/base-models") return { data: current };
+        if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
         return { data: null };
       }) as never);
       vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);

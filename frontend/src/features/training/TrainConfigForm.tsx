@@ -1,22 +1,31 @@
 import { useEffect, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
+import { DatasetCard, type DatasetOption } from "./DatasetCard";
+import { RunSummary } from "./RunSummary";
+import { SettingsForm } from "./SettingsForm";
+import {
+  allFields,
+  applyPreset,
+  changedSettings,
+  defaultValues,
+  isChanged,
+  validateSettings,
+  type SettingsSchema,
+  type SettingsValues,
+} from "./settingsLogic";
 
 type BaseModelOption = components["schemas"]["BaseModelOption"];
 
-export interface DatasetOption {
-  id: number;
-  name: string;
-  exported: boolean;
-}
+export type { DatasetOption } from "./DatasetCard";
 
 export interface TrainConfigValues {
   datasetId: number;
   baseModel: string | null;
   baseModelVersionId: number | null;
-  epochs: number;
-  batch: number;
-  imgsz: number;
+  name: string;
+  note: string;
+  settings: Record<string, number | boolean | string>;
 }
 
 interface TrainConfigFormProps {
@@ -25,6 +34,8 @@ interface TrainConfigFormProps {
   onSubmit: (values: TrainConfigValues) => void;
   baseModels?: BaseModelOption[];
   baseModelsError?: string | null;
+  settingsSchema?: SettingsSchema | null;
+  settingsSchemaError?: string | null;
   onDatasetChange?: (datasetId: number) => void;
 }
 
@@ -44,6 +55,8 @@ export function TrainConfigForm({
   onSubmit,
   baseModels = [],
   baseModelsError = null,
+  settingsSchema = null,
+  settingsSchemaError = null,
   onDatasetChange,
 }: TrainConfigFormProps) {
   const firstExported = datasets.find((dataset) => dataset.exported);
@@ -81,17 +94,40 @@ export function TrainConfigForm({
   }, [baseModels, baseKey]);
   const pretrainedOptions = baseModels.filter((option) => option.kind === "pretrained");
   const versionOptions = baseModels.filter((option) => option.kind === "model_version");
-  const [epochs, setEpochs] = useState(50);
-  const [batch, setBatch] = useState(8);
-  const [imgsz, setImgsz] = useState(640);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [values, setValues] = useState<SettingsValues>(() =>
+    settingsSchema ? defaultValues(settingsSchema) : {},
+  );
+  const [name, setName] = useState("");
+  const [note, setNote] = useState("");
+  // The page passes a new schema object only when a new schema arrives (a
+  // different dataset), so edits survive unrelated re-renders.
+  useEffect(() => {
+    if (settingsSchema) {
+      setValues(defaultValues(settingsSchema));
+    }
+  }, [settingsSchema]);
+
+  const errors = settingsSchema ? validateSettings(settingsSchema, values) : {};
+  const changes = settingsSchema
+    ? allFields(settingsSchema)
+        .filter((field) => isChanged(field, values[field.key]))
+        .map((field) => ({
+          label: field.label,
+          value: String(values[field.key] ?? "none"),
+          defaultValue: field.default === null ? "none" : String(field.default),
+        }))
+    : [];
+  const selectedDataset = datasets.find((dataset) => dataset.id === datasetId) ?? null;
+  const selectedBase = baseModels.find((option) => keyOf(option) === baseKey);
+  const baseLabel = selectedBase
+    ? selectedBase.kind === "model_version"
+      ? selectedBase.label
+      : (selectedBase.weights ?? "")
+    : "";
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (datasetId === "") {
-      return;
-    }
-    if (baseKey === "") {
+    if (datasetId === "" || baseKey === "" || settingsSchema === null) {
       return;
     }
     const isVersion = baseKey.startsWith("version:");
@@ -99,9 +135,9 @@ export function TrainConfigForm({
       datasetId,
       baseModel: isVersion ? null : baseKey.slice("pretrained:".length),
       baseModelVersionId: isVersion ? Number(baseKey.slice("version:".length)) : null,
-      epochs,
-      batch,
-      imgsz,
+      name: name.trim(),
+      note: note.trim(),
+      settings: changedSettings(settingsSchema, values),
     });
   }
 
@@ -122,11 +158,12 @@ export function TrainConfigForm({
           </option>
           {datasets.map((dataset) => (
             <option key={dataset.id} value={dataset.id} disabled={!dataset.exported}>
-              {dataset.name}
+              {`${dataset.name} · ${dataset.taskType} · ${dataset.itemCount} frames`}
               {!dataset.exported ? " — export it first" : ""}
             </option>
           ))}
         </select>
+        <DatasetCard dataset={selectedDataset} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -167,64 +204,69 @@ export function TrainConfigForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="train-epochs" className="text-xs uppercase tracking-wide text-gray-400">
-          Epochs
+        <label htmlFor="train-name" className="text-xs uppercase tracking-wide text-gray-400">
+          Run name (optional)
         </label>
         <input
-          id="train-epochs"
-          type="number"
-          min={1}
-          max={1000}
+          id="train-name"
+          type="text"
+          maxLength={200}
           className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100"
-          value={epochs}
-          onChange={(e) => setEpochs(Number(e.target.value))}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
         />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="train-batch" className="text-xs uppercase tracking-wide text-gray-400">
-          Batch
+        <label htmlFor="train-note" className="text-xs uppercase tracking-wide text-gray-400">
+          Note (optional)
         </label>
-        <input
-          id="train-batch"
-          type="number"
-          min={1}
-          max={256}
+        <textarea
+          id="train-note"
+          maxLength={5000}
+          rows={2}
           className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100"
-          value={batch}
-          onChange={(e) => setBatch(Number(e.target.value))}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
         />
       </div>
 
-      <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          className="self-start text-xs text-gray-400 hover:text-gray-100"
-          onClick={() => setAdvancedOpen((open) => !open)}
-        >
-          {advancedOpen ? "▾" : "▸"} Advanced
-        </button>
-        {advancedOpen && (
-          <div className="flex flex-col gap-1">
-            <label htmlFor="train-imgsz" className="text-xs uppercase tracking-wide text-gray-400">
-              Image size
-            </label>
-            <input
-              id="train-imgsz"
-              type="number"
-              min={32}
-              step={32}
-              className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100"
-              value={imgsz}
-              onChange={(e) => setImgsz(Number(e.target.value))}
-            />
-          </div>
-        )}
-      </div>
+      {settingsSchema ? (
+        <SettingsForm
+          schema={settingsSchema}
+          values={values}
+          errors={errors}
+          onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
+          onReset={(key) => {
+            const field = allFields(settingsSchema).find((candidate) => candidate.key === key);
+            setValues((current) => ({ ...current, [key]: field?.default ?? null }));
+          }}
+          onApplyPreset={(presetId) => setValues(applyPreset(settingsSchema, presetId))}
+        />
+      ) : settingsSchemaError ? (
+        <p className="text-xs text-red-300">{settingsSchemaError}</p>
+      ) : (
+        <p className="text-xs text-gray-500">Loading settings…</p>
+      )}
+
+      {settingsSchema && selectedDataset && (
+        <RunSummary
+          datasetName={selectedDataset.name}
+          taskType={selectedDataset.taskType}
+          baseLabel={baseLabel}
+          changes={changes}
+        />
+      )}
 
       <button
         type="submit"
-        disabled={disabled || datasetId === "" || baseKey === ""}
+        disabled={
+          disabled ||
+          datasetId === "" ||
+          baseKey === "" ||
+          !settingsSchema ||
+          Object.keys(errors).length > 0
+        }
         className="rounded border border-gray-700 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
       >
         Start training

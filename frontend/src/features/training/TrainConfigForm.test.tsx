@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../shared/api/generated/schema";
 import { TrainConfigForm } from "./TrainConfigForm";
+import { settingsSchemaFixture } from "./testFixtures";
 
 type BaseModelOption = components["schemas"]["BaseModelOption"];
 
@@ -32,10 +33,17 @@ const baseModels: BaseModelOption[] = [
   },
 ];
 
-const datasets = [
-  { id: 1, name: "polyps-v1", exported: true },
-  { id: 2, name: "polyps-v2-draft", exported: false },
-];
+const dataset = (id: number, name: string, exported: boolean) => ({
+  id,
+  name,
+  exported,
+  taskType: "detection",
+  itemCount: 110,
+  splitCounts: { train: 80, val: 20, test: 10 },
+  classes: [{ name: "polyp", instances: 40 }],
+});
+
+const datasets = [dataset(1, "polyps-v1", true), dataset(2, "polyps-v2-draft", false)];
 
 describe("TrainConfigForm", () => {
   it("preselects the first exported dataset once datasets arrive after mount", async () => {
@@ -55,7 +63,7 @@ describe("TrainConfigForm", () => {
 
   it("keeps a manual choice when the datasets list is refreshed", async () => {
     const user = userEvent.setup();
-    const withTwoExported = [...datasets, { id: 3, name: "second", exported: true }];
+    const withTwoExported = [...datasets, dataset(3, "second", true)];
     const { rerender } = render(
       <TrainConfigForm datasets={withTwoExported} disabled={false} onSubmit={vi.fn()} />,
     );
@@ -74,7 +82,7 @@ describe("TrainConfigForm", () => {
     expect(notExported.textContent).toMatch(/export it first/i);
   });
 
-  it("submits the entered configuration", async () => {
+  it("submits the dataset, base, name, note and only the changed settings", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     render(
@@ -83,39 +91,122 @@ describe("TrainConfigForm", () => {
         disabled={false}
         onSubmit={onSubmit}
         baseModels={baseModels}
+        settingsSchema={settingsSchemaFixture}
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText(/dataset/i), "1");
-    await user.clear(screen.getByLabelText(/epochs/i));
-    await user.type(screen.getByLabelText(/epochs/i), "25");
-    await user.clear(screen.getByLabelText(/batch/i));
-    await user.type(screen.getByLabelText(/batch/i), "16");
+    await user.type(screen.getByLabelText(/run name/i), "  big frames ");
+    await user.type(screen.getByLabelText(/note/i), "try 800 px");
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "25");
     await user.click(screen.getByRole("button", { name: /start training/i }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       datasetId: 1,
       baseModel: "yolo11n.pt",
       baseModelVersionId: null,
-      epochs: 25,
-      batch: 16,
-      imgsz: 640,
+      name: "big frames",
+      note: "try 800 px",
+      settings: { epochs: 25 },
     });
+  });
+
+  it("a preset fills the fields and replaces earlier edits", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={onSubmit}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "99");
+    await user.click(screen.getByRole("button", { name: "Quick check" }));
+
+    expect(screen.getByLabelText("Epochs")).toHaveValue(3);
+    expect(screen.getByLabelText("Batch size")).toHaveValue(4);
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ settings: { epochs: 3, batch: 4 } }),
+    );
+  });
+
+  it("an empty optional field is not sent", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={onSubmit}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+    await user.click(screen.getByText("Fine-tuning"));
+    await user.type(screen.getByLabelText("Freeze first layers"), "10");
+    await user.clear(screen.getByLabelText("Freeze first layers"));
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    const sent = onSubmit.mock.calls[0][0];
+    expect("freeze" in sent.settings).toBe(false);
+  });
+
+  it("blocks starting while a setting is invalid", async () => {
+    const user = userEvent.setup();
+    render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "0");
+
+    expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
+    expect(screen.getByText(/at least 1/i)).toBeInTheDocument();
+  });
+
+  it("resets the settings when the schema changes with the dataset's task type", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "7");
+
+    rerender(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={{ ...settingsSchemaFixture }} />,
+    );
+
+    expect(screen.getByLabelText("Epochs")).toHaveValue(50);
+  });
+
+  it("lists the changes in the 'what will run' panel and shows the dataset card", async () => {
+    const user = userEvent.setup();
+    render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "25");
+
+    const summary = screen.getByText(/what will run/i).closest("section")!;
+    expect(within(summary).getByText("Epochs")).toBeInTheDocument();
+    expect(screen.getByText(/110 frames/i, { selector: "span" })).toBeInTheDocument();
+  });
+
+  it("shows an error and keeps Start disabled when the settings schema failed to load", () => {
+    render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchemaError="Could not load training settings." />,
+    );
+
+    expect(screen.getByText("Could not load training settings.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
   });
 
   it("disables the start button while a run is active", () => {
     render(<TrainConfigForm datasets={datasets} disabled onSubmit={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
-  });
-
-  it("keeps advanced settings collapsed until opened", async () => {
-    const user = userEvent.setup();
-    render(<TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()} />);
-
-    expect(screen.queryByLabelText(/image size/i)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /advanced/i }));
-    expect(screen.getByLabelText(/image size/i)).toBeInTheDocument();
   });
 
   it("announces the selected dataset so the page can load its base models", async () => {
@@ -139,6 +230,7 @@ describe("TrainConfigForm", () => {
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={baseModels}
+        settingsSchema={settingsSchemaFixture}
       />,
     );
 
@@ -155,6 +247,7 @@ describe("TrainConfigForm", () => {
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={baseModels.slice(0, 3)}
+        settingsSchema={settingsSchemaFixture}
       />,
     );
 
@@ -170,6 +263,7 @@ describe("TrainConfigForm", () => {
         disabled={false}
         onSubmit={onSubmit}
         baseModels={baseModels}
+        settingsSchema={settingsSchemaFixture}
       />,
     );
 
@@ -189,6 +283,7 @@ describe("TrainConfigForm", () => {
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={baseModels}
+        settingsSchema={settingsSchemaFixture}
       />,
     );
 
@@ -205,6 +300,7 @@ describe("TrainConfigForm", () => {
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={baseModels}
+        settingsSchema={settingsSchemaFixture}
       />,
     );
     await user.selectOptions(screen.getByLabelText(/base model/i), "version:7");
@@ -216,6 +312,7 @@ describe("TrainConfigForm", () => {
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={[pretrained("n"), pretrained("s")]}
+        settingsSchema={settingsSchemaFixture}
       />,
     );
 
