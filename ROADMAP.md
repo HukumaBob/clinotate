@@ -1929,3 +1929,95 @@ backup taken beforehand.
 - Deferred minors: the 409/422 check order in `create_training_run`; a missing
   dataset reports "not exported" (pre-existing); the missing-parent worker test
   does not assert the storage key.
+
+### Phase 2b: Train workspace, plan 1 (launch) — DONE (2026-10-09, browser-verified)
+
+First of three plans turning the Train screen into an experiment workspace
+(dataset rail, runs history, parameter schema with presets, run comparison).
+Spec [2026-10-08-train-workspace-design.md](docs/superpowers/specs/2026-10-08-train-workspace-design.md),
+plan [2026-10-08-train-workspace-1-launch.md](docs/superpowers/plans/2026-10-08-train-workspace-1-launch.md),
+12 commits `7cee7d2`..`06e08e7`, executed subagent-driven (per-task review, a
+whole-branch review, then a fix wave). Plans 2 (history, run details, live
+curve, log cleaning, run delete, URL state) and 3 (compare view) are not
+started; the page shell is intentionally still the old two-column one.
+
+- **Settings schema in the backend** (`backend/app/training/params.py`), keyed
+  by adapter: about 30 fields in five groups (basic, optimization,
+  augmentation, fine-tuning, system), each with label, type, default, range,
+  a one-sentence explanation and the tasks it applies to; four presets as data
+  (Quick check, Standard, Fine detail, Fine-tune). Names and defaults were read
+  from ultralytics 8.4.123; `epochs` (50) and `batch` (8) are deliberate
+  project defaults. Anything not in the schema is rejected, so `data`,
+  `project`, `name`, `exist_ok`, `resume`, `pretrained`, `device`, `model` can
+  never reach `model.train()`.
+- **API:** `POST /training/runs` now takes `{dataset_id, base_model |
+  base_model_version_id, name?, note?, settings}` (unknown keys and the removed
+  `epochs/batch/imgsz/advanced` are a 422); the run stores the full resolved
+  settings in `config`; `GET /training/settings-schema?dataset_id=N`;
+  `PATCH /training/runs/{id}` for name and note (migration `d5e6f7a8b9c0`).
+- **Worker:** `train_kwargs` forwards the validated settings to Ultralytics
+  (reserved keys dropped, `cache: "false"` becomes `False`, `batch`/`imgsz`
+  keep 8/640 for old configs).
+- **Form:** dataset card (task, frames per split, classes with counts), base
+  model, run name and note, presets, groups with a range, a one-line
+  explanation, a changed marker and reset per field, inline validation (with a
+  "N settings need attention" line and the group opening on an error), and a
+  sticky, compact "What will run" summary next to Start.
+
+**Verified for real (2026-10-09):** the migration, an `ml-worker` image rebuild
+and short YOLO11-n runs from the real form. Detection with the Quick check
+preset and a name/note (run 422): the stored `config` held every default plus
+the changes, and the Ultralytics argument line in the log showed `epochs=3`,
+`batch=4`, `cache=False`, `freeze=None`. Classification with an explicit
+AdamW (run 423): `optimizer=AdamW`, `lr0=0.0005`, `hsv_h=0.005`, `freeze=5`
+(layers visibly frozen in the log), and no detection-only keys. Invalid input
+disabled Start and showed the error, the "1 setting needs attention" line and
+`aria-describedby`. Everything created was removed afterwards; the run and
+model-version tables match a backup taken beforehand on the original columns,
+and MinIO holds only the previous `models/268`.
+
+**Deviation log:**
+
+- **A stale ml-worker container nearly recorded settings it never applied.**
+  The new adapter had been copied into the running container with `docker cp`
+  for tests while the image still held the old one; a run started that way
+  would have stored the user's settings and trained with Ultralytics defaults,
+  a false experiment record. Caught by the whole-branch review; the deploy
+  order (migration, then image rebuild and recreate, then servers, then check
+  the Ultralytics argument line) is now part of the checklist.
+- **Huge JSON integers raised `OverflowError`** in the settings validator
+  (`math.isfinite(10**400)`), which would have been an HTTP 500; the range is
+  now checked on the exact integer before any float conversion.
+- **Old request bodies were silently accepted** (a stale browser tab would have
+  started a default run); both request models now forbid extra keys.
+- **`freeze` limit.** Freezing every layer makes the trainer abort at start;
+  the maximum is now per task (23 for detection and segmentation, 10 for
+  classification).
+- **The first sticky summary was too big** (found only in a real browser): with
+  six changed settings it was about 270 px and covered the field being edited,
+  and scrolled content showed under it. It is now a one-line summary with a
+  collapsible list (161 px with five changes, flush with the column edge).
+- **Test setup:** the pure-module test file needed `import app.main` for
+  conftest's `create_all`; after the host reboot Postgres, Redis and MinIO were
+  down until restarted by hand.
+- **Preset numbers.** Fine detail (imgsz 800, gentle colour jitter) and
+  Fine-tune (freeze 10, AdamW, lr0 0.0005) are starting guesses, not clinical
+  knowledge.
+
+**Open / next:**
+
+- Plan 2 and 3 as above; the finished run's log pane still shows raw
+  ANSI output (or nothing after a page reload) and the form column is a long
+  scroll next to a mostly empty right pane until the new shell lands.
+- Name and note are kept after a successful Start, so the next run inherits
+  them until Plan 2 clears them.
+- A group opened because of an error closes again when its last error is
+  corrected while the user is still typing in it (React controls `<details
+  open>`); fix by opening it once per error appearance.
+- Fine-tune's `freeze 10` on a classification model leaves only the head
+  trainable (11 layers); not judged yet.
+- Deferred minors: a duplicated `_clean_text` in schemas and service; the
+  422 detail for a non-object `settings` is a list; preset descriptions exist
+  only as tooltips; the unexported-dataset warning on the dataset card is
+  unreachable (such datasets are disabled in the select); no test feeds the
+  resolved defaults through Ultralytics' own config check.
