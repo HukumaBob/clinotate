@@ -53,4 +53,13 @@ describe("DatasetCard", () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("shows the run count when given (plural and singular) and nothing when omitted", () => {
+    const { rerender } = render(<DatasetCard dataset={dataset} runCount={3} />);
+    expect(screen.getByText("3 runs")).toBeInTheDocument();
+    rerender(<DatasetCard dataset={dataset} runCount={1} />);
+    expect(screen.getByText("1 run")).toBeInTheDocument();
+    rerender(<DatasetCard dataset={dataset} />);
+    expect(screen.queryByText(/\d+ runs?$/)).not.toBeInTheDocument();
+  });
 });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
+import { DatasetRail } from "./DatasetRail";
 import { ModelInfoPanel } from "./ModelInfoPanel";
 import { ModelVersionsTable } from "./ModelVersionsTable";
 import type { SettingsSchema } from "./settingsLogic";
@@ -130,13 +131,25 @@ export function TrainPage() {
     }
   }, []);
 
-  const handleDatasetChange = useCallback(
-    (datasetId: number) => {
-      loadBaseModels(datasetId);
-      loadSettingsSchema(datasetId);
-    },
-    [loadBaseModels, loadSettingsSchema],
-  );
+  const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(null);
+  const selectedDataset = datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
+  // Preselect the first exported dataset once the list arrives; only fills an
+  // unset selection, so a manual choice survives list refreshes.
+  useEffect(() => {
+    if (selectedDatasetId === null) {
+      const first = datasets.find((dataset) => dataset.exported);
+      if (first) {
+        setSelectedDatasetId(first.id);
+      }
+    }
+  }, [datasets, selectedDatasetId]);
+  // The catalog and the settings schema depend on the dataset (task type).
+  useEffect(() => {
+    if (selectedDatasetId !== null) {
+      loadBaseModels(selectedDatasetId);
+      loadSettingsSchema(selectedDatasetId);
+    }
+  }, [selectedDatasetId, loadBaseModels, loadSettingsSchema]);
 
   const refreshVersions = useCallback(async () => {
     const { data } = await apiClient.GET("/training/models");
@@ -320,16 +333,20 @@ export function TrainPage() {
       )}
 
       <div className="grid flex-1 grid-cols-5 gap-6 overflow-hidden">
-        <div className="col-span-2 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
-          <TrainConfigForm
+        <div className="col-span-2 flex flex-col gap-4 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
+          <DatasetRail
             datasets={datasets}
+            selectedId={selectedDatasetId}
+            onSelect={setSelectedDatasetId}
+          />
+          <TrainConfigForm
+            dataset={selectedDataset}
             disabled={submitPending}
             onSubmit={handleSubmit}
             baseModels={baseModels}
             baseModelsError={baseModelsError}
             settingsSchema={settingsSchema}
             settingsSchemaError={settingsSchemaError}
-            onDatasetChange={handleDatasetChange}
           />
         </div>
 

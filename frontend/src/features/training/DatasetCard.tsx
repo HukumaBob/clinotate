@@ -9,7 +9,13 @@ export interface DatasetOption {
   classes: { name: string; instances: number }[];
 }
 
-export function DatasetCard({ dataset }: { dataset: DatasetOption | null }) {
+export function DatasetCard({
+  dataset,
+  runCount,
+}: {
+  dataset: DatasetOption | null;
+  runCount?: number;
+}) {
   if (dataset === null) {
     return null;
   }
@@ -18,6 +24,7 @@ export function DatasetCard({ dataset }: { dataset: DatasetOption | null }) {
     <div className="rounded border border-gray-800 bg-gray-950 p-3 text-xs text-gray-300">
       <div className="flex items-center justify-between">
         <span className="rounded bg-gray-800 px-2 py-0.5 text-gray-200">{dataset.taskType}</span>
+        {runCount !== undefined && <span>{runCount} {runCount === 1 ? "run" : "runs"}</span>}
         <span>{dataset.itemCount} frames</span>
       </div>
       <p className="mt-2 text-gray-400">

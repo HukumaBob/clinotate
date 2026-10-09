@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
-import { DatasetCard, type DatasetOption } from "./DatasetCard";
+import type { DatasetOption } from "./DatasetCard";
 import { RunSummary } from "./RunSummary";
 import { SettingsForm } from "./SettingsForm";
 import {
@@ -29,14 +29,17 @@ export interface TrainConfigValues {
 }
 
 interface TrainConfigFormProps {
-  datasets: DatasetOption[];
+  dataset: DatasetOption | null;
   disabled: boolean;
   onSubmit: (values: TrainConfigValues) => void;
   baseModels?: BaseModelOption[];
   baseModelsError?: string | null;
   settingsSchema?: SettingsSchema | null;
   settingsSchemaError?: string | null;
-  onDatasetChange?: (datasetId: number) => void;
+  // Settings and base model of an earlier run, applied once per nonce.
+  prefill?: { nonce: number; baseKey: string; values: SettingsValues } | null;
+  // Changing this value clears the run name and note (not the settings).
+  clearTextSignal?: number;
 }
 
 const keyOf = (option: BaseModelOption) =>
@@ -49,47 +52,28 @@ const optionText = (option: BaseModelOption) => {
   return option.note ? `${name} — ${option.note}` : name;
 };
 
+const firstPretrainedKey = (options: BaseModelOption[]) => {
+  const first = options.find((option) => option.kind === "pretrained");
+  return first ? keyOf(first) : "";
+};
+
 export function TrainConfigForm({
-  datasets,
+  dataset,
   disabled,
   onSubmit,
   baseModels = [],
   baseModelsError = null,
   settingsSchema = null,
   settingsSchemaError = null,
-  onDatasetChange,
+  prefill = null,
+  clearTextSignal,
 }: TrainConfigFormProps) {
-  const firstExported = datasets.find((dataset) => dataset.exported);
-
-  const [datasetId, setDatasetId] = useState<number | "">(firstExported?.id ?? "");
-
-  // TrainPage renders this form before its /datasets fetch resolves, so on a
-  // real page load `datasets` is still empty when the useState initializer
-  // above runs -- and an initializer runs only once. Without this effect the
-  // field stays empty even after the datasets arrive, making the user pick a
-  // dataset by hand on every visit. Only fills an *unset* field, so a manual
-  // choice survives any later refresh of the list.
-  useEffect(() => {
-    if (datasetId === "" && firstExported) {
-      setDatasetId(firstExported.id);
-    }
-  }, [datasetId, firstExported]);
-  // The catalog depends on the dataset (task type), so the page needs to know
-  // which dataset is selected to load it.
-  useEffect(() => {
-    if (datasetId !== "") {
-      onDatasetChange?.(datasetId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datasetId]);
-
   const [baseKey, setBaseKey] = useState("");
   // The list changes with the dataset; a selection that is no longer offered
   // falls back to the first pretrained model.
   useEffect(() => {
     if (!baseModels.some((option) => keyOf(option) === baseKey)) {
-      const first = baseModels.find((option) => option.kind === "pretrained");
-      setBaseKey(first ? keyOf(first) : "");
+      setBaseKey(firstPretrainedKey(baseModels));
     }
   }, [baseModels, baseKey]);
   const pretrainedOptions = baseModels.filter((option) => option.kind === "pretrained");
@@ -107,6 +91,31 @@ export function TrainConfigForm({
     }
   }, [settingsSchema]);
 
+  // Declared after the schema-reset effect so a prefill wins over the defaults
+  // set in the same commit. Waits until the catalog and the schema are loaded.
+  const appliedPrefillRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!prefill || appliedPrefillRef.current === prefill.nonce) return;
+    if (baseModels.length === 0 || !settingsSchema) return;
+    appliedPrefillRef.current = prefill.nonce;
+    setBaseKey(
+      baseModels.some((option) => keyOf(option) === prefill.baseKey)
+        ? prefill.baseKey
+        : firstPretrainedKey(baseModels),
+    );
+    setValues(prefill.values);
+  }, [prefill, baseModels, settingsSchema]);
+
+  const firstSignalRef = useRef(true);
+  useEffect(() => {
+    if (firstSignalRef.current) {
+      firstSignalRef.current = false;
+      return;
+    }
+    setName("");
+    setNote("");
+  }, [clearTextSignal]);
+
   const errors = settingsSchema ? validateSettings(settingsSchema, values) : {};
   const errorCount = Object.keys(errors).length;
   const changes = settingsSchema
@@ -118,7 +127,6 @@ export function TrainConfigForm({
           defaultValue: field.default === null ? "none" : String(field.default),
         }))
     : [];
-  const selectedDataset = datasets.find((dataset) => dataset.id === datasetId) ?? null;
   const selectedBase = baseModels.find((option) => keyOf(option) === baseKey);
   const baseLabel = selectedBase
     ? selectedBase.kind === "model_version"
@@ -128,12 +136,12 @@ export function TrainConfigForm({
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (datasetId === "" || baseKey === "" || settingsSchema === null) {
+    if (!dataset || !dataset.exported || baseKey === "" || settingsSchema === null) {
       return;
     }
     const isVersion = baseKey.startsWith("version:");
     onSubmit({
-      datasetId,
+      datasetId: dataset.id,
       baseModel: isVersion ? null : baseKey.slice("pretrained:".length),
       baseModelVersionId: isVersion ? Number(baseKey.slice("version:".length)) : null,
       name: name.trim(),
@@ -144,29 +152,6 @@ export function TrainConfigForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-gray-200">
-      <div className="flex flex-col gap-1">
-        <label htmlFor="train-dataset" className="text-xs uppercase tracking-wide text-gray-400">
-          Dataset
-        </label>
-        <select
-          id="train-dataset"
-          className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100"
-          value={datasetId}
-          onChange={(e) => setDatasetId(e.target.value === "" ? "" : Number(e.target.value))}
-        >
-          <option value="" disabled>
-            Select a dataset
-          </option>
-          {datasets.map((dataset) => (
-            <option key={dataset.id} value={dataset.id} disabled={!dataset.exported}>
-              {`${dataset.name} · ${dataset.taskType} · ${dataset.itemCount} frames`}
-              {!dataset.exported ? " — export it first" : ""}
-            </option>
-          ))}
-        </select>
-        <DatasetCard dataset={selectedDataset} />
-      </div>
-
       <div className="flex flex-col gap-1">
         <label htmlFor="train-base-model" className="text-xs uppercase tracking-wide text-gray-400">
           Base model
@@ -251,10 +236,10 @@ export function TrainConfigForm({
       )}
 
       <div className="sticky -bottom-4 -mx-4 -mb-4 flex flex-col gap-3 border-t border-gray-800 bg-gray-900 px-4 pb-4 pt-3">
-        {settingsSchema && selectedDataset && (
+        {settingsSchema && dataset && (
           <RunSummary
-            datasetName={selectedDataset.name}
-            taskType={selectedDataset.taskType}
+            datasetName={dataset.name}
+            taskType={dataset.taskType}
             baseLabel={baseLabel}
             changes={changes}
           />
@@ -270,7 +255,8 @@ export function TrainConfigForm({
           type="submit"
           disabled={
             disabled ||
-            datasetId === "" ||
+            !dataset ||
+            !dataset.exported ||
             baseKey === "" ||
             !settingsSchema ||
             errorCount > 0

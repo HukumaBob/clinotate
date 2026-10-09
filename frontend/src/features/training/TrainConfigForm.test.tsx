@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../shared/api/generated/schema";
 import { TrainConfigForm } from "./TrainConfigForm";
+import { defaultValues } from "./settingsLogic";
 import { settingsSchemaFixture } from "./testFixtures";
 
 type BaseModelOption = components["schemas"]["BaseModelOption"];
@@ -45,41 +46,122 @@ const dataset = (id: number, name: string, exported: boolean) => ({
 
 const datasets = [dataset(1, "polyps-v1", true), dataset(2, "polyps-v2-draft", false)];
 
+const prefillValues = (epochs: number) => ({ ...defaultValues(settingsSchemaFixture), epochs });
+
 describe("TrainConfigForm", () => {
-  it("preselects the first exported dataset once datasets arrive after mount", async () => {
-    // The datasets prop starts empty on every real page load: TrainPage
-    // renders this form immediately and fills `datasets` only when the
-    // async /datasets fetch resolves. A useState initializer runs once, so
-    // a default computed at mount would stay empty forever and force the
-    // user to pick a dataset by hand on every visit.
+  it("is disabled until a dataset is given, and for a dataset without an export", () => {
     const { rerender } = render(
-      <TrainConfigForm datasets={[]} disabled={false} onSubmit={vi.fn()} />,
+      <TrainConfigForm dataset={null} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
+    const start = () => screen.getByRole("button", { name: /start training/i });
+    expect(start()).toBeDisabled();
 
-    rerender(<TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()} />);
+    rerender(
+      <TrainConfigForm dataset={datasets[1]} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+    expect(start()).toBeDisabled();
 
-    expect(await screen.findByLabelText(/dataset/i)).toHaveValue("1");
+    rerender(
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+    expect(start()).toBeEnabled();
   });
 
-  it("keeps a manual choice when the datasets list is refreshed", async () => {
+  it("submits the dataset id of the dataset prop", async () => {
     const user = userEvent.setup();
-    const withTwoExported = [...datasets, dataset(3, "second", true)];
-    const { rerender } = render(
-      <TrainConfigForm datasets={withTwoExported} disabled={false} onSubmit={vi.fn()} />,
+    const onSubmit = vi.fn();
+    render(
+      <TrainConfigForm dataset={dataset(1, "x", true)} disabled={false} onSubmit={onSubmit}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
-
-    await user.selectOptions(screen.getByLabelText(/dataset/i), "3");
-    rerender(<TrainConfigForm datasets={withTwoExported} disabled={false} onSubmit={vi.fn()} />);
-
-    expect(screen.getByLabelText(/dataset/i)).toHaveValue("3");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ datasetId: 1 }));
   });
 
-  it("marks datasets without an export as unselectable", () => {
-    render(<TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()} />);
+  it("applies a prefill once its base model and schema are available", () => {
+    const onSubmit = vi.fn();
+    render(
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={onSubmit}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture}
+        prefill={{ nonce: 1, baseKey: "version:7", values: prefillValues(12) }} />,
+    );
 
-    const notExported = screen.getByRole("option", { name: /polyps-v2-draft/ });
-    expect(notExported).toBeDisabled();
-    expect(notExported.textContent).toMatch(/export it first/i);
+    expect(screen.getByLabelText(/base model/i)).toHaveValue("version:7");
+    expect(screen.getByLabelText("Epochs")).toHaveValue(12);
+    const summary = screen.getByText(/what will run/i).closest("section")!;
+    expect(within(summary).getByText(/Epochs/)).toBeInTheDocument();
+    expect(summary.textContent).toMatch(/12/);
+    expect(summary.textContent).toMatch(/default 50/);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("applies a prefill that arrives before the catalog and schema as soon as both are loaded", () => {
+    const prefill = { nonce: 1, baseKey: "version:7", values: prefillValues(12) };
+    const props = { dataset: datasets[0], disabled: false, onSubmit: vi.fn(), prefill };
+    const { rerender } = render(<TrainConfigForm {...props} />);
+
+    rerender(<TrainConfigForm {...props} baseModels={baseModels} />);
+    expect(screen.queryByLabelText("Epochs")).not.toBeInTheDocument();
+
+    rerender(<TrainConfigForm {...props} baseModels={baseModels} settingsSchema={settingsSchemaFixture} />);
+    expect(screen.getByLabelText(/base model/i)).toHaveValue("version:7");
+    expect(screen.getByLabelText("Epochs")).toHaveValue(12);
+  });
+
+  it("falls back to the first pretrained model when the prefilled base is no longer offered", () => {
+    render(
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels.slice(0, 3)} settingsSchema={settingsSchemaFixture}
+        prefill={{ nonce: 1, baseKey: "version:99", values: prefillValues(12) }} />,
+    );
+
+    expect(screen.getByLabelText(/base model/i)).toHaveValue("pretrained:yolo11n.pt");
+    expect(screen.getByLabelText("Epochs")).toHaveValue(12);
+  });
+
+  it("does not re-apply the same prefill nonce, so later edits survive", async () => {
+    const user = userEvent.setup();
+    const prefill = { nonce: 1, baseKey: "version:7", values: prefillValues(12) };
+    const props = { dataset: datasets[0], disabled: false, onSubmit: vi.fn(), baseModels };
+    const { rerender } = render(
+      <TrainConfigForm {...props} settingsSchema={settingsSchemaFixture} prefill={prefill} />,
+    );
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "30");
+
+    rerender(
+      <TrainConfigForm {...props} settingsSchema={settingsSchemaFixture}
+        baseModels={[...baseModels]} prefill={{ ...prefill }} />,
+    );
+    expect(screen.getByLabelText("Epochs")).toHaveValue(30);
+
+    rerender(
+      <TrainConfigForm {...props} settingsSchema={settingsSchemaFixture}
+        prefill={{ ...prefill, nonce: 2 }} />,
+    );
+    expect(screen.getByLabelText("Epochs")).toHaveValue(12);
+  });
+
+  it("clears the name and the note, but keeps the settings, when clearTextSignal changes", async () => {
+    const user = userEvent.setup();
+    const props = { dataset: datasets[0], disabled: false, onSubmit: vi.fn(), baseModels,
+      settingsSchema: settingsSchemaFixture };
+    const { rerender } = render(<TrainConfigForm {...props} clearTextSignal={5} />);
+    await user.type(screen.getByLabelText(/run name/i), "abc");
+    await user.type(screen.getByLabelText(/note/i), "xyz");
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "25");
+
+    rerender(<TrainConfigForm {...props} clearTextSignal={5} />);
+    expect(screen.getByLabelText(/run name/i)).toHaveValue("abc");
+
+    rerender(<TrainConfigForm {...props} clearTextSignal={6} />);
+    expect(screen.getByLabelText(/run name/i)).toHaveValue("");
+    expect(screen.getByLabelText(/note/i)).toHaveValue("");
+    expect(screen.getByLabelText("Epochs")).toHaveValue(25);
   });
 
   it("submits the dataset, base, name, note and only the changed settings", async () => {
@@ -87,7 +169,7 @@ describe("TrainConfigForm", () => {
     const onSubmit = vi.fn();
     render(
       <TrainConfigForm
-        datasets={datasets}
+        dataset={datasets[0]}
         disabled={false}
         onSubmit={onSubmit}
         baseModels={baseModels}
@@ -115,7 +197,7 @@ describe("TrainConfigForm", () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={onSubmit}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={onSubmit}
         baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
 
@@ -135,7 +217,7 @@ describe("TrainConfigForm", () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={onSubmit}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={onSubmit}
         baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
     await user.click(screen.getByText("Fine-tuning"));
@@ -150,7 +232,7 @@ describe("TrainConfigForm", () => {
   it("blocks starting while a setting is invalid", async () => {
     const user = userEvent.setup();
     render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
         baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
 
@@ -164,24 +246,24 @@ describe("TrainConfigForm", () => {
   it("resets the settings when the schema changes with the dataset's task type", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
         baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
     await user.clear(screen.getByLabelText("Epochs"));
     await user.type(screen.getByLabelText("Epochs"), "7");
 
     rerender(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
         baseModels={baseModels} settingsSchema={{ ...settingsSchemaFixture }} />,
     );
 
     expect(screen.getByLabelText("Epochs")).toHaveValue(50);
   });
 
-  it("lists the changes in the 'what will run' panel and shows the dataset card", async () => {
+  it("lists the changes in the 'what will run' panel", async () => {
     const user = userEvent.setup();
     render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
         baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
 
@@ -190,13 +272,12 @@ describe("TrainConfigForm", () => {
 
     const summary = screen.getByText(/what will run/i).closest("section")!;
     expect(within(summary).getByText("Epochs")).toBeInTheDocument();
-    expect(screen.getByText(/110 frames/i, { selector: "span" })).toBeInTheDocument();
   });
 
   it("shows the chosen version's label in the 'what will run' panel", async () => {
     const user = userEvent.setup();
     render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
         baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
 
@@ -208,7 +289,7 @@ describe("TrainConfigForm", () => {
 
   it("shows an error and keeps Start disabled when the settings schema failed to load", () => {
     render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
         baseModels={baseModels} settingsSchemaError="Could not load training settings." />,
     );
 
@@ -217,29 +298,15 @@ describe("TrainConfigForm", () => {
   });
 
   it("disables the start button while a run is active", () => {
-    render(<TrainConfigForm datasets={datasets} disabled onSubmit={vi.fn()} />);
+    render(<TrainConfigForm dataset={datasets[0]} disabled onSubmit={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
-  });
-
-  it("announces the selected dataset so the page can load its base models", async () => {
-    const onDatasetChange = vi.fn();
-    render(
-      <TrainConfigForm
-        datasets={datasets}
-        disabled={false}
-        onSubmit={vi.fn()}
-        onDatasetChange={onDatasetChange}
-      />,
-    );
-
-    await waitFor(() => expect(onDatasetChange).toHaveBeenCalledWith(1));
   });
 
   it("groups pretrained weights and own models, with the VRAM note on large sizes", () => {
     render(
       <TrainConfigForm
-        datasets={datasets}
+        dataset={datasets[0]}
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={baseModels}
@@ -256,7 +323,7 @@ describe("TrainConfigForm", () => {
   it("omits the own-models group when there are no versions", () => {
     render(
       <TrainConfigForm
-        datasets={datasets}
+        dataset={datasets[0]}
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={baseModels.slice(0, 3)}
@@ -272,7 +339,7 @@ describe("TrainConfigForm", () => {
     const onSubmit = vi.fn();
     render(
       <TrainConfigForm
-        datasets={datasets}
+        dataset={datasets[0]}
         disabled={false}
         onSubmit={onSubmit}
         baseModels={baseModels}
@@ -292,7 +359,7 @@ describe("TrainConfigForm", () => {
     const user = userEvent.setup();
     render(
       <TrainConfigForm
-        datasets={datasets}
+        dataset={datasets[0]}
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={baseModels}
@@ -309,7 +376,7 @@ describe("TrainConfigForm", () => {
     const user = userEvent.setup();
     const { rerender } = render(
       <TrainConfigForm
-        datasets={datasets}
+        dataset={datasets[0]}
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={baseModels}
@@ -321,7 +388,7 @@ describe("TrainConfigForm", () => {
     // A different dataset (another task type) no longer offers version 7.
     rerender(
       <TrainConfigForm
-        datasets={datasets}
+        dataset={datasets[0]}
         disabled={false}
         onSubmit={vi.fn()}
         baseModels={[pretrained("n"), pretrained("s")]}
@@ -335,7 +402,7 @@ describe("TrainConfigForm", () => {
   it("shows an error instead of an empty list when the catalog failed to load", () => {
     render(
       <TrainConfigForm
-        datasets={datasets}
+        dataset={datasets[0]}
         disabled={false}
         onSubmit={vi.fn()}
         baseModelsError="Could not load base models."
@@ -356,7 +423,7 @@ describe("TrainConfigForm", () => {
       ],
     };
     render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
         baseModels={baseModels} settingsSchema={schema} />,
     );
     expect(screen.queryByText(/need attention|needs attention/i)).not.toBeInTheDocument();
@@ -372,7 +439,7 @@ describe("TrainConfigForm", () => {
   it("caps the height of the list of changes so Start stays on screen", async () => {
     const user = userEvent.setup();
     render(
-      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
         baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
     );
     await user.clear(screen.getByLabelText("Epochs"));
