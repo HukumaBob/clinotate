@@ -147,6 +147,10 @@ export function RunModelView({ run, onChanged }: RunModelViewProps) {
         )}
       </section>
 
+      {failed && (
+        <p className="text-sm text-gray-500">Failed to load the model's artifacts.</p>
+      )}
+
       {artifacts.length > 0 && (
         <section className="rounded border border-gray-800 bg-gray-900 p-4">
           <h3 className="mb-2 text-xs font-medium uppercase text-gray-500">Artifacts</h3>

@@ -156,7 +156,7 @@ describe("RunModelView", () => {
     vi.mocked(apiClient.GET).mockImplementation((async (path: string, init: unknown) =>
       path === "/training/models/{version_id}/download"
         ? { error: { detail: "x" } }
-        : base(path as never, init as never)) as never);
+        : (base as (...a: unknown[]) => unknown)(path, init)) as never);
     render(<RunModelView run={run} onChanged={() => {}} />);
     fireEvent.click(await screen.findByRole("button", { name: "Download model yolo11n-run7" }));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
@@ -170,6 +170,6 @@ describe("RunModelView", () => {
       return { error: { detail: "x" }, data: undefined };
     }) as never);
     render(<RunModelView run={run} onChanged={() => {}} />);
-    expect(await screen.findByText("Failed to load the model.")).toBeInTheDocument();
+    expect(await screen.findByText("Failed to load the model's artifacts.")).toBeInTheDocument();
   });
 });
