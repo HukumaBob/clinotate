@@ -53,7 +53,7 @@ export const settingsSchemaFixture: SettingsSchema = {
           label: "Optimizer",
           type: "choice",
           default: "auto",
-          help: "Algorithm that updates the model weights.",
+          help: "Algorithm that updates the model weights. 'auto' lets Ultralytics choose and ignores the learning rate.",
           min: null,
           max: null,
           step: null,
