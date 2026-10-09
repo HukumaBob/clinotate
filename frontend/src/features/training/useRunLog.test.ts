@@ -111,12 +111,100 @@ describe("useRunLog", () => {
     expect(result.current.text).toBe("three");
   });
 
-  it("flags an error and makes no request without a run id", async () => {
+  it("makes one final tail fetch from the stored offset when active flips to false", async () => {
+    vi.mocked(apiClient.GET)
+      .mockResolvedValueOnce(ok({ text: "abc", offset: 3, status: "running" }))
+      .mockResolvedValueOnce(ok({ text: "def", offset: 6, status: "running" }))
+      .mockResolvedValueOnce(ok({ text: "TAIL", offset: 10, status: "failed" }));
+    const { result, rerender } = renderHook(({ a }) => useRunLog(4, a), { initialProps: { a: true } });
+    await waitFor(() => expect(result.current.text).toBe("abc"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    await waitFor(() => expect(result.current.text).toBe("abcdef"));
+    rerender({ a: false });
+    await waitFor(() => expect(result.current.text).toBe("abcdefTAIL"));
+    expect(apiClient.GET).toHaveBeenCalledTimes(3);
+    expect(apiClient.GET).toHaveBeenNthCalledWith(3, ...(args(4, 6) as [string, object]));
+  });
+
+  it("makes no extra fetch when active was never true", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue(ok({ text: "x", offset: 1, status: "succeeded" }));
+    const { result, rerender } = renderHook(({ a }) => useRunLog(4, a), { initialProps: { a: false } });
+    await waitFor(() => expect(result.current.text).toBe("x"));
+    rerender({ a: false });
+    await act(async () => {});
+    expect(apiClient.GET).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes no final fetch when the run id changes while active turns false", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue(ok({ text: "x", offset: 1, status: "running" }));
+    const { rerender } = renderHook(({ id, a }) => useRunLog(id, a), { initialProps: { id: 1, a: true } });
+    await waitFor(() => expect(apiClient.GET).toHaveBeenCalledTimes(1));
+    rerender({ id: 2, a: false });
+    await waitFor(() => expect(apiClient.GET).toHaveBeenCalledTimes(2));
+    await act(async () => {});
+    expect(apiClient.GET).toHaveBeenCalledTimes(2);
+    expect(apiClient.GET).toHaveBeenNthCalledWith(2, ...(args(2, 0) as [string, object]));
+  });
+
+  it("skips ticks while a request is pending, applies its answer, then requests again", async () => {
+    const slow = deferred<unknown>();
+    vi.mocked(apiClient.GET)
+      .mockReturnValueOnce(slow.promise as never)
+      .mockResolvedValue(ok({ text: "", offset: 3, status: "running" }));
+    const { result } = renderHook(() => useRunLog(4, true));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    expect(apiClient.GET).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      slow.resolve(ok({ text: "abc", offset: 3, status: "running" }));
+    });
+    await waitFor(() => expect(result.current.text).toBe("abc"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(apiClient.GET).toHaveBeenCalledTimes(2);
+    expect(apiClient.GET).toHaveBeenNthCalledWith(2, ...(args(4, 3) as [string, object]));
+  });
+
+  it("a pending request of the old run never blocks the new run", async () => {
+    const slow = deferred<unknown>();
+    vi.mocked(apiClient.GET)
+      .mockReturnValueOnce(slow.promise as never)
+      .mockResolvedValue(ok({ text: "new", offset: 3, status: "running" }));
+    const { result, rerender } = renderHook(({ id }) => useRunLog(id, true), { initialProps: { id: 1 } });
+    rerender({ id: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    await waitFor(() => expect(apiClient.GET).toHaveBeenCalledTimes(3));
+    expect(result.current.text).toBe("newnew");
+  });
+
+  it("a failed response sets error and keeps the old text", async () => {
+    vi.mocked(apiClient.GET)
+      .mockResolvedValueOnce(ok({ text: "abc", offset: 3, status: "running" }))
+      .mockResolvedValueOnce({ data: undefined, error: { detail: "x" } } as never);
+    const { result } = renderHook(() => useRunLog(4, true));
+    await waitFor(() => expect(result.current.text).toBe("abc"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    await waitFor(() => expect(result.current.error).toBe(true));
+    expect(result.current.text).toBe("abc");
+  });
+
+  it("makes no request and keeps empty text without a run id", () => {
     const { result } = renderHook(() => useRunLog(null, true));
     expect(result.current.text).toBe("");
     expect(apiClient.GET).not.toHaveBeenCalled();
+  });
+
+  it("flags an error when the request throws", async () => {
     vi.mocked(apiClient.GET).mockRejectedValue(new Error("x"));
-    const r2 = renderHook(() => useRunLog(5, false));
-    await waitFor(() => expect(r2.result.current.error).toBe(true));
+    const { result } = renderHook(() => useRunLog(5, false));
+    await waitFor(() => expect(result.current.error).toBe(true));
   });
 });

@@ -9,10 +9,14 @@ export function useRunLog(runId: number | null, active: boolean) {
   const [error, setError] = useState(false);
   const offsetRef = useRef(0);
   const requestRef = useRef(0);
+  // True while the newest request is pending; ticks skip instead of superseding it.
+  const inFlightRef = useRef(false);
+  const prevRef = useRef<{ runId: number | null; active: boolean }>({ runId, active });
 
   // Fetches from `offset`; `replace` swaps the text instead of appending.
   const fetchFrom = useCallback(async (id: number, offset: number, replace: boolean) => {
     const requestId = ++requestRef.current;
+    inFlightRef.current = true;
     try {
       const { data, error: failed } = await apiClient.GET("/training/runs/{run_id}/log", {
         params: { path: { run_id: id }, query: { offset } },
@@ -33,28 +37,42 @@ export function useRunLog(runId: number | null, active: boolean) {
       setText((current) => (replace ? data.text : current + data.text));
     } catch {
       if (requestId === requestRef.current) setError(true);
+    } finally {
+      if (requestId === requestRef.current) inFlightRef.current = false;
     }
   }, []);
 
   useEffect(() => {
     offsetRef.current = 0;
+    inFlightRef.current = false;
     setText("");
     setError(false);
     if (runId === null) return;
     void fetchFrom(runId, 0, true);
     return () => {
       requestRef.current += 1;
+      inFlightRef.current = false;
     };
   }, [runId, fetchFrom]);
 
   useEffect(() => {
     if (runId === null || !active) return;
     const interval = setInterval(() => {
+      if (inFlightRef.current) return;
       void fetchFrom(runId, offsetRef.current, false);
     }, POLL_INTERVAL_MS);
     return () => {
       clearInterval(interval);
     };
+  }, [runId, active, fetchFrom]);
+
+  // The run just ended: the trailing output may have been written after the last tick.
+  useEffect(() => {
+    const prev = prevRef.current;
+    prevRef.current = { runId, active };
+    if (runId !== null && prev.runId === runId && prev.active && !active) {
+      void fetchFrom(runId, offsetRef.current, false);
+    }
   }, [runId, active, fetchFrom]);
 
   return { text, error };

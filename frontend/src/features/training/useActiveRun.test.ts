@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../shared/api/client";
+import { deferred } from "./testDeferred";
 import { useActiveRun } from "./useActiveRun";
 
 vi.mock("../../shared/api/client", () => ({
@@ -117,25 +118,153 @@ describe("useActiveRun", () => {
     expect(result.current.run?.id).toBe(9);
   });
 
-  it("ignores a stale poll answer that arrives after a newer one and does not update after unmount", async () => {
-    let resolveSlow!: (v: unknown) => void;
-    let n = 0;
-    vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
-      if (path === "/training/runs") return ok([{ id: 2, status: "running", current_epoch: 0 }]);
-      n += 1;
-      if (n === 1) return new Promise((r) => (resolveSlow = r));
-      return ok({ id: 2, status: "running", current_epoch: 5 });
+  it("skips ticks while a poll is pending, applies the answer, then polls again", async () => {
+    const slow = deferred<unknown>();
+    let polls = 0;
+    vi.mocked(apiClient.GET).mockImplementation(((path: string) => {
+      if (path === "/training/runs") return Promise.resolve(ok([{ id: 2, status: "running", current_epoch: 0 }]));
+      polls += 1;
+      if (polls === 1) return slow.promise;
+      return Promise.resolve(ok({ id: 2, status: "running", current_epoch: 9 }));
     }) as never);
-    const { result, unmount } = renderHook(() => useActiveRun(vi.fn()));
+    const { result } = renderHook(() => useActiveRun(vi.fn()));
     await waitFor(() => expect(result.current.run?.id).toBe(2));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4100);
     });
+    expect(polls).toBe(1);
+    await act(async () => {
+      slow.resolve(ok({ id: 2, status: "running", current_epoch: 5 }));
+    });
     await waitFor(() => expect((result.current.run as { current_epoch: number }).current_epoch).toBe(5));
     await act(async () => {
-      resolveSlow(ok({ id: 2, status: "running", current_epoch: 1 }));
+      await vi.advanceTimersByTimeAsync(2100);
     });
-    expect((result.current.run as { current_epoch: number }).current_epoch).toBe(5);
+    expect(polls).toBe(2);
+    await waitFor(() => expect((result.current.run as { current_epoch: number }).current_epoch).toBe(9));
+  });
+
+  it("a late poll answer after unmount changes nothing and does not call onFinished", async () => {
+    const slow = deferred<unknown>();
+    const onFinished = vi.fn();
+    vi.mocked(apiClient.GET).mockImplementation(((path: string) =>
+      path === "/training/runs"
+        ? Promise.resolve(ok([{ id: 2, status: "running" }]))
+        : slow.promise) as never);
+    const { result, unmount } = renderHook(() => useActiveRun(onFinished));
+    await waitFor(() => expect(result.current.run?.id).toBe(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
     unmount();
+    await act(async () => {
+      slow.resolve(ok({ id: 2, status: "succeeded" }));
+    });
+    expect(onFinished).not.toHaveBeenCalled();
+    expect(result.current.run).toEqual({ id: 2, status: "running" });
+  });
+
+  it("keeps polling after a thrown poll", async () => {
+    let polls = 0;
+    vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
+      if (path === "/training/runs") return ok([{ id: 2, status: "running" }]);
+      polls += 1;
+      if (polls === 1) throw new Error("network");
+      return ok({ id: 2, status: "running", current_epoch: 4 });
+    }) as never);
+    const { result } = renderHook(() => useActiveRun(vi.fn()));
+    await waitFor(() => expect(result.current.run?.id).toBe(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    await waitFor(() => expect((result.current.run as { current_epoch: number }).current_epoch).toBe(4));
+  });
+
+  it("a pending -> running change restarts polling without double-polling", async () => {
+    vi.mocked(apiClient.GET).mockImplementation((async (path: string) =>
+      path === "/training/runs"
+        ? ok([{ id: 2, status: "pending" }])
+        : ok({ id: 2, status: "running" })) as never);
+    const { result } = renderHook(() => useActiveRun(vi.fn()));
+    await waitFor(() => expect(result.current.run?.status).toBe("pending"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    await waitFor(() => expect(result.current.run?.status).toBe("running"));
+    const before = vi.mocked(apiClient.GET).mock.calls.filter((c) => c[0] !== "/training/runs").length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    const after = vi.mocked(apiClient.GET).mock.calls.filter((c) => c[0] !== "/training/runs").length;
+    expect(after - before).toBe(1);
+  });
+
+  it("a poll answer does not discard a discovery result", async () => {
+    const slowPoll = deferred<unknown>();
+    const discovery = deferred<unknown>();
+    let lists = 0;
+    vi.mocked(apiClient.GET).mockImplementation(((path: string) => {
+      if (path === "/training/runs") {
+        lists += 1;
+        return lists === 1 ? Promise.resolve(ok([{ id: 2, status: "running" }])) : discovery.promise;
+      }
+      return slowPoll.promise;
+    }) as never);
+    const { result } = renderHook(() => useActiveRun(vi.fn()));
+    await waitFor(() => expect(result.current.run?.id).toBe(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    let refreshing!: Promise<void>;
+    act(() => {
+      refreshing = result.current.refresh();
+    });
+    await act(async () => {
+      slowPoll.resolve(ok({ id: 2, status: "running", current_epoch: 1 }));
+    });
+    await act(async () => {
+      discovery.resolve(ok([{ id: 7, status: "pending" }]));
+      await refreshing;
+    });
+    expect(result.current.run?.id).toBe(7);
+  });
+
+  it("refresh() calls onFinished once when the tracked run finished meanwhile", async () => {
+    const onFinished = vi.fn();
+    vi.mocked(apiClient.GET)
+      .mockResolvedValueOnce(ok([{ id: 2, status: "running" }]))
+      .mockResolvedValue(ok([{ id: 2, status: "failed" }]));
+    const { result } = renderHook(() => useActiveRun(onFinished));
+    await waitFor(() => expect(result.current.run?.id).toBe(2));
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(onFinished).toHaveBeenCalledTimes(1);
+    expect(onFinished).toHaveBeenCalledWith({ id: 2, status: "failed" });
+    expect(result.current.run).toBeNull();
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(onFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it("refresh() does not call onFinished a second time for a run the poll already finished", async () => {
+    const onFinished = vi.fn();
+    vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts: unknown) =>
+      path === "/training/runs" && (opts as { params: { query: { limit: number } } }).params
+        ? vi.mocked(apiClient.GET).mock.calls.length > 2
+          ? ok([{ id: 2, status: "succeeded" }])
+          : ok([{ id: 2, status: "running" }])
+        : ok({ id: 2, status: "succeeded" })) as never);
+    const { result } = renderHook(() => useActiveRun(onFinished));
+    await waitFor(() => expect(result.current.run?.id).toBe(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    await waitFor(() => expect(onFinished).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(onFinished).toHaveBeenCalledTimes(1);
   });
 });
