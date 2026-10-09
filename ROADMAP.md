@@ -2021,3 +2021,81 @@ and MinIO holds only the previous `models/268`.
   only as tooltips; the unexported-dataset warning on the dataset card is
   unreachable (such datasets are disabled in the select); no test feeds the
   resolved defaults through Ultralytics' own config check.
+
+### Phase 2b: Train workspace, plan 2 (history) — DONE (2026-10-09, browser-verified)
+
+Second of three plans: the Train screen is now a dataset-centred workspace.
+Spec [2026-10-08-train-workspace-design.md](docs/superpowers/specs/2026-10-08-train-workspace-design.md),
+plan [2026-10-09-train-workspace-2-history.md](docs/superpowers/plans/2026-10-09-train-workspace-2-history.md),
+22 commits `01f8331`..`40e2e54`, executed subagent-driven. Plan 3 (compare view)
+is not started.
+
+- **Run records (backend/worker):** per-class metrics and the confusion matrix
+  are copied onto `TrainingRun` (migration `e6f7a8b9c0d1`, backfilled from
+  existing versions; the worker writes them), so deleting a model keeps them.
+  `GET /training/runs` takes `dataset_id`/`limit` and exposes
+  `model_version_id`; `GET /training/runs/{id}/metrics`; `DELETE
+  /training/runs/{id}` (409 for an active run or one that owns a model; removes
+  the run's finished job).
+- **Workspace (frontend):** dataset rail with run count; tabs Runs / New run;
+  runs table (best run emphasised, settings line, duration, repeat with
+  changes, delete with arm/confirm); run details with Overview (name and note
+  edited in place, settings with defaults, metrics, live progress), Metrics,
+  readable Log, Model; a pinned active-run strip; state in the URL
+  (`?dataset=&tab=&run=&view=`); the log is cleaned for display only (ANSI
+  removed, progress-bar steps folded: run 268's 528 raw lines become 313).
+  The old log panel, versions table and model-info panel were replaced.
+
+**Verified for real:** migration applied (run 268 backfilled from its version),
+`ml-worker` image rebuilt, short YOLO11-n runs from the real form. Preselect
+and URL state; table with the best run emphasised; deep links and reload on a
+run detail and on `view=model`; an invalid `?run=` falls back to the table
+with a message; the readable log (no control characters, only the log pane
+scrolls); a live run: the strip and the Overview moved together (epoch 0→1→3,
+mAP50, curve appeared) and both showed succeeded at the end; Repeat with
+changes copied base and settings into the form without starting anything;
+deleting a model left its run's curve, confusion matrix and per-class table
+intact and disabled the Model tab; deleting the run removed the row, its job
+and cleared the URL; no horizontal page scroll at 900 px. Everything created was
+removed afterwards (runs 199/200/217/268, version 80, 7 MODEL_TRAIN jobs and
+MinIO `models/268` as before).
+
+**Deviation log:**
+
+- **A seam bug found only by the whole-plan review:** the open run's details
+  were fed from the non-polling runs list, so Overview stayed at "Epoch 0 / N"
+  and the curve froze for the very run the page opens after Start. The polled
+  active run now replaces its list entry (memoised); covered by a fake-timer
+  test and seen working live.
+- **Log tail lost at the end of a run:** `useRunLog` made no final fetch when
+  the run finished, dropping exactly the lines that matter (OOM traceback,
+  final metrics). Fixed with a final tail fetch, plus in-flight guards (a
+  request slower than the 2 s tick used to be discarded forever).
+- **Name and note flickered back** to the old value after a successful save
+  until the refetch; fixed.
+- **Accessibility:** per-run accessible names on the table actions
+  (reviewer-found), tab semantics, aria-labels with ids.
+- **Environment:** the host was powered off and on twice during the work
+  (clean `poweroff`, not a crash; GPU healthy); after the second boot another
+  project's `elitmed_db`/`elitmed_redis` held ports 5432/6379, so they were
+  stopped with the user's approval (they restart on their own at boot) and my
+  Postgres/Redis containers had to be recreated (named volume kept, data
+  intact). `/tmp` was wiped, including the scratchpad backups; the cleanup
+  check used the recorded counts and row ids instead.
+- **Process:** one implementer died on an API rate limit with nothing
+  committed; its task (the run details) was re-dispatched in two halves.
+  Per-task reviews were merged and some re-reviews skipped at the user's
+  request to save tokens; the whole-plan review and live pass covered them.
+
+**Open / next:**
+
+- Plan 3: the compare view (the table has no checkboxes yet).
+- Name and note are cleared after Start, but the Overview shows no Download
+  button (it lives on the Model tab only, deliberately).
+- The "Run #N is not on this dataset" line can flash for one render right after
+  a dataset switch with a run in the URL.
+- Deferred minors: `useRuns.refresh` identity changes with the dataset;
+  `testDeferred.ts` is a non-test filename; `refresh()` may call `onFinished`
+  with a stale tracked run if it fell out of the 20-run window; a group
+  auto-opened by Plan 1's validation still closes when its last error is fixed;
+  the preset numbers are still guesses; `l`/`x` sizes were never run live.
