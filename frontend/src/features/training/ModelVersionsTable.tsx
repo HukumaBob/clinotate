@@ -1,6 +1,9 @@
 import { useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
+import { headlineScore } from "./runLogic";
+
+export { headlineScore } from "./runLogic";
 
 type ModelVersionRead = components["schemas"]["ModelVersionRead"];
 
@@ -9,33 +12,6 @@ interface ModelVersionsTableProps {
   onDownload: (id: number) => void;
   onDelete: (id: number) => void;
   onInfo: (id: number) => void;
-}
-
-/** The headline score, which differs by task: mAP50 measures how well
- * predicted boxes overlap real ones and does not exist for a classifier,
- * whose score is top-1 accuracy instead. Showing a dash for a classifier
- * would hide the only number it produces. The known keys are Ultralytics'
- * own; a trainer with a different vocabulary (e.g. RT-DETR's "ap_50") has
- * neither, so we fall back to the first numeric entry in `metrics` and
- * label it with its own key -- never a hardcoded name next to a dash,
- * which would misattribute a metric the trainer never produced. */
-export function headlineScore(
-  taskType: string,
-  metrics: Record<string, unknown>,
-): { label: string; value: string } {
-  const isClassification = taskType === "classification";
-  const raw = isClassification
-    ? metrics["metrics/accuracy_top1"] ?? metrics["accuracy_top1"]
-    : metrics["metrics/mAP50(B)"] ?? metrics["mAP50"];
-  if (typeof raw === "number") {
-    return { label: isClassification ? "top-1" : "mAP50", value: raw.toFixed(3) };
-  }
-  const fallback = Object.entries(metrics).find(([, value]) => typeof value === "number");
-  if (fallback) {
-    const [key, value] = fallback;
-    return { label: key, value: (value as number).toFixed(3) };
-  }
-  return { label: "", value: "—" };
 }
 
 export function ModelVersionsTable({
