@@ -137,7 +137,16 @@ export function SettingsForm({
                   data-testid={`field-${field.key}`}
                   className="flex flex-col gap-1"
                 >
-                  <div className="flex items-center gap-2">
+                  <div data-testid={`row-${field.key}`} className="flex items-center gap-2">
+                    {field.type === "bool" && (
+                      <FieldInput
+                        field={field}
+                        value={value}
+                        invalid={Boolean(error)}
+                        describedBy={error ? `${helpId} ${errorId}` : helpId}
+                        onChange={(next) => onChange(field.key, next)}
+                      />
+                    )}
                     <label htmlFor={`setting-${field.key}`} className="text-xs text-gray-300">
                       {field.label}
                     </label>
@@ -163,13 +172,15 @@ export function SettingsForm({
                       </>
                     )}
                   </div>
-                  <FieldInput
-                    field={field}
-                    value={value}
-                    invalid={Boolean(error)}
-                    describedBy={error ? `${helpId} ${errorId}` : helpId}
-                    onChange={(next) => onChange(field.key, next)}
-                  />
+                  {field.type !== "bool" && (
+                    <FieldInput
+                      field={field}
+                      value={value}
+                      invalid={Boolean(error)}
+                      describedBy={error ? `${helpId} ${errorId}` : helpId}
+                      onChange={(next) => onChange(field.key, next)}
+                    />
+                  )}
                   <p id={helpId} className="text-xs text-gray-500">
                     {field.help}
                   </p>

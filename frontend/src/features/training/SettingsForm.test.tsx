@@ -187,6 +187,18 @@ describe("SettingsForm", () => {
     expect(props.onChange).toHaveBeenLastCalledWith("cos_lr", true);
   });
 
+  it("puts a bool field's checkbox and label in one row", async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByText("Optimization"));
+
+    const checkbox = screen.getByLabelText("Cosine schedule");
+    const label = screen.getByText("Cosine schedule");
+    const row = checkbox.parentElement!;
+    expect(row).toHaveClass("flex", "items-center");
+    expect(row).toContainElement(label);
+  });
+
   it("marks a bool field that differs from its default and resets it", async () => {
     const user = userEvent.setup();
     const props = setup({ cos_lr: true });

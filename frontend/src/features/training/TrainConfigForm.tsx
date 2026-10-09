@@ -250,7 +250,7 @@ export function TrainConfigForm({
         <p className="text-xs text-gray-500">Loading settings…</p>
       )}
 
-      <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col gap-3 border-t border-gray-800 bg-gray-900 px-4 pb-4 pt-3">
+      <div className="sticky -bottom-4 -mx-4 -mb-4 flex flex-col gap-3 border-t border-gray-800 bg-gray-900 px-4 pb-4 pt-3">
         {settingsSchema && selectedDataset && (
           <RunSummary
             datasetName={selectedDataset.name}
