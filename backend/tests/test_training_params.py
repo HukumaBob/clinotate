@@ -235,3 +235,31 @@ def test_huge_integers_are_rejected_not_overflowed(raw):
 
 def test_large_but_valid_integer_still_resolves():
     assert params.resolve_settings(ADAPTER, DET, {"seed": 2147483647})["seed"] == 2147483647
+
+
+def test_freeze_limit_leaves_at_least_one_trainable_layer():
+    for task in (DET, SEG):
+        assert params.resolve_settings(ADAPTER, task, {"freeze": 23})["freeze"] == 23
+        with pytest.raises(params.InvalidSettings):
+            params.resolve_settings(ADAPTER, task, {"freeze": 24})
+    assert params.resolve_settings(ADAPTER, CLS, {"freeze": 10})["freeze"] == 10
+    with pytest.raises(params.InvalidSettings):
+        params.resolve_settings(ADAPTER, CLS, {"freeze": 11})
+
+
+def test_each_task_schema_has_exactly_one_freeze_field_with_its_own_max():
+    for task, expected in ((DET, 23), (SEG, 23), (CLS, 10)):
+        freezes = [
+            f
+            for g in params.settings_schema(ADAPTER, task)["groups"]
+            for f in g["fields"]
+            if f["key"] == "freeze"
+        ]
+        assert len(freezes) == 1
+        assert freezes[0]["max"] == expected
+
+
+def test_the_fine_tune_preset_validates_for_every_task():
+    preset = next(p for p in params._presets_for(ADAPTER) if p.id == "fine_tune")
+    for task in (DET, SEG, CLS):
+        assert params.resolve_settings(ADAPTER, task, preset.values)["freeze"] == 10

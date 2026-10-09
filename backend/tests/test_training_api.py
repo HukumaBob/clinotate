@@ -1003,3 +1003,47 @@ def test_settings_schema_matches_the_datasets_task_type():
         _cleanup(session, dataset.id)
         _cleanup(session, other.id)
         session.close()
+
+
+def test_create_run_rejects_a_legacy_body_and_starts_nothing(monkeypatch):
+    email = "train-legacy1@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    sent = _stub_send_task(monkeypatch)
+    try:
+        response = client.post(
+            "/training/runs",
+            headers=headers,
+            json={"dataset_id": dataset.id, "base_model": "yolo11n.pt", "epochs": 3},
+        )
+
+        assert response.status_code == 422
+        assert session.query(TrainingRun).filter(TrainingRun.dataset_id == dataset.id).count() == 0
+        assert sent == []
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_patch_run_rejects_an_unknown_key(monkeypatch):
+    email = "train-legacy2@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    _stub_send_task(monkeypatch)
+    try:
+        run_id = _create(headers, dataset.id, base_model="yolo11n.pt").json()["id"]
+
+        response = client.patch(
+            f"/training/runs/{run_id}", json={"name": "x", "status": "failed"}, headers=headers
+        )
+
+        assert response.status_code == 422
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()

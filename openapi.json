@@ -7907,6 +7907,7 @@
             "title": "Settings"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "dataset_id"
@@ -8107,6 +8108,7 @@
             "title": "Note"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "TrainingRunUpdate"
       },

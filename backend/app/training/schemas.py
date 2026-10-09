@@ -15,6 +15,10 @@ def _clean_text(value: str | None) -> str | None:
 
 
 class TrainingRunCreate(BaseModel):
+    # Unknown keys are a 422: a stale client posting the removed top-level
+    # epochs/batch/imgsz fields must not silently start a default run.
+    model_config = ConfigDict(extra="forbid")
+
     dataset_id: int
     # Exactly one of base_model / base_model_version_id: a pretrained
     # weights name, or an earlier ModelVersion to fine-tune from.
@@ -39,6 +43,8 @@ class TrainingRunCreate(BaseModel):
 
 
 class TrainingRunUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = Field(default=None, max_length=200)
     note: str | None = Field(default=None, max_length=5000)
 

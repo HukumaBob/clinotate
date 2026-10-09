@@ -119,7 +119,8 @@ def _yolo11_fields() -> list[ParamField]:
           help="Probability of stitching four images into one training image."),
         f("close_mosaic", "Mosaic off for last epochs", "augmentation", "int", 10, min=0, max=100,
           tasks=_DETECT_SEGMENT,
-          help="Switch mosaic off for the final N epochs so the model finishes on natural images."),
+          help="Switch mosaic off for the final N epochs so the model finishes on natural images. "
+               "0 keeps mosaic on for the whole run."),
         f("mixup", "MixUp", "augmentation", "float", 0.0, min=0, max=1,
           tasks=_DETECT_SEGMENT, help="Probability of blending two images together."),
         f("copy_paste", "Copy-paste", "augmentation", "float", 0.0, min=0, max=1,
@@ -135,9 +136,16 @@ def _yolo11_fields() -> list[ParamField]:
           tasks=(TaskType.CLASSIFICATION,),
           help="Fraction of the classifier head switched off during training; fights overfitting."),
         # -- fine-tuning
-        f("freeze", "Freeze first layers", "finetune", "int", None, min=0, max=50, optional=True,
-          help="Keep the first N layers unchanged. Leave empty to train everything; freezing "
-               "helps when fine-tuning on little data."),
+        # Two definitions, one key: the layer count differs per task, and
+        # freezing every layer makes the trainer raise at start.
+        f("freeze", "Freeze first layers", "finetune", "int", None, min=0, max=23, optional=True,
+          tasks=_DETECT_SEGMENT,
+          help="Keep the first N layers unchanged (this model has 24 layers, so at most 23). "
+               "Leave empty to train everything; freezing helps when fine-tuning on little data."),
+        f("freeze", "Freeze first layers", "finetune", "int", None, min=0, max=10, optional=True,
+          tasks=(TaskType.CLASSIFICATION,),
+          help="Keep the first N layers unchanged (this model has 11 layers, so at most 10). "
+               "Leave empty to train everything; freezing helps when fine-tuning on little data."),
         # -- system
         f("cache", "Cache images", "system", "choice", "false", choices=("false", "ram", "disk"),
           help="Keep decoded images in memory or on disk to speed up epochs; 'false' reads files "
