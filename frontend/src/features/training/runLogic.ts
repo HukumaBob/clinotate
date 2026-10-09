@@ -45,6 +45,7 @@ export function formatDuration(
 ): string {
   if (!startedAt) return "—";
   const end = finishedAt ? new Date(finishedAt) : now;
+  if (Number.isNaN(end.getTime()) || Number.isNaN(new Date(startedAt).getTime())) return "—";
   const seconds = Math.max(0, Math.round((end.getTime() - new Date(startedAt).getTime()) / 1000));
   if (seconds >= 3600) {
     const hours = Math.floor(seconds / 3600);
@@ -60,9 +61,9 @@ export function formatDuration(
 
 export function settingsLine(config: Record<string, unknown>): string {
   const parts: string[] = [];
-  if (config.imgsz !== undefined) parts.push(String(config.imgsz));
-  if (config.batch !== undefined) parts.push(`b${config.batch}`);
-  if (config.epochs !== undefined) parts.push(`${config.epochs} ep`);
+  if (config.imgsz != null) parts.push(String(config.imgsz));
+  if (config.batch != null) parts.push(`b${config.batch}`);
+  if (config.epochs != null) parts.push(`${config.epochs} ep`);
   if (config.freeze !== undefined && config.freeze !== null) parts.push(`freeze ${config.freeze}`);
   if (typeof config.optimizer === "string" && config.optimizer !== "auto") parts.push(config.optimizer);
   return parts.join(" · ");

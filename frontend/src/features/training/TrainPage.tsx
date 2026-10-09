@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
@@ -278,10 +278,25 @@ export function TrainPage() {
     update({ tab: "new" });
   }
 
+  // The runs list does not poll; the polled active run is fresher for its own
+  // row and details. Memoised so the array keeps its reference between renders.
+  const liveRuns = useMemo(
+    () =>
+      activeRun && runs.some((run) => run.id === activeRun.id)
+        ? runs.map((run) => (run.id === activeRun.id ? activeRun : run))
+        : runs,
+    [runs, activeRun],
+  );
   const openRun =
-    url.run !== null ? (runs.find((run) => run.id === url.run) ?? null) : null;
+    url.run !== null
+      ? (liveRuns.find((run) => run.id === url.run) ?? null)
+      : null;
   const missingRun =
     url.run !== null && openRun === null && !loading && runsError === null;
+
+  useEffect(() => {
+    setDeleteError(null);
+  }, [selectedDatasetId, url.run]);
 
   const lastPoint = activeMetrics.data?.history.at(-1);
   const headline =
@@ -325,7 +340,7 @@ export function TrainPage() {
                 view: "overview",
               });
             } else {
-              update({ tab: "runs", run: activeRun.id });
+              update({ tab: "runs", run: activeRun.id, view: "overview" });
             }
           }}
         />
@@ -407,7 +422,7 @@ export function TrainPage() {
                       </p>
                     )}
                     <RunsTable
-                      runs={runs}
+                      runs={liveRuns}
                       selectedRunId={url.run}
                       loading={loading && runs.length === 0}
                       error={runsError}

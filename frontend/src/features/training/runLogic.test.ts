@@ -62,6 +62,13 @@ describe("formatDuration", () => {
   });
 });
 
+describe("formatDuration with bad input", () => {
+  it("returns a dash for an unparsable date", () => {
+    expect(formatDuration("garbage", null)).toBe("—");
+    expect(formatDuration("2026-10-09T10:00:00Z", "garbage")).toBe("—");
+  });
+});
+
 describe("settingsLine", () => {
   it("summarises the settings that matter in one line", () => {
     expect(
@@ -74,6 +81,10 @@ describe("settingsLine", () => {
       "640 · b8 · 3 ep",
     );
     expect(settingsLine({})).toBe("");
+  });
+
+  it("skips null imgsz, batch and epochs", () => {
+    expect(settingsLine({ imgsz: null, batch: undefined, epochs: 5 })).toBe("5 ep");
   });
 });
 

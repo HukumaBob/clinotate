@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deferred } from "./testDeferred";
@@ -70,14 +70,22 @@ function installMock() {
         return { data: world.catalog };
       case "/training/settings-schema":
         return { data: settingsSchemaFixture };
+      case "/training/models":
+        return { data: [{ id: 3, training_run_id: 5, name: "m3", task_type: "detection", metrics: {}, is_active: false, base_model: "yolo11n.pt", base_model_version_id: null, created_at: "2026-10-09T00:00:00Z" }] };
+      case "/training/models/{version_id}/metrics":
+        return { data: { metrics: {}, history: [], per_class: [], confusion: null } };
       default:
         return { data: null };
     }
   }) as never);
 }
 
+const navLog: Array<{ search: string; type: string }> = [];
+
 function Where() {
   const location = useLocation();
+  const type = useNavigationType();
+  navLog.push({ search: location.search, type });
   return <div data-testid="where">{location.search}</div>;
 }
 
@@ -97,6 +105,7 @@ const getCalls = (path: string) =>
 describe("TrainPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navLog.length = 0;
     world = {
       datasets: [datasetRow(496, "polyps-v1"), datasetRow(497, "polyps-v2")],
       runs: { 496: [runRow()], 497: [] },
@@ -126,10 +135,11 @@ describe("TrainPage", () => {
     });
     await waitFor(() => expect(where()).toBe("?dataset=496"));
     // replace, not push: a Back press must not trap the user on the bare URL
-    expect(window.history.length).toBeLessThan(3);
+    expect(navLog.at(-1)).toEqual({ search: "?dataset=496", type: "REPLACE" });
+    expect(navLog.some((entry) => entry.type === "PUSH")).toBe(false);
   });
 
-  it("keeps a manual dataset choice when the datasets are refreshed", async () => {
+  it("switching dataset by hand updates the URL and does not re-request the datasets", async () => {
     renderPage();
     await screen.findByText("first try");
     fireEvent.change(screen.getByLabelText("Dataset"), { target: { value: "497" } });
@@ -296,7 +306,7 @@ describe("TrainPage", () => {
       });
     });
 
-    it("shows a dash before the first epoch and no strip without an active run", async () => {
+    it("shows a dash as the headline before the first epoch", async () => {
       world.running = running();
       renderPage();
       expect(await screen.findByText(/epoch 3 \/ 10/i)).toBeInTheDocument();
@@ -324,7 +334,60 @@ describe("TrainPage", () => {
     });
   });
 
+  describe("live details", () => {
+    it("updates the open active run's details and its table row from the poll", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const at = (epoch: number, status: string) =>
+        runRow({ id: 7, status, name: "live one", current_epoch: epoch, total_epochs: 10 });
+      world.runs[496] = [at(0, "pending")];
+      world.running = at(0, "pending");
+      world.runDetail = () => at(4, "running");
+      renderPage("/train?dataset=496&run=7");
+      await vi.waitFor(() => screen.getByText("Epoch 0 / 10"));
+      await vi.advanceTimersByTimeAsync(2100);
+      await vi.waitFor(() => screen.getByText("Epoch 4 / 10"));
+      expect(screen.getAllByText("running").length).toBeGreaterThan(0);
+      expect(screen.queryByText("pending")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /← Runs/ }));
+      const table = await screen.findByRole("table");
+      const row = within(table).getByText("live one").closest("tr")!;
+      expect(within(row).getByText("running")).toBeInTheDocument();
+    });
+
+    it("opening the active run from the strip resets the view to overview", async () => {
+      world.runs[496] = [runRow({ id: 7, status: "running", current_epoch: 3, total_epochs: 10 })];
+      world.running = runRow({ id: 7, status: "running", current_epoch: 3, total_epochs: 10 });
+      renderPage("/train?dataset=496&run=5&view=log");
+      await screen.findByRole("table");
+      fireEvent.click(screen.getAllByRole("button", { name: "Open run 7" })[0]);
+      await waitFor(() => expect(where()).toBe("?dataset=496&run=7"));
+    });
+  });
+
   describe("deleting a run", () => {
+    it("deleting the open run clears it from the URL", async () => {
+      vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
+      renderPage("/train?dataset=496&run=5");
+      fireEvent.click(await screen.findByRole("button", { name: "Delete run #5" }));
+      world.runs[496] = [];
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Confirm delete run #5" }));
+      });
+      await waitFor(() => expect(where()).toBe("?dataset=496"));
+    });
+
+    it("clears a refused-delete message when another dataset is selected or a run is opened", async () => {
+      vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: { detail: "Run 5 owns a model." } } as never);
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Delete run 5" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Confirm delete run 5" }));
+      });
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Open run 5" }));
+      await waitFor(() => expect(screen.queryByText("Run 5 owns a model.")).not.toBeInTheDocument());
+    });
+
     it("deletes after confirmation and refreshes the table", async () => {
       vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
       renderPage();
@@ -450,6 +513,20 @@ describe("TrainPage", () => {
       expect(await screen.findByText("Could not load base models.")).toBeInTheDocument();
     });
 
+    it("reloads the catalog when the run details report a change", async () => {
+      world.runs[496] = [runRow({ id: 5, model_version_id: 3 })];
+      world.runDetail = () => runRow({ id: 5, model_version_id: 3 });
+      vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
+      renderPage("/train?dataset=496&run=5&view=model");
+      await waitFor(() => expect(getCalls("/training/base-models")).toHaveLength(1));
+      const del = await screen.findByRole("button", { name: "Delete model m3" });
+      fireEvent.click(del);
+      await act(async () => {
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm delete model m3" }));
+      });
+      await waitFor(() => expect(getCalls("/training/base-models").length).toBeGreaterThan(1));
+    });
+
     it("reloads the catalog when the active run finishes, keeping a valid selection", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       world.running = runRow({ id: 7, status: "running", current_epoch: 1, total_epochs: 10 });
@@ -485,6 +562,10 @@ function installMockResult(path: string, opts?: unknown) {
       return { data: settingsSchemaFixture };
     case "/training/runs/{run_id}":
       return { data: world.runDetail((opts as { params: { path: { run_id: number } } }).params.path.run_id) };
+    case "/training/models":
+      return { data: [{ id: 3, training_run_id: 5, name: "m3", task_type: "detection", metrics: {}, is_active: false, base_model: "yolo11n.pt", base_model_version_id: null, created_at: "2026-10-09T00:00:00Z" }] };
+    case "/training/models/{version_id}/metrics":
+      return { data: { metrics: {}, history: [], per_class: [], confusion: null } };
     default:
       return { data: null };
   }

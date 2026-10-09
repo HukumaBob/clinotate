@@ -1,3 +1,4 @@
+import type { RunView } from "./useTrainUrl";
 import type { components } from "../../shared/api/generated/schema";
 import { RunLogView } from "./RunLogView";
 import { RunMetricsView } from "./RunMetricsView";
@@ -8,12 +9,11 @@ import type { SettingsSchema } from "./settingsLogic";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
 
-export type RunDetailView = "overview" | "metrics" | "log" | "model";
 
 interface RunDetailProps {
   run: TrainingRunRead;
-  view: RunDetailView;
-  onViewChange: (view: RunDetailView) => void;
+  view: RunView;
+  onViewChange: (view: RunView) => void;
   onBack: () => void;
   schema: SettingsSchema | null;
   onRepeat: (run: TrainingRunRead) => void;
@@ -22,7 +22,7 @@ interface RunDetailProps {
   deleteError: string | null;
 }
 
-const TABS: Array<{ id: RunDetailView; label: string }> = [
+const TABS: Array<{ id: RunView; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "metrics", label: "Metrics" },
   { id: "log", label: "Log" },

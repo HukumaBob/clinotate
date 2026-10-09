@@ -67,6 +67,12 @@ describe("ActiveRunStrip", () => {
     expect(onOpen).toHaveBeenCalled();
   });
 
+  it("renders a pending run and shows 0% without NaN when total_epochs is 0", () => {
+    setup({ status: "pending", current_epoch: 0, total_epochs: 0 });
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+  });
+
   it("renders nothing for a finished run", () => {
     const { container } = render(
       <ActiveRunStrip run={{ ...base, status: "succeeded" } as Run} headline={{ label: "", value: "—" }}
