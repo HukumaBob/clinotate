@@ -13,6 +13,7 @@ const runningRun: TrainingRunRead = {
   job_id: 1,
   adapter: "ultralytics",
   base_model_version_id: null,
+  model_version_id: null,
   base_model: "yolo11n.pt",
   name: null,
   note: null,
