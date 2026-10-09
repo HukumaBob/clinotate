@@ -3553,6 +3553,40 @@
               ],
               "title": "Status"
             }
+          },
+          {
+            "name": "dataset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 500,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
           }
         ],
         "responses": {
@@ -3626,6 +3660,44 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Delete Run",
+        "operationId": "delete_run_training_runs__run_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -3766,6 +3838,53 @@
                     "$ref": "#/components/schemas/BaseModelOption"
                   },
                   "title": "Response List Base Models Training Base Models Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/runs/{run_id}/metrics": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Read Run Metrics",
+        "operationId": "read_run_metrics_training_runs__run_id__metrics_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunMetricsRead"
                 }
               }
             }
@@ -6903,6 +7022,52 @@
         ],
         "title": "RecommendationRead"
       },
+      "RunMetricsRead": {
+        "properties": {
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          },
+          "history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "History"
+          },
+          "per_class": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Per Class"
+          },
+          "confusion": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confusion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metrics",
+          "history",
+          "per_class",
+          "confusion"
+        ],
+        "title": "RunMetricsRead",
+        "description": "Everything about how a run went, read from the run itself (not from its\nweights), so it survives deleting the model."
+      },
       "Sam2PredictRequest": {
         "properties": {
           "frame_id": {
@@ -7954,6 +8119,17 @@
             ],
             "title": "Base Model Version Id"
           },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          },
           "name": {
             "anyOf": [
               {
@@ -8053,6 +8229,7 @@
           "adapter",
           "base_model",
           "base_model_version_id",
+          "model_version_id",
           "name",
           "note",
           "task_type",

@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth.models import User
 from app.celery_app import celery_app
@@ -310,11 +310,64 @@ def _force_stop(session: Session, run: TrainingRun) -> None:
     session.refresh(run)
 
 
-def list_runs(session: Session, status: TrainingRunStatus | None = None) -> list[TrainingRun]:
-    statement = select(TrainingRun).order_by(TrainingRun.id.desc())
+class RunNotDeletable(Exception):
+    """The run is still active or still owns a model version."""
+
+
+def list_runs(
+    session: Session,
+    status: TrainingRunStatus | None = None,
+    dataset_id: int | None = None,
+    limit: int | None = None,
+) -> list[TrainingRun]:
+    statement = (
+        select(TrainingRun)
+        .options(selectinload(TrainingRun.model_versions))
+        .order_by(TrainingRun.id.desc())
+    )
     if status is not None:
         statement = statement.where(TrainingRun.status == status)
+    if dataset_id is not None:
+        statement = statement.where(TrainingRun.dataset_id == dataset_id)
+    if limit is not None:
+        statement = statement.limit(limit)
     return list(session.scalars(statement))
+
+
+def get_run_metrics(session: Session, run_id: int) -> dict:
+    run = get_run(session, run_id)
+    return {
+        "metrics": run.metrics or {},
+        "history": run.metrics_history or [],
+        "per_class": run.per_class_metrics or [],
+        "confusion": run.confusion_matrix,
+    }
+
+
+def delete_run(session: Session, run_id: int) -> None:
+    """Remove a finished run that produced no model.
+
+    The history is a record of experiments, so a run with weights is deleted by
+    deleting the model first (a deliberate two-step: weights are the expensive
+    artifact). The run's own finished Job row goes with it; nothing in storage
+    belongs to a run without a model.
+    """
+    run = get_run(session, run_id)
+    if run.status in ACTIVE_STATUSES:
+        raise RunNotDeletable(f"Training run {run_id} is {run.status.value}; stop it first")
+    if run.model_versions:
+        raise RunNotDeletable(
+            f"Training run {run_id} produced model version '{run.model_versions[0].name}'; "
+            "delete the model first"
+        )
+    job_id = run.job_id
+    session.delete(run)
+    session.flush()
+    if job_id is not None:
+        job = session.get(Job, job_id)
+        if job is not None and job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED):
+            session.delete(job)
+    session.commit()
 
 
 def read_log(session: Session, run_id: int, offset: int) -> tuple[str, int, TrainingRunStatus]:

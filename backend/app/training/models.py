@@ -68,6 +68,10 @@ class TrainingRun(Base):
     # than the model because a run that dies at epoch 12 has no
     # ModelVersion at all, and those 12 points are what it left behind.
     metrics_history: Mapped[list] = mapped_column(JSON, default=list)
+    # Facts of the experiment, copied from the trainer's result: they belong to
+    # the run, not to its weights, so deleting a model never erases them.
+    per_class_metrics: Mapped[list] = mapped_column(JSON, default=list)
+    confusion_matrix: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     current_epoch: Mapped[int] = mapped_column(Integer, default=0)
     total_epochs: Mapped[int] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
@@ -77,6 +81,16 @@ class TrainingRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    # Read-only view of the model this run produced (zero or one in practice).
+    # foreign_keys is required: runs and versions also reference each other
+    # through base_model_version_id.
+    model_versions: Mapped[list["ModelVersion"]] = relationship(
+        "ModelVersion", foreign_keys="ModelVersion.training_run_id", viewonly=True
+    )
+
+    @property
+    def model_version_id(self) -> int | None:
+        return self.model_versions[0].id if self.model_versions else None
 
 
 class ModelVersion(Base):

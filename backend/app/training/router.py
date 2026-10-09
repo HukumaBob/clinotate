@@ -12,6 +12,7 @@ from app.training.schemas import (
     ModelDownloadRead,
     ModelMetricsRead,
     ModelVersionRead,
+    RunMetricsRead,
     TrainingLogRead,
     TrainingRunCreate,
     TrainingRunRead,
@@ -86,9 +87,29 @@ def list_base_models(
 @router.get("/runs", response_model=list[TrainingRunRead])
 def list_runs(
     run_status: TrainingRunStatus | None = Query(default=None, alias="status"),
+    dataset_id: int | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=500),
     session: Session = Depends(get_session),
 ):
-    return service.list_runs(session, run_status)
+    return service.list_runs(session, run_status, dataset_id, limit)
+
+
+@router.get("/runs/{run_id}/metrics", response_model=RunMetricsRead)
+def read_run_metrics(run_id: int, session: Session = Depends(get_session)):
+    try:
+        return service.get_run_metrics(session, run_id)
+    except service.TrainingRunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.delete("/runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_run(run_id: int, session: Session = Depends(get_session)):
+    try:
+        service.delete_run(session, run_id)
+    except service.TrainingRunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except service.RunNotDeletable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 @router.get("/runs/{run_id}", response_model=TrainingRunRead)

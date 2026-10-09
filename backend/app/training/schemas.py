@@ -94,6 +94,7 @@ class TrainingRunRead(BaseModel):
     adapter: str
     base_model: str
     base_model_version_id: int | None
+    model_version_id: int | None
     name: str | None
     note: str | None
     task_type: TaskType
@@ -168,3 +169,13 @@ class BaseModelOption(BaseModel):
     size: str | None
     note: str | None
     model_version_id: int | None
+
+
+class RunMetricsRead(BaseModel):
+    """Everything about how a run went, read from the run itself (not from its
+    weights), so it survives deleting the model."""
+
+    metrics: dict
+    history: list[dict]
+    per_class: list[dict]
+    confusion: dict | None

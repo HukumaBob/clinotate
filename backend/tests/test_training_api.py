@@ -1047,3 +1047,164 @@ def test_patch_run_rejects_an_unknown_key(monkeypatch):
     finally:
         _cleanup(session, dataset.id)
         session.close()
+
+
+def _make_run(session, dataset, user_id, *, status=TrainingRunStatus.SUCCEEDED, **fields):
+    run = TrainingRun(
+        dataset_id=dataset.id,
+        adapter="ultralytics_yolo",
+        base_model="yolo11n.pt",
+        task_type=dataset.task_type,
+        config={"epochs": 2},
+        status=status,
+        total_epochs=2,
+        created_by_id=user_id,
+        **fields,
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def test_runs_list_filters_by_dataset_and_limits_and_exposes_the_model_version():
+    email = "train-hist1@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    a = _make_dataset(session, user_id)
+    b = _make_dataset(session, user_id)
+    try:
+        run_a1 = _make_run(session, a, user_id)
+        run_a2 = _make_run(session, a, user_id)
+        _make_run(session, b, user_id)
+        version = ModelVersion(
+            training_run_id=run_a1.id, name="m1", task_type=a.task_type,
+            storage_key="models/x/best.pt", metrics={},
+        )
+        session.add(version)
+        session.commit()
+
+        listed = client.get(f"/training/runs?dataset_id={a.id}", headers=headers).json()
+
+        assert [r["id"] for r in listed] == [run_a2.id, run_a1.id]  # newest first, only dataset a
+        by_id = {r["id"]: r for r in listed}
+        assert by_id[run_a1.id]["model_version_id"] == version.id
+        assert by_id[run_a2.id]["model_version_id"] is None
+
+        limited = client.get(f"/training/runs?dataset_id={a.id}&limit=1", headers=headers).json()
+        assert [r["id"] for r in limited] == [run_a2.id]
+        assert client.get("/training/runs?limit=0", headers=headers).status_code == 422
+    finally:
+        _cleanup(session, a.id)
+        _cleanup(session, b.id)
+        session.close()
+
+
+def test_run_metrics_come_from_the_run_and_survive_deleting_the_model():
+    email = "train-hist2@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    try:
+        run = _make_run(
+            session, dataset, user_id,
+            metrics={"metrics/mAP50(B)": 0.5},
+            metrics_history=[{"epoch": 1, "train/box_loss": 1.2}, {"epoch": 2, "train/box_loss": 0.9}],
+            per_class_metrics=[{"class": "polyp", "mAP50": 0.5}],
+            confusion_matrix={"labels": ["polyp", "background"], "matrix": [[4, 1], [0, 2]]},
+        )
+        version = ModelVersion(
+            training_run_id=run.id, name="m", task_type=dataset.task_type,
+            storage_key=f"models/{run.id}/best.pt", metrics={},
+        )
+        session.add(version)
+        session.commit()
+
+        before = client.get(f"/training/runs/{run.id}/metrics", headers=headers).json()
+        assert before["metrics"] == {"metrics/mAP50(B)": 0.5}
+        assert [p["epoch"] for p in before["history"]] == [1, 2]
+        assert before["per_class"][0]["class"] == "polyp"
+        assert before["confusion"]["labels"] == ["polyp", "background"]
+
+        class _Storage:
+            def delete(self, key):
+                pass
+
+        app.dependency_overrides[get_storage_service] = lambda: _Storage()
+        try:
+            assert client.delete(f"/training/models/{version.id}", headers=headers).status_code == 204
+        finally:
+            app.dependency_overrides.pop(get_storage_service, None)
+
+        after = client.get(f"/training/runs/{run.id}/metrics", headers=headers).json()
+        assert after == before  # the experiment record outlives the weights
+        assert client.get("/training/runs/99999999/metrics", headers=headers).status_code == 404
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_delete_run_removes_a_finished_run_and_its_job_only():
+    email = "train-hist3@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    try:
+        job = Job(job_type=JobType.MODEL_TRAIN, status=JobStatus.FAILED,
+                  payload={"dataset_id": dataset.id}, created_by_id=user_id)
+        session.add(job)
+        session.commit()
+        run = _make_run(session, dataset, user_id, status=TrainingRunStatus.FAILED, job_id=job.id)
+        run_id, job_id = run.id, job.id
+
+        response = client.delete(f"/training/runs/{run_id}", headers=headers)
+
+        assert response.status_code == 204
+        session.expire_all()
+        assert session.get(TrainingRun, run_id) is None
+        assert session.get(Job, job_id) is None
+        assert client.delete(f"/training/runs/{run_id}", headers=headers).status_code == 404
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+@pytest.mark.parametrize("status", [TrainingRunStatus.PENDING, TrainingRunStatus.RUNNING])
+def test_delete_run_refuses_an_active_run(status):
+    email = "train-hist4@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    try:
+        run = _make_run(session, dataset, user_id, status=status)
+
+        response = client.delete(f"/training/runs/{run.id}", headers=headers)
+
+        assert response.status_code == 409
+        assert "stop" in response.json()["detail"].lower()
+        assert session.get(TrainingRun, run.id) is not None
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_delete_run_refuses_a_run_that_still_owns_a_model():
+    email = "train-hist5@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    try:
+        parent = _make_parent_version(session, dataset, user_id, "keeper")
+        response = client.delete(f"/training/runs/{parent.training_run_id}", headers=headers)
+
+        assert response.status_code == 409
+        assert "keeper" in response.json()["detail"]
+        assert session.get(ModelVersion, parent.id) is not None
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
