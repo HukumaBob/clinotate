@@ -137,4 +137,39 @@ describe("RunModelView", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Model is used as a base by another run.");
     expect(onChanged).not.toHaveBeenCalled();
   });
+
+  it("shows an alert when the delete request throws", async () => {
+    mockGets();
+    const onChanged = vi.fn();
+    vi.mocked(apiClient.DELETE).mockRejectedValue(new Error("net"));
+    render(<RunModelView run={run} onChanged={onChanged} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete model yolo11n-run7" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete model yolo11n-run7" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("shows an alert when the download link cannot be fetched", async () => {
+    mockGets();
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const base = vi.mocked(apiClient.GET).getMockImplementation()!;
+    vi.mocked(apiClient.GET).mockImplementation((async (path: string, init: unknown) =>
+      path === "/training/models/{version_id}/download"
+        ? { error: { detail: "x" } }
+        : base(path as never, init as never)) as never);
+    render(<RunModelView run={run} onChanged={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Download model yolo11n-run7" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it("reports a failed metrics response instead of silently showing no artifacts", async () => {
+    vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
+      if (path === "/training/models") return { data: [version] };
+      return { error: { detail: "x" }, data: undefined };
+    }) as never);
+    render(<RunModelView run={run} onChanged={() => {}} />);
+    expect(await screen.findByText("Failed to load the model.")).toBeInTheDocument();
+  });
 });

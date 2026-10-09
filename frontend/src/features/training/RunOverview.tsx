@@ -48,8 +48,13 @@ function EditableField({
 
   useEffect(() => {
     // Unsaved edits (including ones whose save failed) are never overwritten.
+    // A saved edit stays "dirty" until the server value catches up with it.
+    if (dirty && stored === text) {
+      setDirty(false);
+      return;
+    }
     if (!focused && !dirty) setText(stored);
-  }, [stored, focused, dirty]);
+  }, [stored, focused, dirty, text]);
 
   useEffect(() => {
     setError(null);
@@ -74,7 +79,6 @@ function EditableField({
         return;
       }
       setError(null);
-      setDirty(false);
       onChanged();
     } catch {
       setError(`Could not save the ${field}.`);

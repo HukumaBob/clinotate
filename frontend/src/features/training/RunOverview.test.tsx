@@ -230,4 +230,19 @@ describe("RunOverview", () => {
     );
     expect(input.value).toBe("typing");
   });
+
+  it("keeps a saved name until the run catches up, then follows external changes", async () => {
+    const props = { schema: null, deleteError: null, onRepeat: vi.fn(), onDeleteRun: vi.fn(), onChanged: vi.fn() };
+    const { rerender } = render(<RunOverview run={run} {...props} />);
+    const input = screen.getByLabelText("Name") as HTMLInputElement;
+    await userEvent.clear(input);
+    await userEvent.type(input, "saved");
+    await userEvent.tab();
+    await waitFor(() => expect(props.onChanged).toHaveBeenCalled());
+    expect(input.value).toBe("saved");
+    rerender(<RunOverview run={{ ...run, name: "saved" }} {...props} />);
+    expect(input.value).toBe("saved");
+    rerender(<RunOverview run={{ ...run, name: "external" }} {...props} />);
+    expect(input.value).toBe("external");
+  });
 });

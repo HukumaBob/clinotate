@@ -28,7 +28,7 @@ export function RunModelView({ run, onChanged }: RunModelViewProps) {
     setFailed(false);
     setArmed(false);
     setDeleteError(null);
-    if (versionId === null) return;
+    if (versionId == null) return;
     let cancelled = false;
     (async () => {
       try {
@@ -40,7 +40,7 @@ export function RunModelView({ run, onChanged }: RunModelViewProps) {
         ]);
         if (cancelled) return;
         const found = (models.data ?? []).find((item) => item.id === versionId) ?? null;
-        if (!found) setFailed(true);
+        if (!found || metrics.error) setFailed(true);
         setVersion(found);
         setArtifacts(metrics.data?.artifacts ?? []);
       } catch {
@@ -52,7 +52,7 @@ export function RunModelView({ run, onChanged }: RunModelViewProps) {
     };
   }, [versionId]);
 
-  if (versionId === null) {
+  if (versionId == null) {
     return (
       <p className="text-sm text-gray-500">
         This run has no model (it failed, was stopped before the first epoch, or its model was deleted)
@@ -68,25 +68,36 @@ export function RunModelView({ run, onChanged }: RunModelViewProps) {
   const score = headlineScore(version.task_type, version.metrics as Record<string, unknown>);
 
   async function download() {
-    const { data } = await apiClient.GET("/training/models/{version_id}/download", {
-      params: { path: { version_id: versionId as number } },
-    });
-    if (data?.download_url) {
-      window.open(data.download_url, "_blank", "noopener,noreferrer");
+    try {
+      const { data } = await apiClient.GET("/training/models/{version_id}/download", {
+        params: { path: { version_id: versionId as number } },
+      });
+      if (data?.download_url) {
+        setDeleteError(null);
+        window.open(data.download_url, "_blank", "noopener,noreferrer");
+      } else {
+        setDeleteError("Failed to get the download link.");
+      }
+    } catch {
+      setDeleteError("Failed to get the download link.");
     }
   }
 
   async function remove() {
     setArmed(false);
-    const { error } = await apiClient.DELETE("/training/models/{version_id}", {
-      params: { path: { version_id: versionId as number } },
-    });
-    if (error) {
-      setDeleteError((error as { detail?: string }).detail ?? "Failed to delete the model.");
-      return;
+    try {
+      const { error } = await apiClient.DELETE("/training/models/{version_id}", {
+        params: { path: { version_id: versionId as number } },
+      });
+      if (error) {
+        setDeleteError((error as { detail?: string }).detail ?? "Failed to delete the model.");
+        return;
+      }
+      setDeleteError(null);
+      onChanged();
+    } catch {
+      setDeleteError("Failed to delete the model.");
     }
-    setDeleteError(null);
-    onChanged();
   }
 
   return (
