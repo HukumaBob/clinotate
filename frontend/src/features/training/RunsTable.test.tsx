@@ -89,7 +89,7 @@ describe("RunsTable", () => {
   it("repeats with changes", () => {
     const r = run({ id: 5 });
     const { onRepeat, onOpen } = setup([r]);
-    fireEvent.click(screen.getByRole("button", { name: "Repeat with changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Repeat run 5 with changes" }));
     expect(onRepeat).toHaveBeenCalledWith(r);
     expect(onOpen).not.toHaveBeenCalled();
   });
@@ -97,9 +97,9 @@ describe("RunsTable", () => {
   it("arms before deleting", () => {
     const r = run({ id: 6 });
     const { onDelete, onOpen } = setup([r]);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete run 6" }));
     expect(onDelete).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete run 6" }));
     expect(onDelete).toHaveBeenCalledWith(r);
     expect(onOpen).not.toHaveBeenCalled();
   });
@@ -107,13 +107,13 @@ describe("RunsTable", () => {
   it("disarms when the runs change", () => {
     const r = run({ id: 6 });
     const { rerender, onOpen, onRepeat, onDelete } = setup([r]);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete run 6" }));
+    expect(screen.getByRole("button", { name: "Confirm delete run 6" })).toBeInTheDocument();
     rerender(
       <RunsTable runs={[r, run({ id: 7 })]} selectedRunId={null} loading={false} error={null}
         deleteError={null} onOpen={onOpen} onRepeat={onRepeat} onDelete={onDelete} />,
     );
-    expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm delete run 6" })).not.toBeInTheDocument();
   });
 
   it("disables Delete for a run that owns a model and for an active run, with the reason", () => {
@@ -140,5 +140,16 @@ describe("RunsTable", () => {
   it("shows the delete error", () => {
     setup([run({})], { deleteError: "Run 1 could not be deleted" });
     expect(screen.getByRole("alert")).toHaveTextContent("Run 1 could not be deleted");
+  });
+
+  it("gives each row's actions a distinct accessible name", () => {
+    setup([run({ id: 1 }), run({ id: 2 })]);
+    for (const id of [1, 2]) {
+      expect(screen.getByRole("button", { name: `Open run ${id}` })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `Repeat run ${id} with changes` })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `Delete run ${id}` })).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Delete run 2" }));
+    expect(screen.getByRole("button", { name: "Confirm delete run 2" })).toBeInTheDocument();
   });
 });

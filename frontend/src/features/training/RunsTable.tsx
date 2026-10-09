@@ -135,7 +135,7 @@ export function RunsTable({
                     ) : (
                       <span>{score.value}</span>
                     )}{" "}
-                    <span className="text-xs text-gray-600">{score.label}</span>
+                    <span className="text-xs text-gray-400">{score.label}</span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-400">
                     {formatDuration(run.started_at ?? null, run.finished_at ?? null, now)}
@@ -152,13 +152,19 @@ export function RunsTable({
                     >
                       Open
                     </button>
-                    <button type="button" className={`mr-2 ${BUTTON}`} onClick={() => onRepeat(run)}>
+                    <button
+                      type="button"
+                      className={`mr-2 ${BUTTON}`}
+                      aria-label={`Repeat run ${run.id} with changes`}
+                      onClick={() => onRepeat(run)}
+                    >
                       Repeat with changes
                     </button>
                     {armed === run.id && !blockReason ? (
                       <button
                         type="button"
                         className="rounded bg-red-700 px-2 py-1 text-xs text-white"
+                        aria-label={`Confirm delete run ${run.id}`}
                         onClick={() => {
                           onDelete(run);
                           setArmed(null);
@@ -172,6 +178,7 @@ export function RunsTable({
                         className={`${BUTTON} ${DISABLED}`}
                         disabled={blockReason !== undefined}
                         title={blockReason}
+                        aria-label={`Delete run ${run.id}`}
                         onClick={() => setArmed(run.id)}
                       >
                         Delete
