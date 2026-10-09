@@ -30,11 +30,56 @@ def test_history_accumulates_during_training(db_session, make_job_and_run, fake_
 
     assert [p["epoch"] for p in run.metrics_history] == [1, 2, 3]
     assert run.metrics_history[0]["train/loss"] == 1.0
+    assert run.per_class_metrics[0]["class"] == "polyp"
+    assert run.confusion_matrix["labels"][-1] == "background"
 
     version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
     assert version.per_class_metrics[0]["class"] == "polyp"
     assert version.confusion_matrix["labels"][-1] == "background"
     assert version.artifact_keys == [f"models/{run.id}/artifacts/results.csv"]
+
+
+def test_a_failed_run_leaves_per_class_and_confusion_empty(db_session, make_job_and_run, fake_storage):
+    from app.tasks import model_train
+
+    class _Crashing:
+        def train(self, request, on_log, on_epoch, should_stop):
+            on_epoch(1, 3, {"train/loss": 0.9})
+            raise RuntimeError("CUDA out of memory")
+
+    job, run = make_job_and_run()
+    model_train(job.id, adapter=_Crashing())
+    db_session.refresh(run)
+
+    assert run.status == TrainingRunStatus.FAILED
+    assert run.per_class_metrics == []
+    assert run.confusion_matrix is None
+
+
+def test_the_run_keeps_its_per_class_numbers_when_the_model_is_deleted(
+    db_session, make_job_and_run, fake_storage
+):
+    from app.tasks import model_train
+
+    class _Adapter:
+        def train(self, request, on_log, on_epoch, should_stop):
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            return TrainingResult(
+                weights_path=weights,
+                per_class=[{"class": "polyp", "mAP50": 0.7}],
+                confusion={"labels": ["polyp", "background"], "matrix": [[1, 0], [0, 1]]},
+            )
+
+    job, run = make_job_and_run()
+    model_train(job.id, adapter=_Adapter())
+    version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
+    db_session.delete(version)
+    db_session.commit()
+    db_session.refresh(run)
+
+    assert run.per_class_metrics[0]["class"] == "polyp"
+    assert run.confusion_matrix["matrix"] == [[1, 0], [0, 1]]
 
 
 def test_same_named_artifacts_in_different_subdirs_get_distinct_keys(

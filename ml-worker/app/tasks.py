@@ -940,6 +940,10 @@ def model_train(job_id: int, adapter=None) -> None:
             TrainingRunStatus.STOPPED if run.stop_requested else TrainingRunStatus.SUCCEEDED
         )
         run.metrics = result.metrics
+        # Facts of the experiment live on the run too: deleting the model later
+        # must not erase how well each class did.
+        run.per_class_metrics = result.per_class
+        run.confusion_matrix = result.confusion
         # A trainer that fills history only at the end wins over what
         # on_epoch accumulated: it is that trainer's final word.
         if result.history:

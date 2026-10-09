@@ -204,6 +204,8 @@ class TrainingRun(Base):
     # than the model because a run that dies at epoch 12 has no
     # ModelVersion at all, and those 12 points are what it left behind.
     metrics_history: Mapped[list] = mapped_column(JSON, default=list)
+    per_class_metrics: Mapped[list] = mapped_column(JSON, default=list)
+    confusion_matrix: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     current_epoch: Mapped[int] = mapped_column(Integer, default=0)
     total_epochs: Mapped[int] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
