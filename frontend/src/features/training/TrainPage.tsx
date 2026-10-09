@@ -2,58 +2,70 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
+import { ActiveRunStrip } from "./ActiveRunStrip";
 import { DatasetRail } from "./DatasetRail";
-import { ModelInfoPanel } from "./ModelInfoPanel";
-import { ModelVersionsTable } from "./ModelVersionsTable";
-import type { SettingsSchema } from "./settingsLogic";
-import { TrainConfigForm, type DatasetOption, type TrainConfigValues } from "./TrainConfigForm";
-import { TrainRunPanel } from "./TrainRunPanel";
+import { RunDetail } from "./RunDetail";
+import {
+  baseKeyFromRun,
+  headlineScore,
+  isActiveRun,
+  valuesFromConfig,
+} from "./runLogic";
+import { RunsTable } from "./RunsTable";
+import type { SettingsSchema, SettingsValues } from "./settingsLogic";
+import {
+  TrainConfigForm,
+  type DatasetOption,
+  type TrainConfigValues,
+} from "./TrainConfigForm";
+import { useActiveRun } from "./useActiveRun";
+import { useRunMetrics } from "./useRunMetrics";
+import { useRuns } from "./useRuns";
+import { useTrainUrl, type TrainTab } from "./useTrainUrl";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
-type ModelVersionRead = components["schemas"]["ModelVersionRead"];
 type BaseModelOption = components["schemas"]["BaseModelOption"];
 
-const POLL_INTERVAL_MS = 2000;
-const TERMINAL_STATUSES = new Set(["succeeded", "failed", "stopped"]);
-
-function isActive(run: TrainingRunRead | null): boolean {
-  return run !== null && !TERMINAL_STATUSES.has(run.status);
+interface Prefill {
+  nonce: number;
+  baseKey: string;
+  values: SettingsValues;
 }
 
+const TAB_LABELS: Array<{ id: TrainTab; label: string }> = [
+  { id: "runs", label: "Runs" },
+  { id: "new", label: "New run" },
+];
+
 export function TrainPage() {
+  const [url, update] = useTrainUrl();
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
-  const [versions, setVersions] = useState<ModelVersionRead[]>([]);
   const [baseModels, setBaseModels] = useState<BaseModelOption[]>([]);
   const [baseModelsError, setBaseModelsError] = useState<string | null>(null);
-  const [settingsSchema, setSettingsSchema] = useState<SettingsSchema | null>(null);
-  const [settingsSchemaError, setSettingsSchemaError] = useState<string | null>(null);
-  const [activeRun, setActiveRun] = useState<TrainingRunRead | null>(null);
-  const [logText, setLogText] = useState("");
+  const [settingsSchema, setSettingsSchema] = useState<SettingsSchema | null>(
+    null,
+  );
+  const [settingsSchemaError, setSettingsSchemaError] = useState<string | null>(
+    null,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitPending, setSubmitPending] = useState(false);
   const [stopPending, setStopPending] = useState(false);
-  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
-  const selectedVersion = versions.find((v) => v.id === selectedVersionId) ?? null;
-  const [rightPane, setRightPane] = useState<"log" | "metrics">("log");
-  // A version that vanishes (deleted while its metrics were open) must not
-  // strand the pane on a tab with nothing behind it.
-  const showMetrics = rightPane === "metrics" && selectedVersion !== null;
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<Prefill | null>(null);
+  const [clearSignal, setClearSignal] = useState(0);
+  const nonceRef = useRef(0);
 
-  function openModelInfo(versionId: number) {
-    setSelectedVersionId(versionId);
-    setRightPane("metrics");
-  }
+  const selectedDatasetId = url.dataset;
+  const selectedDataset =
+    datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
 
-  // Running offset into the active run's log, kept outside React state so
-  // the poll tick can read the latest value without re-subscribing the
-  // interval on every append. The log itself can reach megabytes over an
-  // hour-long run, so each tick only fetches the tail past this offset.
-  const logOffsetRef = useRef(0);
-  // Id of the run the log offset/text currently belong to, so refreshRuns
-  // can tell "switched to a different run" (reset) apart from "re-fetched
-  // the same run" (must not reset, or the whole log gets appended again
-  // on top of what is already in state).
-  const activeRunIdRef = useRef<number | null>(null);
+  const {
+    runs,
+    loading,
+    error: runsError,
+    refresh: refreshRuns,
+  } = useRuns(selectedDatasetId);
 
   const refreshDatasets = useCallback(async () => {
     const { data } = await apiClient.GET("/datasets");
@@ -66,8 +78,11 @@ export function TrainPage() {
         itemCount: dataset.item_count,
         splitCounts: dataset.split_counts,
         classes: (
-          (dataset.balance_metrics as { classes?: { name: string; instances: number }[] })
-            .classes ?? []
+          (
+            dataset.balance_metrics as {
+              classes?: { name: string; instances: number }[];
+            }
+          ).classes ?? []
         ).map(({ name, instances }) => ({ name, instances })),
       })),
     );
@@ -78,34 +93,36 @@ export function TrainPage() {
   const baseModelsRequestRef = useRef(0);
   const baseModelsDatasetRef = useRef<number | null>(null);
 
-  const loadBaseModels = useCallback(async (datasetId: number, reset = true) => {
-    const requestId = ++baseModelsRequestRef.current;
-    baseModelsDatasetRef.current = datasetId;
-    if (reset) {
-      setBaseModels([]);
-    }
-    setBaseModelsError(null);
-    try {
-      const { data, error } = await apiClient.GET("/training/base-models", {
-        params: { query: { dataset_id: datasetId } },
-      });
-      if (requestId !== baseModelsRequestRef.current) {
-        return;
+  const loadBaseModels = useCallback(
+    async (datasetId: number, reset = true) => {
+      const requestId = ++baseModelsRequestRef.current;
+      baseModelsDatasetRef.current = datasetId;
+      if (reset) {
+        setBaseModels([]);
       }
-      if (error || !data) {
-        setBaseModelsError("Could not load base models.");
-        return;
+      setBaseModelsError(null);
+      try {
+        const { data, error } = await apiClient.GET("/training/base-models", {
+          params: { query: { dataset_id: datasetId } },
+        });
+        if (requestId !== baseModelsRequestRef.current) {
+          return;
+        }
+        if (error || !data) {
+          setBaseModelsError("Could not load base models.");
+          return;
+        }
+        setBaseModels(data);
+      } catch {
+        if (requestId === baseModelsRequestRef.current) {
+          setBaseModelsError("Could not load base models.");
+        }
       }
-      setBaseModels(data);
-    } catch {
-      if (requestId === baseModelsRequestRef.current) {
-        setBaseModelsError("Could not load base models.");
-      }
-    }
-  }, []);
+    },
+    [],
+  );
 
-  // Same newest-request-wins rule as the catalog: a slow response for an
-  // earlier dataset must not replace the current dataset's settings.
+  // Same newest-request-wins rule as the catalog.
   const settingsSchemaRequestRef = useRef(0);
 
   const loadSettingsSchema = useCallback(async (datasetId: number) => {
@@ -131,109 +148,48 @@ export function TrainPage() {
     }
   }, []);
 
-  const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(null);
-  const selectedDataset = datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
-  // Preselect the first exported dataset once the list arrives; only fills an
-  // unset selection, so a manual choice survives list refreshes.
+  // The catalog's "Your models" group mirrors the models; reload without
+  // clearing so a still-valid selection survives.
+  const refreshCatalog = useCallback(() => {
+    if (baseModelsDatasetRef.current !== null) {
+      void loadBaseModels(baseModelsDatasetRef.current, false);
+    }
+  }, [loadBaseModels]);
+
+  const active = useActiveRun(() => {
+    void refreshRuns();
+    refreshCatalog();
+  });
+  const activeRun = active.run;
+  const activeIsLive = activeRun !== null && isActiveRun(activeRun);
+  const activeMetrics = useRunMetrics(
+    activeIsLive ? activeRun.id : null,
+    activeIsLive,
+    activeRun?.current_epoch ?? 0,
+  );
+
+  useEffect(() => {
+    void refreshDatasets();
+  }, [refreshDatasets]);
+
+  // Preselect the first exported dataset in the URL (no history entry); only
+  // fills an unset selection, so a manual choice survives list refreshes.
   useEffect(() => {
     if (selectedDatasetId === null) {
       const first = datasets.find((dataset) => dataset.exported);
       if (first) {
-        setSelectedDatasetId(first.id);
+        update({ dataset: first.id }, { replace: true });
       }
     }
-  }, [datasets, selectedDatasetId]);
+  }, [datasets, selectedDatasetId, update]);
+
   // The catalog and the settings schema depend on the dataset (task type).
   useEffect(() => {
     if (selectedDatasetId !== null) {
-      loadBaseModels(selectedDatasetId);
-      loadSettingsSchema(selectedDatasetId);
+      void loadBaseModels(selectedDatasetId);
+      void loadSettingsSchema(selectedDatasetId);
     }
   }, [selectedDatasetId, loadBaseModels, loadSettingsSchema]);
-
-  const refreshVersions = useCallback(async () => {
-    const { data } = await apiClient.GET("/training/models");
-    setVersions(data ?? []);
-    // The catalog's "Your models" group mirrors the versions list. Reload
-    // without clearing so a still-valid selection survives.
-    if (baseModelsDatasetRef.current !== null) {
-      loadBaseModels(baseModelsDatasetRef.current, false);
-    }
-  }, [loadBaseModels]);
-
-  const refreshRuns = useCallback(async () => {
-    const { data } = await apiClient.GET("/training/runs");
-    const list = data ?? [];
-    const active = list.find((run) => run.status === "pending" || run.status === "running");
-    const chosen = active ?? list[0] ?? null;
-    setActiveRun(chosen);
-    // A freshly chosen run starts its log tail from scratch; switching
-    // between runs must not carry over a stale offset from a previous one.
-    // But if this call re-resolves to the SAME run that is already being
-    // polled (not just today's call paths, but any future one -- e.g. a
-    // manual refresh while a run is active), resetting here would append
-    // the whole multi-megabyte log a second time on top of what is
-    // already in state. Only reset when the run id actually changes.
-    if (chosen?.id !== activeRunIdRef.current) {
-      activeRunIdRef.current = chosen?.id ?? null;
-      logOffsetRef.current = 0;
-      setLogText("");
-    }
-    return chosen;
-  }, []);
-
-  useEffect(() => {
-    refreshDatasets();
-    refreshRuns();
-    refreshVersions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!isActive(activeRun) || activeRun === null) {
-      return;
-    }
-    const runId = activeRun.id;
-
-    let cancelled = false;
-
-    async function tick() {
-      const [runResult, logResult] = await Promise.all([
-        apiClient.GET("/training/runs/{run_id}", { params: { path: { run_id: runId } } }),
-        apiClient.GET("/training/runs/{run_id}/log", {
-          params: { path: { run_id: runId }, query: { offset: logOffsetRef.current } },
-        }),
-      ]);
-
-      if (cancelled) {
-        return;
-      }
-
-      if (logResult.data) {
-        logOffsetRef.current = logResult.data.offset;
-        setLogText((current) => current + logResult.data!.text);
-      }
-
-      if (runResult.data) {
-        setActiveRun(runResult.data);
-
-        if (TERMINAL_STATUSES.has(runResult.data.status)) {
-          clearInterval(interval);
-          // A finished run (succeeded or stopped) can produce a new model
-          // version -- refresh the table so it shows up without a reload.
-          refreshVersions();
-        }
-      }
-    }
-
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRun?.id, activeRun?.status]);
 
   async function handleSubmit(values: TrainConfigValues) {
     setSubmitError(null);
@@ -251,12 +207,16 @@ export function TrainPage() {
         },
       });
       if (error) {
-        const detail = (error as { detail?: string }).detail ?? "Failed to start training.";
-        setSubmitError(detail);
+        setSubmitError(
+          (error as { detail?: string }).detail ?? "Failed to start training.",
+        );
         return;
       }
       if (data) {
         await refreshRuns();
+        void active.refresh();
+        update({ tab: "runs", run: data.id, view: "overview" });
+        setClearSignal((n) => n + 1);
       }
     } finally {
       setSubmitPending(false);
@@ -269,50 +229,77 @@ export function TrainPage() {
     }
     setStopPending(true);
     try {
-      const { data, error } = await apiClient.POST("/training/runs/{run_id}/stop", {
+      const { error } = await apiClient.POST("/training/runs/{run_id}/stop", {
         params: { path: { run_id: activeRun.id } },
       });
       if (error) {
-        const detail = (error as { detail?: string }).detail ?? "Failed to stop the run.";
-        setSubmitError(detail);
+        setSubmitError(
+          (error as { detail?: string }).detail ?? "Failed to stop the run.",
+        );
         return;
       }
-      if (data) {
-        setActiveRun(data);
-      }
+      void active.refresh();
+      void refreshRuns();
     } finally {
       setStopPending(false);
     }
   }
 
-  async function handleDownload(id: number) {
-    const { data } = await apiClient.GET("/training/models/{version_id}/download", {
-      params: { path: { version_id: id } },
-    });
-    if (data?.download_url) {
-      window.open(data.download_url, "_blank", "noopener,noreferrer");
-    }
-  }
-
-  async function handleDelete(id: number) {
-    const { error } = await apiClient.DELETE("/training/models/{version_id}", {
-      params: { path: { version_id: id } },
+  async function handleDeleteRun(run: TrainingRunRead) {
+    setDeleteError(null);
+    const { error } = await apiClient.DELETE("/training/runs/{run_id}", {
+      params: { path: { run_id: run.id } },
     });
     if (error) {
-      setSubmitError((error as { detail?: string }).detail ?? "Failed to delete the model.");
+      setDeleteError(
+        (error as { detail?: string }).detail ?? "Failed to delete the run.",
+      );
       return;
     }
-    setSubmitError(null);
-    await refreshVersions();
+    await refreshRuns();
+    if (url.run === run.id) {
+      update({ run: null });
+    }
   }
 
+  // "Repeat with changes" is only offered on rows of the selected dataset, so
+  // the loaded catalog and schema already belong to it.
+  function handleRepeat(run: TrainingRunRead) {
+    setPrefill({
+      nonce: ++nonceRef.current,
+      baseKey: baseKeyFromRun(run),
+      values: settingsSchema
+        ? valuesFromConfig(
+            settingsSchema,
+            run.config as Record<string, unknown>,
+          )
+        : {},
+    });
+    update({ tab: "new" });
+  }
+
+  const openRun =
+    url.run !== null ? (runs.find((run) => run.id === url.run) ?? null) : null;
+  const missingRun =
+    url.run !== null && openRun === null && !loading && runsError === null;
+
+  const lastPoint = activeMetrics.data?.history.at(-1);
+  const headline =
+    activeRun && lastPoint
+      ? headlineScore(activeRun.task_type, lastPoint)
+      : { label: "", value: "—" };
+
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-gray-950 p-8 text-gray-100">
-      <div className="mb-4 flex shrink-0 items-center justify-between">
+    <div className="flex flex-col gap-4 bg-gray-950 p-8 text-gray-100">
+      <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Train</h1>
       </div>
 
-      <div role="tablist" aria-label="Training adapters" className="mb-4 flex shrink-0 gap-2 border-b border-gray-800">
+      <div
+        role="tablist"
+        aria-label="Training adapters"
+        className="flex gap-2 border-b border-gray-800"
+      >
         <button
           type="button"
           role="tab"
@@ -323,100 +310,137 @@ export function TrainPage() {
         </button>
       </div>
 
+      {activeRun && activeIsLive && (
+        <ActiveRunStrip
+          run={activeRun}
+          headline={headline}
+          onStop={handleStop}
+          stopPending={stopPending}
+          onOpen={() => {
+            if (activeRun.dataset_id !== selectedDatasetId) {
+              update({
+                dataset: activeRun.dataset_id,
+                tab: "runs",
+                run: activeRun.id,
+                view: "overview",
+              });
+            } else {
+              update({ tab: "runs", run: activeRun.id });
+            }
+          }}
+        />
+      )}
+
       {submitError && (
         <div
           role="alert"
-          className="mb-4 shrink-0 rounded border border-red-800 bg-red-950 px-3 py-2 text-sm text-red-300"
+          className="rounded border border-red-800 bg-red-950 px-3 py-2 text-sm text-red-300"
         >
           {submitError}
         </div>
       )}
 
-      <div className="grid flex-1 grid-cols-5 gap-6 overflow-hidden">
-        <div className="col-span-2 flex flex-col gap-4 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
+      <div className="flex items-start gap-6">
+        <aside className="sticky top-4 w-72 shrink-0">
           <DatasetRail
             datasets={datasets}
             selectedId={selectedDatasetId}
-            onSelect={setSelectedDatasetId}
+            onSelect={(id) => update({ dataset: id })}
+            runCount={selectedDatasetId !== null ? runs.length : undefined}
           />
-          <TrainConfigForm
-            dataset={selectedDataset}
-            disabled={submitPending}
-            onSubmit={handleSubmit}
-            baseModels={baseModels}
-            baseModelsError={baseModelsError}
-            settingsSchema={settingsSchema}
-            settingsSchemaError={settingsSchemaError}
-          />
-        </div>
+        </aside>
 
-        <div className="col-span-3 flex flex-col gap-6 overflow-hidden">
-          {/* Log and metrics are two views of the same run and are never
-              needed at once, so they share this column as tabs rather than
-              stacking: stacked, each got half the height and its own inner
-              scrollbar, which left the training curve as an unreadable
-              strip. Selecting a model switches here automatically; the log
-              stays one click away while training runs. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {selectedVersion && (
-              <div
-                role="tablist"
-                aria-label="Run views"
-                className="mb-3 flex shrink-0 gap-2 border-b border-gray-800"
+        <div className="min-w-0 flex-1">
+          <div
+            role="tablist"
+            aria-label="Train sections"
+            className="mb-4 flex gap-1 border-b border-gray-800"
+          >
+            {TAB_LABELS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`train-tab-${tab.id}`}
+                aria-selected={url.tab === tab.id}
+                aria-controls={`train-tabpanel-${tab.id}`}
+                onClick={() => update({ tab: tab.id })}
+                className={`px-3 py-1.5 text-sm ${
+                  url.tab === tab.id
+                    ? "border-b-2 border-blue-500 text-gray-100"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
               >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={rightPane === "log"}
-                  className={`px-3 py-1.5 text-sm ${
-                    rightPane === "log"
-                      ? "border-b-2 border-blue-500 text-gray-100"
-                      : "text-gray-500 hover:text-gray-300"
-                  }`}
-                  onClick={() => setRightPane("log")}
-                >
-                  Log
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={rightPane === "metrics"}
-                  className={`px-3 py-1.5 text-sm ${
-                    rightPane === "metrics"
-                      ? "border-b-2 border-blue-500 text-gray-100"
-                      : "text-gray-500 hover:text-gray-300"
-                  }`}
-                  onClick={() => setRightPane("metrics")}
-                >
-                  Metrics
-                </button>
-              </div>
-            )}
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-            {showMetrics && selectedVersion ? (
-              <ModelInfoPanel
-                version={selectedVersion}
-                onClose={() => {
-                  setSelectedVersionId(null);
-                  setRightPane("log");
-                }}
-              />
-            ) : (
-              <TrainRunPanel
-                run={activeRun}
-                logText={logText}
-                onStop={handleStop}
-                stopPending={stopPending}
-              />
+          <div
+            role="tabpanel"
+            id="train-tabpanel-runs"
+            aria-labelledby="train-tab-runs"
+            hidden={url.tab !== "runs"}
+          >
+            {url.tab === "runs" && (
+              <>
+                {openRun ? (
+                  <RunDetail
+                    run={openRun}
+                    view={url.view}
+                    onViewChange={(view) => update({ view })}
+                    onBack={() => update({ run: null, view: "overview" })}
+                    schema={settingsSchema}
+                    onRepeat={handleRepeat}
+                    onDeleteRun={handleDeleteRun}
+                    onChanged={() => {
+                      void refreshRuns();
+                      refreshCatalog();
+                    }}
+                    deleteError={deleteError}
+                  />
+                ) : (
+                  <>
+                    {missingRun && (
+                      <p className="mb-3 text-sm text-gray-500">
+                        {`Run #${url.run} is not on this dataset (it may have been deleted).`}
+                      </p>
+                    )}
+                    <RunsTable
+                      runs={runs}
+                      selectedRunId={url.run}
+                      loading={loading && runs.length === 0}
+                      error={runsError}
+                      onOpen={(runId) => update({ tab: "runs", run: runId })}
+                      onRepeat={handleRepeat}
+                      onDelete={handleDeleteRun}
+                      deleteError={deleteError}
+                    />
+                  </>
+                )}
+              </>
             )}
           </div>
 
-          <div className="max-h-64 shrink-0 overflow-y-auto rounded border border-gray-800 bg-gray-900 p-4">
-            <ModelVersionsTable
-              versions={versions}
-              onDownload={handleDownload}
-              onDelete={handleDelete}
-              onInfo={openModelInfo}
+          {/* Stays mounted while the Runs tab is shown, so edits and the kept
+              settings survive a look at the table or a started run. */}
+          <div
+            role="tabpanel"
+            id="train-tabpanel-new"
+            aria-labelledby="train-tab-new"
+            hidden={url.tab !== "new"}
+            className="max-w-3xl"
+          >
+            <TrainConfigForm
+              dataset={selectedDataset}
+              disabled={submitPending}
+              onSubmit={handleSubmit}
+              baseModels={baseModels}
+              baseModelsError={baseModelsError}
+              settingsSchema={settingsSchema}
+              settingsSchemaError={settingsSchemaError}
+              prefill={prefill}
+              clearTextSignal={clearSignal}
             />
           </div>
         </div>
