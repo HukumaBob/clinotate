@@ -249,28 +249,30 @@ export function TrainConfigForm({
         <p className="text-xs text-gray-500">Loading settings…</p>
       )}
 
-      {settingsSchema && selectedDataset && (
-        <RunSummary
-          datasetName={selectedDataset.name}
-          taskType={selectedDataset.taskType}
-          baseLabel={baseLabel}
-          changes={changes}
-        />
-      )}
+      <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col gap-3 border-t border-gray-800 bg-gray-900 px-4 pb-4 pt-3">
+        {settingsSchema && selectedDataset && (
+          <RunSummary
+            datasetName={selectedDataset.name}
+            taskType={selectedDataset.taskType}
+            baseLabel={baseLabel}
+            changes={changes}
+          />
+        )}
 
-      <button
-        type="submit"
-        disabled={
-          disabled ||
-          datasetId === "" ||
-          baseKey === "" ||
-          !settingsSchema ||
-          Object.keys(errors).length > 0
-        }
-        className="rounded border border-gray-700 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
-      >
-        Start training
-      </button>
+        <button
+          type="submit"
+          disabled={
+            disabled ||
+            datasetId === "" ||
+            baseKey === "" ||
+            !settingsSchema ||
+            Object.keys(errors).length > 0
+          }
+          className="rounded border border-gray-700 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+        >
+          Start training
+        </button>
+      </div>
     </form>
   );
 }

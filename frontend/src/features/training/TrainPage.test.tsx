@@ -289,6 +289,42 @@ describe("TrainPage", () => {
     vi.useRealTimers();
   });
 
+  it("a run poll does not clobber in-progress edits or reload the settings schema", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const running = {
+      id: 7, status: "running", current_epoch: 1, total_epochs: 10,
+      stop_requested: false, error: null, metrics: {},
+    };
+    vi.mocked(apiClient.GET).mockImplementation((async (path: string) => {
+      if (path === "/datasets") return { data: [datasetRow(1, "polyps-v1")] };
+      if (path === "/training/runs") return { data: [running] };
+      if (path === "/training/runs/{run_id}") return { data: running };
+      if (path === "/training/runs/{run_id}/log") {
+        return { data: { text: "x\n", offset: 2, status: "running" } };
+      }
+      if (path === "/training/settings-schema") return { data: settingsSchemaFixture };
+      if (path === "/training/models") return { data: [] };
+      return { data: [] };
+    }) as never);
+
+    render(<TrainPage />);
+    await vi.waitFor(() => screen.getByLabelText("Epochs"));
+    fireEvent.change(screen.getByLabelText("Epochs"), { target: { value: "25" } });
+
+    await vi.advanceTimersByTimeAsync(2100);
+
+    expect(vi.mocked(apiClient.GET)).toHaveBeenCalledWith(
+      "/training/runs/{run_id}/log",
+      expect.anything(),
+    );
+    expect(screen.getByLabelText("Epochs")).toHaveValue(25);
+    const schemaCalls = vi
+      .mocked(apiClient.GET)
+      .mock.calls.filter((call) => (call as unknown[])[0] === "/training/settings-schema");
+    expect(schemaCalls).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
   it("stops polling once the run reaches a terminal status", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let runStatus = "running";

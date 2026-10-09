@@ -193,6 +193,19 @@ describe("TrainConfigForm", () => {
     expect(screen.getByText(/110 frames/i, { selector: "span" })).toBeInTheDocument();
   });
 
+  it("shows the chosen version's label in the 'what will run' panel", async () => {
+    const user = userEvent.setup();
+    render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+
+    await user.selectOptions(screen.getByLabelText(/base model/i), "version:7");
+
+    const summary = screen.getByText(/what will run/i).closest("section")!;
+    expect(within(summary).getByText("polyps-v1-run7")).toBeInTheDocument();
+  });
+
   it("shows an error and keeps Start disabled when the settings schema failed to load", () => {
     render(
       <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}

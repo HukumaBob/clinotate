@@ -14,6 +14,8 @@ const runningRun: TrainingRunRead = {
   adapter: "ultralytics",
   base_model_version_id: null,
   base_model: "yolo11n.pt",
+  name: null,
+  note: null,
   task_type: "detection",
   config: {},
   status: "running",
