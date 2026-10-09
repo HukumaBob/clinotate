@@ -245,4 +245,25 @@ describe("RunOverview", () => {
     rerender(<RunOverview run={{ ...run, name: "external" }} {...props} />);
     expect(input.value).toBe("external");
   });
+
+  it("hides setting groups with no value in an old-style config", () => {
+    renderOverview({ config: { epochs: 50, batch: 8, imgsz: 640 } });
+    expect(screen.getByText("Basic")).toBeInTheDocument();
+    expect(screen.queryByText("Optimization")).not.toBeInTheDocument();
+  });
+
+  it("shows every group present in a full config", () => {
+    const config: Record<string, unknown> = {};
+    for (const group of settingsSchemaFixture.groups)
+      for (const field of group.fields) config[field.key] = field.default;
+    renderOverview({ config });
+    for (const group of settingsSchemaFixture.groups)
+      expect(screen.getByText(group.label)).toBeInTheDocument();
+  });
+
+  it("rounds numeric final metrics to 4 decimals with the full value in the title", () => {
+    renderOverview({ metrics: { "metrics/mAP50(B)": 0.8974314322666428 } });
+    const cell = screen.getByText("0.8974");
+    expect(cell).toHaveAttribute("title", "0.8974314322666428");
+  });
 });

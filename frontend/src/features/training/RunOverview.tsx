@@ -4,7 +4,12 @@ import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
 import { MetricsChart } from "./MetricsChart";
 import { isActiveRun } from "./runLogic";
-import { allFields, isChanged, type SettingValue, type SettingsSchema } from "./settingsLogic";
+import {
+  allFields,
+  isChanged,
+  type SettingValue,
+  type SettingsSchema,
+} from "./settingsLogic";
 import { useRunMetrics } from "./useRunMetrics";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
@@ -20,8 +25,10 @@ interface RunOverviewProps {
 
 const SECTION = "rounded border border-gray-800 bg-gray-900 p-4";
 const HEADING = "mb-2 text-xs font-medium uppercase text-gray-500";
-const BUTTON = "rounded border border-gray-700 px-3 py-1.5 text-sm text-gray-300 hover:text-gray-100";
-const DISABLED = "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-gray-300";
+const BUTTON =
+  "rounded border border-gray-700 px-3 py-1.5 text-sm text-gray-300 hover:text-gray-100";
+const DISABLED =
+  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-gray-300";
 const FIELD =
   "w-full rounded border border-gray-700 bg-gray-950 px-2 py-1 text-sm text-gray-100 focus:border-blue-500 focus:outline-none";
 
@@ -70,10 +77,13 @@ function EditableField({
       return;
     }
     try {
-      const { error: failed } = await apiClient.PATCH("/training/runs/{run_id}", {
-        params: { path: { run_id: run.id } },
-        body: { [field]: text },
-      });
+      const { error: failed } = await apiClient.PATCH(
+        "/training/runs/{run_id}",
+        {
+          params: { path: { run_id: run.id } },
+          body: { [field]: text },
+        },
+      );
       if (failed) {
         setError(`Could not save the ${field}.`);
         return;
@@ -108,7 +118,11 @@ function EditableField({
   return (
     <div>
       <label className="mb-1 block text-xs text-gray-500">{label}</label>
-      {multiline ? <textarea rows={2} {...common} /> : <input type="text" {...common} />}
+      {multiline ? (
+        <textarea rows={2} {...common} />
+      ) : (
+        <input type="text" {...common} />
+      )}
       {error && (
         <p role="alert" className="mt-1 text-xs text-red-400">
           {error}
@@ -139,27 +153,50 @@ export function RunOverview({
   }, [run.id, run.status]);
 
   const config = run.config as Record<string, unknown>;
-  const known = new Set(schema ? allFields(schema).map((field) => field.key) : []);
+  const known = new Set(
+    schema ? allFields(schema).map((field) => field.key) : [],
+  );
   const unknown = Object.keys(config).filter((key) => !known.has(key));
   const history = (data?.history ?? []) as Array<Record<string, number>>;
-  const numericMetrics = Object.entries(run.metrics as Record<string, unknown>).filter(
-    ([, value]) => typeof value === "number",
-  ) as Array<[string, number]>;
+  const numericMetrics = Object.entries(
+    run.metrics as Record<string, unknown>,
+  ).filter(([, value]) => typeof value === "number") as Array<[string, number]>;
 
-  const ownsModel = run.model_version_id !== null && run.model_version_id !== undefined;
-  const blockReason = ownsModel ? "Delete the model first" : active ? "Stop the run first" : undefined;
+  const ownsModel =
+    run.model_version_id !== null && run.model_version_id !== undefined;
+  const blockReason = ownsModel
+    ? "Delete the model first"
+    : active
+      ? "Stop the run first"
+      : undefined;
   const percent =
-    run.total_epochs > 0 ? Math.min(100, Math.round((run.current_epoch / run.total_epochs) * 100)) : 0;
+    run.total_epochs > 0
+      ? Math.min(100, Math.round((run.current_epoch / run.total_epochs) * 100))
+      : 0;
 
   return (
     <div className="flex flex-col gap-4">
       <section className={`${SECTION} grid gap-3 md:grid-cols-2`}>
-        <EditableField run={run} field="name" label="Name" multiline={false} onChanged={onChanged} />
-        <EditableField run={run} field="note" label="Note" multiline onChanged={onChanged} />
+        <EditableField
+          run={run}
+          field="name"
+          label="Name"
+          multiline={false}
+          onChanged={onChanged}
+        />
+        <EditableField
+          run={run}
+          field="note"
+          label="Note"
+          multiline
+          onChanged={onChanged}
+        />
       </section>
 
       {run.error && (
-        <p className="rounded border border-red-800 bg-red-950 p-3 text-sm text-red-300">{run.error}</p>
+        <p className="rounded border border-red-800 bg-red-950 p-3 text-sm text-red-300">
+          {run.error}
+        </p>
       )}
 
       {active && (
@@ -173,7 +210,10 @@ export function RunOverview({
             aria-label="Training progress"
             className="h-2 w-full overflow-hidden rounded bg-gray-800"
           >
-            <div className="h-full bg-blue-600" style={{ width: `${percent}%` }} />
+            <div
+              className="h-full bg-blue-600"
+              style={{ width: `${percent}%` }}
+            />
           </div>
           <p className="mt-1 text-xs text-gray-400">{`Epoch ${run.current_epoch} / ${run.total_epochs}`}</p>
         </section>
@@ -183,36 +223,51 @@ export function RunOverview({
         <h3 className={HEADING}>Configuration</h3>
         {schema ? (
           <div className="flex flex-col gap-3">
-            {schema.groups.map((group) => (
-              <div key={group.id}>
-                <h4 className="mb-1 text-sm text-gray-300">{group.label}</h4>
-                <dl className="grid grid-cols-[minmax(8rem,14rem)_1fr] gap-x-4 gap-y-1 text-sm">
-                  {group.fields
-                    .filter((field) => field.key in config)
-                    .map((field) => {
-                      const value = config[field.key] as SettingValue | undefined;
-                      const changed = isChanged(field, value);
-                      return (
-                        <div key={field.key} className="contents">
-                          <dt className="text-gray-400">{field.label}</dt>
-                          <dd className={changed ? "text-blue-300" : "text-gray-200"}>
-                            {formatValue(value)}
-                            {changed && (
-                              <span className="ml-2 text-xs text-gray-500">
-                                {`(default ${formatValue(field.default)})`}
-                              </span>
-                            )}
-                          </dd>
-                        </div>
-                      );
-                    })}
-                </dl>
-              </div>
-            ))}
-            {unknown.length > 0 && <RawList title="Other settings" keys={unknown} config={config} />}
+            {schema.groups
+              .filter((group) =>
+                group.fields.some((field) => field.key in config),
+              )
+              .map((group) => (
+                <div key={group.id}>
+                  <h4 className="mb-1 text-sm text-gray-300">{group.label}</h4>
+                  <dl className="grid grid-cols-[minmax(8rem,14rem)_1fr] gap-x-4 gap-y-1 text-sm">
+                    {group.fields
+                      .filter((field) => field.key in config)
+                      .map((field) => {
+                        const value = config[field.key] as
+                          SettingValue | undefined;
+                        const changed = isChanged(field, value);
+                        return (
+                          <div key={field.key} className="contents">
+                            <dt className="text-gray-400">{field.label}</dt>
+                            <dd
+                              className={
+                                changed ? "text-blue-300" : "text-gray-200"
+                              }
+                            >
+                              {formatValue(value)}
+                              {changed && (
+                                <span className="ml-2 text-xs text-gray-500">
+                                  {`(default ${formatValue(field.default)})`}
+                                </span>
+                              )}
+                            </dd>
+                          </div>
+                        );
+                      })}
+                  </dl>
+                </div>
+              ))}
+            {unknown.length > 0 && (
+              <RawList title="Other settings" keys={unknown} config={config} />
+            )}
           </div>
         ) : (
-          <RawList title="Settings" keys={Object.keys(config)} config={config} />
+          <RawList
+            title="Settings"
+            keys={Object.keys(config)}
+            config={config}
+          />
         )}
       </section>
 
@@ -224,7 +279,7 @@ export function RunOverview({
               {numericMetrics.map(([key, value]) => (
                 <tr key={key}>
                   <td className="pr-6 text-gray-400">{key}</td>
-                  <td>{value}</td>
+                  <td title={String(value)}>{Number(value.toFixed(4))}</td>
                 </tr>
               ))}
             </tbody>
@@ -255,7 +310,11 @@ export function RunOverview({
             >
               Confirm
             </button>
-            <button type="button" className={BUTTON} onClick={() => setArmed(false)}>
+            <button
+              type="button"
+              className={BUTTON}
+              onClick={() => setArmed(false)}
+            >
               Cancel
             </button>
           </>
