@@ -95,3 +95,8 @@ export function valuesFromConfig(schema: SettingsSchema, config: Record<string, 
   }
   return values;
 }
+
+/** A run is active while it is queued or training. */
+export function isActiveRun(run: TrainingRunRead): boolean {
+  return run.status === "pending" || run.status === "running";
+}
