@@ -5,7 +5,7 @@ import { bestRunId, formatDuration, headlineScore, settingsLine } from "./runLog
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
 
-const STATUS_STYLES: Record<string, string> = {
+export const STATUS_STYLES: Record<string, string> = {
   pending: "bg-gray-700 text-gray-200",
   running: "bg-blue-600 text-white",
   succeeded: "bg-green-700 text-white",
