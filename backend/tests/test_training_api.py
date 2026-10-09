@@ -1,5 +1,6 @@
 import app.db as db_module
 import app.main  # noqa: F401 -- registers every model on Base.metadata for create_all
+import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
@@ -102,8 +103,7 @@ def test_create_run_returns_409_without_export():
             json={
                 "dataset_id": dataset.id,
                 "base_model": "yolo11n.pt",
-                "epochs": 10,
-                "batch": 8,
+                "settings": {"epochs": 10, "batch": 8},
             },
         )
         assert response.status_code == 409
@@ -128,8 +128,7 @@ def test_create_run_returns_202(monkeypatch):
             json={
                 "dataset_id": dataset.id,
                 "base_model": "yolo11n.pt",
-                "epochs": 10,
-                "batch": 8,
+                "settings": {"epochs": 10, "batch": 8},
             },
         )
 
@@ -643,7 +642,7 @@ def test_base_models_unknown_dataset_is_404():
 
 
 def _create(headers, dataset_id, **overrides):
-    body = {"dataset_id": dataset_id, "epochs": 1, "batch": 2, **overrides}
+    body = {"dataset_id": dataset_id, "settings": {"epochs": 1, "batch": 2}, **overrides}
     return client.post("/training/runs", json=body, headers=headers)
 
 
@@ -883,4 +882,124 @@ def test_model_list_exposes_lineage(monkeypatch):
         assert row["base_model_version_id"] is None
     finally:
         _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_create_run_stores_the_full_resolved_settings(monkeypatch):
+    email = "train-set1@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    _stub_send_task(monkeypatch)
+    try:
+        response = _create(
+            headers, dataset.id, base_model="yolo11n.pt", settings={"epochs": 7, "hsv_h": 0.01}
+        )
+
+        assert response.status_code == 202
+        run = session.get(TrainingRun, response.json()["id"])
+        session.refresh(run)
+        assert run.config["epochs"] == 7
+        assert run.config["hsv_h"] == 0.01
+        assert run.config["batch"] == 8 and run.config["imgsz"] == 640  # defaults included
+        assert run.total_epochs == 7
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [{"project": "/x"}, {"data": "y"}, {"resume": True}, {"epochs": True}, {"imgsz": 650},
+     {"mosaic_typo": 1}, {"erasing": 0.4}, {"epochs": 10**400}],
+)
+def test_create_run_rejects_invalid_settings(monkeypatch, settings):
+    email = "train-set2@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)  # detection: erasing is classification-only
+    _succeeded_export(session, dataset.id, user_id)
+    sent = _stub_send_task(monkeypatch)
+    try:
+        response = _create(headers, dataset.id, base_model="yolo11n.pt", settings=settings)
+
+        assert response.status_code == 422
+        assert isinstance(response.json()["detail"], str) and response.json()["detail"]
+        assert sent == []
+        assert session.query(TrainingRun).filter(TrainingRun.dataset_id == dataset.id).count() == 0
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_create_run_stores_a_trimmed_name_and_note_and_blank_becomes_null(monkeypatch):
+    email = "train-set3@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    _stub_send_task(monkeypatch)
+    try:
+        response = _create(
+            headers, dataset.id, base_model="yolo11n.pt", name="  big frames  ", note="try 800px"
+        )
+
+        assert response.json()["name"] == "big frames"
+        assert response.json()["note"] == "try 800px"
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_patch_run_updates_and_clears_name_and_note(monkeypatch):
+    email = "train-set4@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    _succeeded_export(session, dataset.id, user_id)
+    _stub_send_task(monkeypatch)
+    try:
+        run_id = _create(headers, dataset.id, base_model="yolo11n.pt", name="a", note="b").json()["id"]
+
+        renamed = client.patch(f"/training/runs/{run_id}", json={"name": "renamed"}, headers=headers)
+        assert renamed.status_code == 200
+        assert renamed.json()["name"] == "renamed" and renamed.json()["note"] == "b"  # note untouched
+
+        cleared = client.patch(f"/training/runs/{run_id}", json={"note": None}, headers=headers)
+        assert cleared.json()["note"] is None and cleared.json()["name"] == "renamed"
+
+        assert client.patch("/training/runs/99999999", json={"name": "x"}, headers=headers).status_code == 404
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()
+
+
+def test_settings_schema_matches_the_datasets_task_type():
+    email = "train-set5@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    dataset = _make_dataset(session, user_id)
+    other = _make_dataset(session, user_id)
+    other.task_type = TaskType.CLASSIFICATION
+    session.commit()
+    try:
+        det = client.get(f"/training/settings-schema?dataset_id={dataset.id}", headers=headers)
+        cls = client.get(f"/training/settings-schema?dataset_id={other.id}", headers=headers)
+
+        assert det.status_code == 200
+        det_keys = {f["key"] for g in det.json()["groups"] for f in g["fields"]}
+        cls_keys = {f["key"] for g in cls.json()["groups"] for f in g["fields"]}
+        assert "mosaic" in det_keys and "mosaic" not in cls_keys
+        assert "erasing" in cls_keys
+        assert [p["id"] for p in det.json()["presets"]][:2] == ["quick_check", "standard"]
+        assert client.get("/training/settings-schema?dataset_id=99999999", headers=headers).status_code == 404
+    finally:
+        _cleanup(session, dataset.id)
+        _cleanup(session, other.id)
         session.close()

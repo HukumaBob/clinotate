@@ -17,7 +17,7 @@ from app.celery_app import celery_app
 from app.datasets.models import Dataset, TaskType
 from app.jobs.models import Job, JobStatus, JobType
 from app.storage import StorageService
-from app.training import catalog
+from app.training import catalog, params
 from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 
 logger = logging.getLogger(__name__)
@@ -133,13 +133,39 @@ def list_base_models(session: Session, dataset_id: int) -> list[dict]:
     return options
 
 
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def get_settings_schema(session: Session, dataset_id: int) -> dict:
+    dataset = session.get(Dataset, dataset_id)
+    if dataset is None:
+        raise DatasetNotFound(f"Dataset {dataset_id} not found")
+    return params.settings_schema(ADAPTER_NAME, dataset.task_type)
+
+
+def update_run_meta(session: Session, run_id: int, fields: dict) -> TrainingRun:
+    run = get_run(session, run_id)
+    for key in ("name", "note"):
+        if key in fields:
+            setattr(run, key, _clean_text(fields[key]))
+    session.commit()
+    session.refresh(run)
+    return run
+
+
 def create_training_run(
     session: Session,
     *,
     dataset_id: int,
-    base_model: str | None,
-    base_model_version_id: int | None,
-    config: dict,
+    base_model: str | None = None,
+    base_model_version_id: int | None = None,
+    settings: dict | None = None,
+    name: str | None = None,
+    note: str | None = None,
     created_by: User,
 ) -> TrainingRun:
     dataset = session.get(Dataset, dataset_id)
@@ -182,14 +208,18 @@ def create_training_run(
                 f"{base_model!r} is not a {dataset.task_type.value} base model for {ADAPTER_NAME}"
             )
 
+    resolved_settings = params.resolve_settings(ADAPTER_NAME, dataset.task_type, settings)
+
     run = TrainingRun(
         dataset_id=dataset_id,
         adapter=ADAPTER_NAME,
         base_model=resolved_base,
         base_model_version_id=parent_id,
         task_type=dataset.task_type,
-        config=config,
-        total_epochs=int(config.get("epochs", 1)),
+        config=resolved_settings,
+        total_epochs=int(resolved_settings["epochs"]),
+        name=_clean_text(name),
+        note=_clean_text(note),
         created_by_id=created_by.id,
     )
     session.add(run)

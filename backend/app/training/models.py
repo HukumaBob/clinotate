@@ -51,6 +51,10 @@ class TrainingRun(Base):
     base_model_version_id: Mapped[int | None] = mapped_column(
         ForeignKey("model_versions.id"), nullable=True
     )
+    # Free-form labels the person gives a run so the history stays readable
+    # ("why did I run this?"). Never used by the trainer.
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
     task_type: Mapped[TaskType] = mapped_column(Enum(TaskType))
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[TrainingRunStatus] = mapped_column(

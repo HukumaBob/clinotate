@@ -1,10 +1,17 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.datasets.models import TaskType
 from app.training.models import TrainingRunStatus
+
+
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
 
 
 class TrainingRunCreate(BaseModel):
@@ -13,18 +20,63 @@ class TrainingRunCreate(BaseModel):
     # weights name, or an earlier ModelVersion to fine-tune from.
     base_model: str | None = Field(default=None, min_length=1, max_length=200)
     base_model_version_id: int | None = None
-    # Bounded rather than free-form: an accidental 100000-epoch run would
-    # hold this single-GPU host's only worker for days.
-    epochs: int = Field(ge=1, le=1000)
-    batch: int = Field(ge=1, le=256)
-    imgsz: int = Field(default=640, ge=32, le=4096)
-    advanced: dict = Field(default_factory=dict)
+    name: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=5000)
+    # Validated against the adapter's schema (app.training.params); an unknown
+    # key, an out-of-range value or a key the task does not use is a 422.
+    settings: dict = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _exactly_one_base(self):
         if (self.base_model is None) == (self.base_model_version_id is None):
             raise ValueError("Provide exactly one of base_model and base_model_version_id")
         return self
+
+    @field_validator("name", "note")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        return _clean_text(value)
+
+
+class TrainingRunUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("name", "note")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        return _clean_text(value)
+
+
+class SettingFieldRead(BaseModel):
+    key: str
+    label: str
+    type: Literal["int", "float", "bool", "choice"]
+    default: bool | int | float | str | None
+    help: str
+    min: float | None
+    max: float | None
+    step: float | None
+    choices: list[str] | None
+    optional: bool
+
+
+class SettingGroupRead(BaseModel):
+    id: str
+    label: str
+    fields: list[SettingFieldRead]
+
+
+class PresetRead(BaseModel):
+    id: str
+    label: str
+    description: str
+    values: dict[str, bool | int | float | str]
+
+
+class SettingsSchemaRead(BaseModel):
+    groups: list[SettingGroupRead]
+    presets: list[PresetRead]
 
 
 class TrainingRunRead(BaseModel):
@@ -36,6 +88,8 @@ class TrainingRunRead(BaseModel):
     adapter: str
     base_model: str
     base_model_version_id: int | None
+    name: str | None
+    note: str | None
     task_type: TaskType
     config: dict
     status: TrainingRunStatus

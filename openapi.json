@@ -3583,6 +3583,155 @@
         }
       }
     },
+    "/training/runs/{run_id}": {
+      "patch": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Update Run",
+        "operationId": "update_run_training_runs__run_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainingRunUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingRunRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Get Run",
+        "operationId": "get_run_training_runs__run_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingRunRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/settings-schema": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "Settings Schema",
+        "operationId": "settings_schema_training_settings_schema_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSchemaRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/training/base-models": {
       "get": {
         "tags": [
@@ -3617,53 +3766,6 @@
                     "$ref": "#/components/schemas/BaseModelOption"
                   },
                   "title": "Response List Base Models Training Base Models Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/training/runs/{run_id}": {
-      "get": {
-        "tags": [
-          "training"
-        ],
-        "summary": "Get Run",
-        "operationId": "get_run_training_runs__run_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "run_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Run Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TrainingRunRead"
                 }
               }
             }
@@ -6405,6 +6507,50 @@
         ],
         "title": "PredictionsRead"
       },
+      "PresetRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "description",
+          "values"
+        ],
+        "title": "PresetRead"
+      },
       "ProcedureCreate": {
         "properties": {
           "name": {
@@ -7377,6 +7523,143 @@
         ],
         "title": "SequencesStats"
       },
+      "SettingFieldRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "int",
+              "float",
+              "bool",
+              "choice"
+            ],
+            "title": "Type"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "help": {
+            "type": "string",
+            "title": "Help"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          },
+          "optional": {
+            "type": "boolean",
+            "title": "Optional"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "type",
+          "default",
+          "help",
+          "min",
+          "max",
+          "step",
+          "choices",
+          "optional"
+        ],
+        "title": "SettingFieldRead"
+      },
+      "SettingGroupRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingFieldRead"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "fields"
+        ],
+        "title": "SettingGroupRead"
+      },
       "SettingsRead": {
         "properties": {
           "max_track_range_frames": {
@@ -7399,6 +7682,30 @@
           "min_mask_area_fraction"
         ],
         "title": "SettingsRead"
+      },
+      "SettingsSchemaRead": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SettingGroupRead"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/PresetRead"
+            },
+            "type": "array",
+            "title": "Presets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups",
+          "presets"
+        ],
+        "title": "SettingsSchemaRead"
       },
       "SettingsUpdate": {
         "properties": {
@@ -7570,36 +7877,39 @@
             ],
             "title": "Base Model Version Id"
           },
-          "epochs": {
-            "type": "integer",
-            "maximum": 1000.0,
-            "minimum": 1.0,
-            "title": "Epochs"
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
-          "batch": {
-            "type": "integer",
-            "maximum": 256.0,
-            "minimum": 1.0,
-            "title": "Batch"
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
-          "imgsz": {
-            "type": "integer",
-            "maximum": 4096.0,
-            "minimum": 32.0,
-            "title": "Imgsz",
-            "default": 640
-          },
-          "advanced": {
+          "settings": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Advanced"
+            "title": "Settings"
           }
         },
         "type": "object",
         "required": [
-          "dataset_id",
-          "epochs",
-          "batch"
+          "dataset_id"
         ],
         "title": "TrainingRunCreate"
       },
@@ -7642,6 +7952,28 @@
               }
             ],
             "title": "Base Model Version Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "task_type": {
             "$ref": "#/components/schemas/TaskType"
@@ -7720,6 +8052,8 @@
           "adapter",
           "base_model",
           "base_model_version_id",
+          "name",
+          "note",
           "task_type",
           "config",
           "status",
@@ -7745,6 +8079,36 @@
         ],
         "title": "TrainingRunStatus",
         "description": "Deliberately parallel to JobStatus rather than reusing it: a run can\nend as STOPPED, which is neither success nor failure, and widening an\nenum shared by every job type to serve one of them is worse than a\nneighbouring enum."
+      },
+      "TrainingRunUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "TrainingRunUpdate"
       },
       "UserLogin": {
         "properties": {

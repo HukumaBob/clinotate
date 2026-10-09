@@ -5,7 +5,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import get_session
 from app.storage import StorageService, get_storage_service
-from app.training import service
+from app.training import params, service
 from app.training.models import TrainingRunStatus
 from app.training.schemas import (
     BaseModelOption,
@@ -15,6 +15,8 @@ from app.training.schemas import (
     TrainingLogRead,
     TrainingRunCreate,
     TrainingRunRead,
+    TrainingRunUpdate,
+    SettingsSchemaRead,
 )
 
 router = APIRouter(prefix="/training", tags=["training"], dependencies=[Depends(get_current_user)])
@@ -26,19 +28,15 @@ def create_run(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    config = {
-        "epochs": body.epochs,
-        "batch": body.batch,
-        "imgsz": body.imgsz,
-        **body.advanced,
-    }
     try:
         return service.create_training_run(
             session,
             dataset_id=body.dataset_id,
             base_model=body.base_model,
             base_model_version_id=body.base_model_version_id,
-            config=config,
+            settings=body.settings,
+            name=body.name,
+            note=body.note,
             created_by=current_user,
         )
     except service.DatasetNotExported as exc:
@@ -47,6 +45,31 @@ def create_run(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except service.InvalidBaseModel as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except params.InvalidSettings as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+
+@router.patch("/runs/{run_id}", response_model=TrainingRunRead)
+def update_run(
+    run_id: int,
+    body: TrainingRunUpdate,
+    session: Session = Depends(get_session),
+):
+    try:
+        return service.update_run_meta(session, run_id, body.model_dump(exclude_unset=True))
+    except service.TrainingRunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/settings-schema", response_model=SettingsSchemaRead)
+def settings_schema(
+    dataset_id: int = Query(),
+    session: Session = Depends(get_session),
+):
+    try:
+        return service.get_settings_schema(session, dataset_id)
+    except service.DatasetNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 @router.get("/base-models", response_model=list[BaseModelOption])

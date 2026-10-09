@@ -132,7 +132,7 @@ def test_create_run_requires_an_exported_dataset():
                 dataset_id=dataset.id,
                 base_model="yolo11n.pt",
                 base_model_version_id=None,
-                config={"epochs": 10, "batch": 8},
+                settings={"epochs": 10, "batch": 8},
                 created_by=_User(user_id),
             )
     finally:
@@ -158,7 +158,7 @@ def test_create_run_succeeds_when_export_exists(monkeypatch):
             dataset_id=dataset.id,
             base_model="yolo11n.pt",
             base_model_version_id=None,
-            config={"epochs": 10, "batch": 8},
+            settings={"epochs": 10, "batch": 8},
             created_by=_User(user_id),
         )
 
@@ -197,7 +197,7 @@ def test_create_run_refuses_a_second_active_run(monkeypatch):
             dataset_id=dataset.id,
             base_model="yolo11n.pt",
             base_model_version_id=None,
-            config={"epochs": 1, "batch": 8},
+            settings={"epochs": 1, "batch": 8},
             created_by=_User(user_id),
         )
 
@@ -207,7 +207,7 @@ def test_create_run_refuses_a_second_active_run(monkeypatch):
                 dataset_id=dataset_b.id,
                 base_model="yolo11n.pt",
             base_model_version_id=None,
-                config={"epochs": 1, "batch": 8},
+                settings={"epochs": 1, "batch": 8},
                 created_by=_User(user_id),
             )
     finally:
@@ -483,7 +483,7 @@ def test_force_stop_unblocks_create_training_run(monkeypatch):
             dataset_id=dataset_b.id,
             base_model="yolo11n.pt",
             base_model_version_id=None,
-            config={"epochs": 1, "batch": 8},
+            settings={"epochs": 1, "batch": 8},
             created_by=_User(user_id),
         )
 
