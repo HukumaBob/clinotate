@@ -174,6 +174,32 @@ def weights_for_task(base_model: str, task_type: str) -> str:
     return f"{stem}{suffix}.{extension}"
 
 
+# Keys that would let a stored config redirect the trainer or change where it
+# writes. The backend schema never accepts them; refusing them here as well
+# means a hand-edited row cannot reach model.train() either.
+_RESERVED_TRAIN_KEYS = frozenset(
+    {"data", "project", "name", "exist_ok", "resume", "pretrained", "model", "device", "save_dir"}
+)
+
+
+def train_kwargs(config: dict) -> dict:
+    """The settings to hand to model.train(), minus anything reserved.
+
+    `cache` is stored as the string "false" (the settings schema is typed,
+    and a choice field cannot hold a boolean); Ultralytics wants a real False.
+    batch/imgsz keep the defaults a run created before the settings schema
+    would have used, and epochs defaults to 1 to stay in step with the
+    progress callback's total_epochs.
+    """
+    kwargs = {key: value for key, value in config.items() if key not in _RESERVED_TRAIN_KEYS}
+    if kwargs.get("cache") == "false":
+        kwargs["cache"] = False
+    kwargs.setdefault("epochs", 1)
+    kwargs.setdefault("batch", 8)
+    kwargs.setdefault("imgsz", 640)
+    return kwargs
+
+
 class UltralyticsYoloAdapter:
     name = "ultralytics_yolo"
 
@@ -232,9 +258,7 @@ class UltralyticsYoloAdapter:
                     # train/val/test entries (images/train etc.) assume sit
                     # alongside it.
                     data=data_argument,
-                    epochs=total_epochs,
-                    batch=int(request.config.get("batch", 8)),
-                    imgsz=int(request.config.get("imgsz", 640)),
+                    **train_kwargs(request.config),
                     project=str(request.output_dir),
                     name="run",
                     exist_ok=True,

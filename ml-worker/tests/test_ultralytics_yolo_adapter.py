@@ -15,7 +15,7 @@ from unittest import mock
 import pytest
 
 from app.training_adapter import TrainingRequest
-from app.ultralytics_yolo_adapter import UltralyticsYoloAdapter
+from app.ultralytics_yolo_adapter import UltralyticsYoloAdapter, train_kwargs
 
 
 class _FakeTrainer:
@@ -68,6 +68,7 @@ def _make_fake_yolo(*, epochs, weights_dir, log_lines_via_print, log_lines_via_l
             self._callbacks[event] = fn
 
         def train(self, **kwargs):
+            _FakeYOLO.last_kwargs = kwargs
             weights_dir.mkdir(parents=True, exist_ok=True)
             self.trainer = _FakeTrainer(weights_dir)
             on_epoch_end = self._callbacks.get("on_train_epoch_end")
@@ -392,3 +393,68 @@ def test_weights_for_task_leaves_a_local_path_untouched():
 
     assert weights_for_task("/tmp/xyz/parent.pt", "segmentation") == "/tmp/xyz/parent.pt"
     assert weights_for_task("/tmp/xyz/parent.pt", "classification") == "/tmp/xyz/parent.pt"
+
+
+def test_train_kwargs_passes_every_setting_through():
+    kwargs = train_kwargs({"epochs": 5, "batch": 4, "imgsz": 800, "hsv_h": 0.005, "freeze": 10})
+
+    assert kwargs == {"epochs": 5, "batch": 4, "imgsz": 800, "hsv_h": 0.005, "freeze": 10}
+
+
+def test_train_kwargs_never_forwards_keys_that_redirect_the_trainer():
+    kwargs = train_kwargs(
+        {"epochs": 1, "data": "/x", "project": "/y", "name": "n", "exist_ok": False,
+         "resume": True, "pretrained": False, "model": "m.pt", "device": "cpu", "save_dir": "/z"}
+    )
+
+    assert kwargs == {"epochs": 1, "batch": 8, "imgsz": 640}
+
+
+def test_train_kwargs_maps_the_cache_string_false_to_a_boolean():
+    assert train_kwargs({"cache": "false"})["cache"] is False
+    assert train_kwargs({"cache": "ram"})["cache"] == "ram"
+    assert train_kwargs({"cache": "disk"})["cache"] == "disk"
+
+
+def test_train_kwargs_keeps_batch_and_imgsz_defaults_for_a_legacy_config():
+    assert train_kwargs({"epochs": 3})["batch"] == 8
+    assert train_kwargs({"epochs": 3})["imgsz"] == 640
+    assert train_kwargs({"batch": 2, "imgsz": 320})["batch"] == 2
+
+
+def test_train_kwargs_always_forwards_epochs_and_omits_freeze_when_unset():
+    kwargs = train_kwargs({"batch": 2})
+
+    assert kwargs["epochs"] == 1
+    assert "freeze" not in kwargs
+
+
+def test_settings_reach_model_train_alongside_the_fixed_arguments(monkeypatch, tmp_path):
+    fake_yolo_cls = _make_fake_yolo(
+        epochs=1,
+        weights_dir=tmp_path / "out" / "run" / "weights",
+        log_lines_via_print=["p"],
+        log_lines_via_logger=["l"],
+    )
+    monkeypatch.setattr("app.ultralytics_yolo_adapter.YOLO", fake_yolo_cls)
+    request = TrainingRequest(
+        dataset_dir=tmp_path / "ds",
+        task_type="detection",
+        base_model="yolo11n.pt",
+        config={"epochs": 1, "hsv_h": 0.005, "freeze": 10, "cache": "false", "project": "/evil"},
+        output_dir=tmp_path / "out",
+    )
+
+    UltralyticsYoloAdapter().train(
+        request, on_log=lambda line: None, on_epoch=lambda e, t, m=None: None, should_stop=lambda: False
+    )
+
+    kwargs = fake_yolo_cls.last_kwargs
+    assert kwargs["hsv_h"] == 0.005
+    assert kwargs["freeze"] == 10
+    assert kwargs["cache"] is False
+    assert kwargs["project"] == str(tmp_path / "out")
+    assert kwargs["name"] == "run"
+    assert kwargs["exist_ok"] is True
+    assert "data" in kwargs
+    assert kwargs["epochs"] == 1 and kwargs["batch"] == 8 and kwargs["imgsz"] == 640
