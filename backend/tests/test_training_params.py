@@ -216,3 +216,22 @@ def test_unknown_adapter_has_no_fields():
     assert params.settings_schema("no_such_adapter", DET)["groups"] == []
     with pytest.raises(params.InvalidSettings):
         params.resolve_settings("no_such_adapter", DET, {"epochs": 1})
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"epochs": 10**400},
+        {"epochs": -(10**400)},
+        {"lr0": 10**400},
+        {"lr0": -(10**400)},
+        {"imgsz": 10**400},
+    ],
+)
+def test_huge_integers_are_rejected_not_overflowed(raw):
+    with pytest.raises(params.InvalidSettings):
+        params.resolve_settings(ADAPTER, DET, raw)
+
+
+def test_large_but_valid_integer_still_resolves():
+    assert params.resolve_settings(ADAPTER, DET, {"seed": 2147483647})["seed"] == 2147483647

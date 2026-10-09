@@ -239,7 +239,7 @@ def _check(field: ParamField, value: Any) -> tuple[Any, str | None]:
     # int and float: a bool is an int in Python, so exclude it explicitly
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None, f"{key} must be a number"
-    if not math.isfinite(value):
+    if isinstance(value, float) and not math.isfinite(value):
         return None, f"{key} must be a finite number"
     if field.type == "int":
         if isinstance(value, float):
@@ -248,12 +248,14 @@ def _check(field: ParamField, value: Any) -> tuple[Any, str | None]:
             value = int(value)
         if field.step and field.step > 1 and value % int(field.step) != 0:
             return None, f"{key} must be a multiple of {int(field.step)}"
-    else:
-        value = float(value)
+    # Range-check before any float conversion: ints compare exactly in Python,
+    # and float() of a huge JSON integer would raise OverflowError.
     if field.min is not None and value < field.min:
         return None, f"{key} must be at least {field.min:g}"
     if field.max is not None and value > field.max:
         return None, f"{key} must be at most {field.max:g}"
+    if field.type == "float":
+        value = float(value)
     return value, None
 
 
