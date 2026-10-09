@@ -108,6 +108,7 @@ export function TrainConfigForm({
   }, [settingsSchema]);
 
   const errors = settingsSchema ? validateSettings(settingsSchema, values) : {};
+  const errorCount = Object.keys(errors).length;
   const changes = settingsSchema
     ? allFields(settingsSchema)
         .filter((field) => isChanged(field, values[field.key]))
@@ -259,6 +260,12 @@ export function TrainConfigForm({
           />
         )}
 
+        {errorCount > 0 && (
+          <p role="alert" className="text-xs text-red-300">
+            {errorCount === 1 ? "1 setting needs attention" : `${errorCount} settings need attention`}
+          </p>
+        )}
+
         <button
           type="submit"
           disabled={
@@ -266,7 +273,7 @@ export function TrainConfigForm({
             datasetId === "" ||
             baseKey === "" ||
             !settingsSchema ||
-            Object.keys(errors).length > 0
+            errorCount > 0
           }
           className="rounded border border-gray-700 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
         >

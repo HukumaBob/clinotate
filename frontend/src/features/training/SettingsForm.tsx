@@ -18,15 +18,25 @@ interface SettingsFormProps {
 const INPUT =
   "rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100 aria-[invalid=true]:border-red-600";
 
+function rangeText(field: SettingField): string | null {
+  const { min, max } = field;
+  if (min != null && max != null) return `${min}–${max}`;
+  if (min != null) return `≥ ${min}`;
+  if (max != null) return `≤ ${max}`;
+  return null;
+}
+
 function FieldInput({
   field,
   value,
   invalid,
+  describedBy,
   onChange,
 }: {
   field: SettingField;
   value: SettingValue;
   invalid: boolean;
+  describedBy: string;
   onChange: (value: SettingValue) => void;
 }) {
   const id = `setting-${field.key}`;
@@ -35,6 +45,7 @@ function FieldInput({
       <input
         id={id}
         type="checkbox"
+        aria-describedby={describedBy}
         checked={value === true}
         onChange={(event) => onChange(event.target.checked)}
       />
@@ -45,6 +56,7 @@ function FieldInput({
       <select
         id={id}
         className={INPUT}
+        aria-describedby={describedBy}
         value={typeof value === "string" ? value : ""}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -62,6 +74,7 @@ function FieldInput({
       type="number"
       className={INPUT}
       aria-invalid={invalid}
+      aria-describedby={describedBy}
       min={field.min ?? undefined}
       max={field.max ?? undefined}
       step={field.step ?? (field.type === "float" ? "any" : 1)}
@@ -104,7 +117,7 @@ export function SettingsForm({
       {schema.groups.map((group) => (
         <details
           key={group.id}
-          open={group.id === "basic"}
+          open={group.id === "basic" || group.fields.some((f) => errors[f.key])}
           className="rounded border border-gray-800 bg-gray-950"
         >
           <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-gray-200">
@@ -115,6 +128,9 @@ export function SettingsForm({
               const value = values[field.key] ?? null;
               const changed = isChanged(field, value);
               const error = errors[field.key];
+              const range = rangeText(field);
+              const helpId = `setting-${field.key}-help`;
+              const errorId = `setting-${field.key}-error`;
               return (
                 <div
                   key={field.key}
@@ -125,9 +141,11 @@ export function SettingsForm({
                     <label htmlFor={`setting-${field.key}`} className="text-xs text-gray-300">
                       {field.label}
                     </label>
+                    {range && <span className="text-xs text-gray-500">{range}</span>}
                     {changed && (
                       <>
                         <span
+                          role="img"
                           aria-label="changed from default"
                           title="Changed from the default"
                           className="text-blue-400"
@@ -136,6 +154,7 @@ export function SettingsForm({
                         </span>
                         <button
                           type="button"
+                          aria-label={`Reset ${field.label}`}
                           className="text-xs text-gray-500 hover:text-gray-200"
                           onClick={() => onReset(field.key)}
                         >
@@ -148,10 +167,17 @@ export function SettingsForm({
                     field={field}
                     value={value}
                     invalid={Boolean(error)}
+                    describedBy={error ? `${helpId} ${errorId}` : helpId}
                     onChange={(next) => onChange(field.key, next)}
                   />
-                  <p className="text-xs text-gray-500">{field.help}</p>
-                  {error && <p className="text-xs text-red-300">{error}</p>}
+                  <p id={helpId} className="text-xs text-gray-500">
+                    {field.help}
+                  </p>
+                  {error && (
+                    <p id={errorId} className="text-xs text-red-300">
+                      {error}
+                    </p>
+                  )}
                 </div>
               );
             })}

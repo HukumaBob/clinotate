@@ -345,4 +345,41 @@ describe("TrainConfigForm", () => {
     expect(screen.getByText("Could not load base models.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
   });
+
+  it("opens the group with an invalid value and says how many settings need attention", async () => {
+    const user = userEvent.setup();
+    const schema = {
+      ...settingsSchemaFixture,
+      presets: [
+        ...settingsSchemaFixture.presets,
+        { id: "bad", label: "Bad", description: "Out of range.", values: { hsv_h: 5 } },
+      ],
+    };
+    render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={schema} />,
+    );
+    expect(screen.queryByText(/need attention|needs attention/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Hue shift", { selector: "input" })).not.toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Bad" }));
+
+    expect(screen.getByLabelText("Hue shift")).toBeVisible();
+    expect(screen.getByText("1 setting needs attention")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
+  });
+
+  it("caps the height of the list of changes so Start stays on screen", async () => {
+    const user = userEvent.setup();
+    render(
+      <TrainConfigForm datasets={datasets} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "25");
+
+    const list = screen.getByText(/what will run/i).closest("section")!.querySelector("ul")!;
+    expect(list.className).toContain("max-h-[40vh]");
+    expect(list.className).toContain("overflow-y-auto");
+  });
 });

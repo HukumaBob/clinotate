@@ -22,7 +22,7 @@ export function RunSummary({ datasetName, taskType, baseLabel, changes }: RunSum
       {changes.length === 0 ? (
         <p className="mt-2 text-gray-500">Default settings.</p>
       ) : (
-        <ul className="mt-2 flex flex-col gap-0.5">
+        <ul className="mt-2 flex max-h-[40vh] flex-col gap-0.5 overflow-y-auto">
           {changes.map((change) => (
             <li key={change.label} className="flex justify-between gap-2">
               <span>{change.label}</span>

@@ -72,6 +72,18 @@ export const settingsSchemaFixture: SettingsSchema = {
           choices: null,
           optional: false,
         },
+        {
+          key: "cos_lr",
+          label: "Cosine schedule",
+          type: "bool",
+          default: false,
+          help: "Decay the learning rate along a cosine curve instead of linearly.",
+          min: null,
+          max: null,
+          step: null,
+          choices: null,
+          optional: false,
+        },
       ],
     },
     {

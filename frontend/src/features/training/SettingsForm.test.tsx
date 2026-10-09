@@ -120,4 +120,88 @@ describe("SettingsForm", () => {
       within(screen.getByTestId("field-optimizer")).getByText(/ignores the learning rate/i),
     ).toBeInTheDocument();
   });
+
+  it("shows the allowed range next to the label, and none for choice fields", async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByText("Optimization"));
+
+    expect(within(screen.getByTestId("field-epochs")).getByText("1–1000")).toBeInTheDocument();
+    expect(within(screen.getByTestId("field-lr0")).queryByText(/[≥≤–]/)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("field-optimizer")).queryByText(/[≥≤–]/)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("field-cos_lr")).queryByText(/[≥≤–]/)).not.toBeInTheDocument();
+  });
+
+  it("shows a one-sided range as at-least or at-most", () => {
+    const oneSided = {
+      ...schema,
+      groups: [
+        {
+          id: "basic",
+          label: "Basic",
+          fields: [
+            { ...schema.groups[0].fields[0], key: "low", label: "Low", min: 0.0001, max: null },
+            { ...schema.groups[0].fields[0], key: "high", label: "High", min: null, max: 1 },
+          ],
+        },
+      ],
+    };
+    render(
+      <SettingsForm schema={oneSided} values={{ low: 1, high: 1 }} errors={{}}
+        onChange={vi.fn()} onReset={vi.fn()} onApplyPreset={vi.fn()} />,
+    );
+
+    expect(within(screen.getByTestId("field-low")).getByText("≥ 0.0001")).toBeInTheDocument();
+    expect(within(screen.getByTestId("field-high")).getByText("≤ 1")).toBeInTheDocument();
+  });
+
+  it("links the input to its help, and to its error when there is one", () => {
+    setup({ epochs: 0 }, { epochs: "Must be at least 1" });
+
+    const epochs = screen.getByLabelText("Epochs");
+    expect(epochs).toHaveAttribute("aria-describedby", "setting-epochs-help setting-epochs-error");
+    expect(document.getElementById("setting-epochs-error")).toHaveTextContent("Must be at least 1");
+    expect(screen.getByLabelText("Batch size")).toHaveAttribute(
+      "aria-describedby",
+      "setting-batch-help",
+    );
+    expect(document.getElementById("setting-batch-help")).toHaveTextContent(/number of frames/i);
+  });
+
+  it("names the Reset button after its field", () => {
+    setup({ epochs: 30 });
+
+    expect(screen.getByRole("button", { name: "Reset Epochs" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "changed from default" })).toBeInTheDocument();
+  });
+
+  it("renders a bool field as a checkbox that reports toggles and resets", async () => {
+    const user = userEvent.setup();
+    const props = setup();
+    await user.click(screen.getByText("Optimization"));
+
+    const checkbox = screen.getByLabelText("Cosine schedule");
+    expect(checkbox).toHaveAttribute("type", "checkbox");
+    expect(checkbox).not.toBeChecked();
+    await user.click(checkbox);
+    expect(props.onChange).toHaveBeenLastCalledWith("cos_lr", true);
+  });
+
+  it("marks a bool field that differs from its default and resets it", async () => {
+    const user = userEvent.setup();
+    const props = setup({ cos_lr: true });
+    await user.click(screen.getByText("Optimization"));
+
+    const field = screen.getByTestId("field-cos_lr");
+    expect(within(field).getByLabelText("changed from default")).toBeInTheDocument();
+    await user.click(within(field).getByRole("button", { name: /reset/i }));
+
+    expect(props.onReset).toHaveBeenCalledWith("cos_lr");
+  });
+
+  it("opens a collapsed group that contains an error", () => {
+    setup({ hsv_h: 5 }, { hsv_h: "Must be at most 0.1" });
+
+    expect(screen.getByLabelText("Hue shift")).toBeVisible();
+  });
 });
