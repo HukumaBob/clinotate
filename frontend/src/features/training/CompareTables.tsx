@@ -19,6 +19,7 @@ interface CompareTablesProps {
 }
 
 function formatDelta(delta: number): string {
+  if (Number(Math.abs(delta).toFixed(3)) === 0) return "0.000";
   return `${delta < 0 ? "−" : "+"}${Math.abs(delta).toFixed(3)}`;
 }
 
@@ -39,9 +40,9 @@ function Empty({ children }: { children: string }) {
 function RunHeaders({ runs, first }: { runs: CompareRunInfo[]; first: string }) {
   return (
     <tr className="border-b border-gray-800 text-left text-xs text-gray-400">
-      <th className="px-2 py-1 font-medium">{first}</th>
+      <th scope="col" className="px-2 py-1 font-medium">{first}</th>
       {runs.map((run) => (
-        <th key={run.id} className="px-2 py-1 font-medium" style={{ color: run.color }}>
+        <th key={run.id} scope="col" className="px-2 py-1 font-medium" style={{ color: run.color }}>
           {run.label}
         </th>
       ))}
@@ -100,7 +101,7 @@ export function CompareTables({ runs, runObjects, metrics, schema }: CompareTabl
               <tbody>
                 {configRows.map((row) => (
                   <tr key={row.key} className="border-b border-gray-900">
-                    <td className="px-2 py-1 text-gray-400">{row.label}</td>
+                    <th scope="row" className="px-2 py-1 text-left font-normal text-gray-400">{row.label}</th>
                     {row.values.map((value, i) => (
                       <td key={i} className="px-2 py-1 text-gray-300">
                         {value}
@@ -129,7 +130,7 @@ export function CompareTables({ runs, runObjects, metrics, schema }: CompareTabl
               <tbody>
                 {finalRows.map((row) => (
                   <tr key={row.key} className="border-b border-gray-900">
-                    <td className="px-2 py-1 text-gray-400">{row.key}</td>
+                    <th scope="row" className="px-2 py-1 text-left font-normal text-gray-400">{row.key}</th>
                     <MetricCells row={row} />
                   </tr>
                 ))}
@@ -167,7 +168,7 @@ export function CompareTables({ runs, runObjects, metrics, schema }: CompareTabl
                 <tbody>
                   {classRows.map((row) => (
                     <tr key={row.cls} className="border-b border-gray-900">
-                      <td className="px-2 py-1 text-gray-400">{row.cls}</td>
+                      <th scope="row" className="px-2 py-1 text-left font-normal text-gray-400">{row.cls}</th>
                       <MetricCells row={row} />
                     </tr>
                   ))}

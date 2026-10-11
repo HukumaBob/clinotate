@@ -78,8 +78,23 @@ describe("useCompareMetrics", () => {
   it("ignores answers after unmount", async () => {
     const d = deferred<never>();
     vi.mocked(apiClient.GET).mockReturnValue(d.promise as never);
-    const { unmount } = renderHook(() => useCompareMetrics([1]));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result, unmount } = renderHook(() => useCompareMetrics([1]));
+    const before = result.current;
     unmount();
     await act(async () => d.resolve(ok({ id: 1 })));
+    expect(result.current).toBe(before);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("is loading on the very first render and right after the ids change", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue(ok({ id: 1 }));
+    const { result, rerender } = renderHook(({ ids }) => useCompareMetrics(ids), { initialProps: { ids: [1] } });
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    rerender({ ids: [2] });
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.loading).toBe(false));
   });
 });

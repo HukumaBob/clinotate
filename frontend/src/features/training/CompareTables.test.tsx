@@ -39,10 +39,47 @@ describe("CompareTables", () => {
   it("renders captions for all three sections", () => {
     render(<CompareTables runs={runs} runObjects={runObjects} metrics={metrics} schema={null} />);
 
-    for (const name of ["Configuration differences", "Final metrics", "Per-class metrics"]) {
-      const heading = screen.getByRole("heading", { name });
-      expect(heading.parentElement?.querySelector("p")).not.toBeNull();
+    const captions: Record<string, string> = {
+      "Configuration differences": "Only settings whose values differ between the compared runs.",
+      "Final metrics": "Last reported values; the best is highlighted, deltas are against the first run.",
+      "Per-class metrics": "One metric at a time, per class; deltas are against the first run.",
+    };
+    for (const [name, caption] of Object.entries(captions)) {
+      expect(within(section(name)).getByText(caption)).toBeInTheDocument();
     }
+  });
+
+  it("handles a run with null metrics next to one with metrics", () => {
+    render(
+      <CompareTables
+        runs={runs}
+        runObjects={runObjects}
+        metrics={[null, metrics[1]]}
+        schema={null}
+      />,
+    );
+
+    const finals = within(section("Final metrics"));
+    expect(finals.getByText("—")).toBeInTheDocument();
+    expect(finals.getByText("0.6230")).not.toHaveClass("text-green-300");
+    expect(finals.queryByText(/^[+−]\d/)).not.toBeInTheDocument();
+  });
+
+  it("renders a delta that rounds to zero without a sign", () => {
+    render(
+      <CompareTables
+        runs={runs}
+        runObjects={runObjects}
+        metrics={[
+          { metrics: { mAP50: 0.5 }, per_class: [] },
+          { metrics: { mAP50: 0.4999 }, per_class: [] },
+        ]}
+        schema={null}
+      />,
+    );
+
+    expect(screen.getByText("0.000")).toBeInTheDocument();
+    expect(screen.queryByText("−0.000")).not.toBeInTheDocument();
   });
 
   it("lists only differing settings", () => {

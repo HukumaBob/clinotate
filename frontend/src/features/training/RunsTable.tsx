@@ -113,7 +113,7 @@ export function RunsTable({
               const finished = run.status === "succeeded" || run.status === "stopped";
               const checked = selectedForCompare.includes(run.id);
               const full = selectedForCompare.length >= MAX_COMPARE && !checked;
-              const compareReason = !finished
+              const compareReason = !finished && !checked
                 ? "Only finished runs can be compared"
                 : full
                   ? `You can compare up to ${MAX_COMPARE} runs`
@@ -130,7 +130,7 @@ export function RunsTable({
                     onOpen(run.id);
                   }}
                 >
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       aria-label={`Select run ${run.id} for comparison`}

@@ -177,6 +177,25 @@ describe("RunsTable", () => {
       expect(screen.getByRole("checkbox", { name: "Select run 4 for comparison" })).toBeEnabled();
     });
 
+    it("keeps a selected unfinished run's checkbox enabled so it can be unticked", () => {
+      const onToggleCompare = vi.fn();
+      setup([run({ id: 2, status: "running", finished_at: null })], {
+        selectedForCompare: [2],
+        onToggleCompare,
+      });
+      const box = screen.getByRole("checkbox", { name: "Select run 2 for comparison" });
+      expect(box).toBeEnabled();
+      fireEvent.click(box);
+      expect(onToggleCompare).toHaveBeenCalledWith(2);
+    });
+
+    it("does not open the row when the checkbox cell padding is clicked", () => {
+      const { onOpen } = setup([run({ id: 1 })]);
+      const cell = screen.getByRole("checkbox", { name: "Select run 1 for comparison" }).closest("td")!;
+      fireEvent.click(cell);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
     it("with 3 selected, disables the unselected boxes but keeps the selected ones enabled", () => {
       setup([run({ id: 1 }), run({ id: 2 }), run({ id: 3 }), run({ id: 4 })], {
         selectedForCompare: [1, 2, 3],

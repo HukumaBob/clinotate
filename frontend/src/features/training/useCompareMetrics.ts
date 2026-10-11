@@ -7,10 +7,12 @@ type RunMetricsRead = components["schemas"]["RunMetricsRead"];
 
 export function useCompareMetrics(runIds: number[]) {
   const [byId, setById] = useState<Record<number, RunMetricsRead | null>>({});
-  const [loading, setLoading] = useState(false);
+  const [settledKey, setSettledKey] = useState("");
   const [error, setError] = useState(false);
   const requestRef = useRef(0);
   const key = runIds.join(",");
+  // Derived so it is already true on the first render and on a key change.
+  const loading = key !== "" && settledKey !== key;
 
   useEffect(() => {
     const requestId = ++requestRef.current;
@@ -18,16 +20,14 @@ export function useCompareMetrics(runIds: number[]) {
     setById({});
     setError(false);
     if (ids.length === 0) {
-      setLoading(false);
       return () => {
         requestRef.current += 1;
       };
     }
-    setLoading(true);
     let pending = ids.length;
     const settle = () => {
       pending -= 1;
-      if (pending === 0 && requestId === requestRef.current) setLoading(false);
+      if (pending === 0 && requestId === requestRef.current) setSettledKey(key);
     };
     for (const id of ids) {
       (async () => {

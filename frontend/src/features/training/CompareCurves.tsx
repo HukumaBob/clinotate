@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { curveKeys, curveSeries, defaultCurveKey, type HistoryPoint } from "./compareLogic";
 
@@ -22,17 +22,10 @@ const PLOT_WIDTH = WIDTH - MARGIN.left - MARGIN.right;
 const PLOT_HEIGHT = HEIGHT - MARGIN.top - MARGIN.bottom;
 const TICKS = 4;
 
-/** Shared value range. A loss spike would otherwise flatten every run, so
- * for loss metrics the top is clipped to the ~95th percentile when the
- * maximum dwarfs it; the spike still draws, clipped by the plot area. */
-function valueRange(values: number[], clip: boolean): [number, number] {
+/** Shared value range: the real min/max of every plotted value. */
+function valueRange(values: number[]): [number, number] {
   let min = Math.min(...values);
   let max = Math.max(...values);
-  if (clip && values.length > 2) {
-    const sorted = [...values].sort((a, b) => a - b);
-    const cap = sorted[Math.max(0, Math.min(sorted.length - 2, Math.floor((sorted.length - 1) * 0.95)))];
-    if (cap > min && max > cap * 4) max = cap;
-  }
   if (min === max) {
     min -= 1;
     max += 1;
@@ -40,7 +33,13 @@ function valueRange(values: number[], clip: boolean): [number, number] {
   return [min, max];
 }
 
+/** Tick decimals from the span, so small losses do not all read "0.00". */
+function tickDecimals(span: number): number {
+  return Math.min(6, Math.max(2, 1 - Math.floor(Math.log10(span))));
+}
+
 export function CompareCurves({ runs, histories }: CompareCurvesProps) {
+  const clipId = `compare-curves-${useId().replace(/:/g, "")}`;
   const keys = curveKeys(histories);
   const [chosen, setChosen] = useState<string | null>(null);
   const key = chosen && keys.includes(chosen) ? chosen : defaultCurveKey(keys);
@@ -54,15 +53,15 @@ export function CompareCurves({ runs, histories }: CompareCurvesProps) {
   const epochs = all.map((p) => p.epoch);
   const [xMin, xMax] =
     epochs.length > 0 ? [Math.min(...epochs), Math.max(...epochs)] : [0, 1];
-  const [yMin, yMax] = valueRange(
-    all.map((p) => p.value),
-    key.toLowerCase().includes("loss"),
-  );
+  const [yMin, yMax] =
+    all.length > 0 ? valueRange(all.map((p) => p.value)) : ([0, 1] as [number, number]);
+  const decimals = tickDecimals(yMax - yMin);
 
   const x = (epoch: number) =>
     MARGIN.left + (xMax === xMin ? 0.5 : (epoch - xMin) / (xMax - xMin)) * PLOT_WIDTH;
   const y = (value: number) => MARGIN.top + (1 - (value - yMin) / (yMax - yMin)) * PLOT_HEIGHT;
 
+  const chartTitle = `${key} by epoch for ${runs.map((r) => r.label).join(", ")}`;
   const xTicks = [...new Set([xMin, xMax])];
   const yTicks = Array.from({ length: TICKS + 1 }, (_, i) => yMin + ((yMax - yMin) * i) / TICKS);
 
@@ -83,16 +82,16 @@ export function CompareCurves({ runs, histories }: CompareCurvesProps) {
           ))}
         </select>
       </label>
+      <div className="min-h-[280px]">
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
-        aria-label="Run comparison chart"
-        preserveAspectRatio="none"
-        className="min-h-[280px] w-full"
-        style={{ height: HEIGHT }}
+        aria-label={chartTitle}
+        className="h-auto w-full"
       >
+        <title>{chartTitle}</title>
         <defs>
-          <clipPath id="compare-curves-plot">
+          <clipPath id={clipId}>
             <rect x={MARGIN.left} y={MARGIN.top} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
           </clipPath>
         </defs>
@@ -112,7 +111,7 @@ export function CompareCurves({ runs, histories }: CompareCurvesProps) {
             textAnchor="end"
             className="fill-gray-500 text-[10px]"
           >
-            {tick.toFixed(2)}
+            {tick.toFixed(decimals)}
           </text>
         ))}
         {xTicks.map((tick) => (
@@ -126,9 +125,18 @@ export function CompareCurves({ runs, histories }: CompareCurvesProps) {
             {tick}
           </text>
         ))}
-        <g clipPath="url(#compare-curves-plot)">
+        <g clipPath={`url(#${clipId})`}>
           {runs.map((run, i) =>
-            series[i].length === 0 ? null : (
+            series[i].length === 0 ? null : series[i].length === 1 ? (
+              <circle
+                key={run.id}
+                data-run={run.id}
+                cx={x(series[i][0].epoch)}
+                cy={y(series[i][0].value)}
+                r={3}
+                fill={run.color}
+              />
+            ) : (
               <polyline
                 key={run.id}
                 data-run={run.id}
@@ -141,6 +149,7 @@ export function CompareCurves({ runs, histories }: CompareCurvesProps) {
           )}
         </g>
       </svg>
+      </div>
       <ul className="mt-2 flex flex-wrap gap-3 text-xs">
         {runs.map((run, i) => (
           <li key={run.id} className="flex items-center gap-1.5 text-gray-300">
