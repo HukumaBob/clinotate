@@ -435,6 +435,139 @@ describe("TrainPage", () => {
     expect(screen.getByText("other run")).toBeInTheDocument();
   });
 
+  describe("run comparison", () => {
+    const tick = (id: number) => fireEvent.click(screen.getByRole("checkbox", { name: `Select run ${id} for comparison` }));
+    const compareHeading = (text: string) => screen.findByRole("heading", { name: text });
+
+    beforeEach(() => {
+      world.runs[496] = [
+        runRow({ id: 268, name: "alpha" }),
+        runRow({ id: 199, name: "beta" }),
+        runRow({ id: 77, name: "gamma" }),
+        runRow({ id: 78, name: "delta" }),
+        runRow({ id: 90, name: "going", status: "failed" }),
+      ];
+      world.runs[497] = [runRow({ id: 8, dataset_id: 497, name: "other run" })];
+    });
+
+    it("ticking two finished runs and pressing Compare opens the view and writes compare and cmp to the URL", async () => {
+      renderPage();
+      await screen.findByText("alpha");
+      tick(268);
+      tick(199);
+      expect(where()).toBe("?dataset=496&compare=268%2C199");
+      fireEvent.click(screen.getByRole("button", { name: "Compare (2)" }));
+      expect(await compareHeading("Comparing #268 alpha, #199 beta")).toBeInTheDocument();
+      expect(where()).toBe("?dataset=496&compare=268%2C199&cmp=1");
+      expect(screen.queryByRole("table", { name: /runs/i })).not.toBeInTheDocument();
+    });
+
+    it("← Runs returns to the table and keeps the ticks", async () => {
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      fireEvent.click(await screen.findByRole("button", { name: /← Runs/ }));
+      expect(await screen.findByText("gamma")).toBeInTheDocument();
+      expect(where()).toBe("?dataset=496&compare=268%2C199");
+      expect(screen.getByRole("checkbox", { name: "Select run 268 for comparison" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Select run 199 for comparison" })).toBeChecked();
+    });
+
+    it("drops ids that are not finished runs of this dataset, shows a note and falls back to the table", async () => {
+      renderPage("/train?dataset=496&compare=268,99999&cmp=1");
+      expect(await screen.findByText("gamma")).toBeInTheDocument();
+      expect(screen.getByText("Some runs in the link are not on this dataset and were left out.")).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: "Select run 268 for comparison" })).toBeChecked();
+      expect(screen.queryByRole("heading", { name: /^Comparing/ })).not.toBeInTheDocument();
+    });
+
+    it("renders the view straight from a deep link", async () => {
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      expect(await compareHeading("Comparing #268 alpha, #199 beta")).toBeInTheDocument();
+      expect(screen.queryByText(/not on this dataset and were left out/)).not.toBeInTheDocument();
+      await waitFor(() => expect(getCalls("/training/runs/{run_id}/metrics")).toHaveLength(2));
+    });
+
+    it("removing a run below two returns to the table in one URL change, keeping the remaining tick", async () => {
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      await compareHeading("Comparing #268 alpha, #199 beta");
+      fireEvent.click(screen.getByRole("button", { name: "Remove run 268 from the comparison" }));
+      expect(await screen.findByText("gamma")).toBeInTheDocument();
+      expect(where()).toBe("?dataset=496&compare=199");
+      expect(screen.getByRole("checkbox", { name: "Select run 199 for comparison" })).toBeChecked();
+    });
+
+    it("removing one of three keeps the view open with the other two", async () => {
+      renderPage("/train?dataset=496&compare=268,199,77&cmp=1");
+      await compareHeading("Comparing #268 alpha, #199 beta, #77 gamma");
+      fireEvent.click(screen.getByRole("button", { name: "Remove run 199 from the comparison" }));
+      expect(await compareHeading("Comparing #268 alpha, #77 gamma")).toBeInTheDocument();
+      expect(where()).toBe("?dataset=496&compare=268%2C77&cmp=1");
+    });
+
+    it("opening a single run from the table clears the compare view", async () => {
+      renderPage("/train?dataset=496&compare=268,199");
+      await screen.findByText("gamma");
+      fireEvent.click(screen.getByRole("button", { name: "Open run 77" }));
+      await waitFor(() => expect(where()).toContain("run=77"));
+      expect(where()).not.toContain("cmp=1");
+      expect(screen.queryByRole("heading", { name: /^Comparing/ })).not.toBeInTheDocument();
+    });
+
+    it("switching the dataset clears the selection and the view", async () => {
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      await compareHeading("Comparing #268 alpha, #199 beta");
+      fireEvent.change(screen.getByLabelText("Dataset"), { target: { value: "497" } });
+      expect(await screen.findByText("other run")).toBeInTheDocument();
+      expect(where()).toBe("?dataset=497");
+      expect(screen.queryByRole("heading", { name: /^Comparing/ })).not.toBeInTheDocument();
+    });
+
+    it("a late metrics answer for an older selection never shows", async () => {
+      const slow = deferred<{ data: unknown }>();
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: { params?: { path?: { run_id: number } } }) => {
+        if (path === "/training/runs/{run_id}/metrics" && opts?.params?.path?.run_id === 268) return slow.promise;
+        return installMockResult(path, opts);
+      }) as never);
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      await compareHeading("Comparing #268 alpha, #199 beta");
+      expect(screen.getByText("Loading metrics…")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Remove run 268 from the comparison" }));
+      await screen.findByText("gamma");
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select run 77 for comparison" }));
+      fireEvent.click(screen.getByRole("button", { name: "Compare (2)" }));
+      await compareHeading("Comparing #199 beta, #77 gamma");
+      await screen.findByRole("heading", { name: "Confusion matrices" });
+      await act(async () => {
+        slow.resolve({ data: { metrics: { staleMetricKey: 1 }, history: [], per_class: [], confusion: null } });
+      });
+      expect(screen.queryByText("staleMetricKey")).not.toBeInTheDocument();
+      expect(screen.queryByText(/#268/)).not.toBeInTheDocument();
+    });
+
+    it("allows a third tick but disables a fourth checkbox, and unfinished runs", async () => {
+      renderPage();
+      await screen.findByText("alpha");
+      tick(268);
+      tick(199);
+      tick(77);
+      expect(screen.getByRole("checkbox", { name: "Select run 78 for comparison" })).toBeDisabled();
+      expect(screen.getByRole("checkbox", { name: "Select run 90 for comparison" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Compare (3)" })).toBeEnabled();
+    });
+
+    it("shows a note for a run whose metrics failed while the other run's data renders", async () => {
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: { params?: { path?: { run_id: number } } }) => {
+        if (path === "/training/runs/{run_id}/metrics") {
+          if (opts?.params?.path?.run_id === 199) return { data: undefined, error: { detail: "x" } };
+          return { data: { metrics: { mAP50: 0.61 }, history: [], per_class: [], confusion: null } };
+        }
+        return installMockResult(path, opts);
+      }) as never);
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      expect(await screen.findByText(/Could not load metrics for #199 beta/)).toBeInTheDocument();
+      expect(screen.getByText("0.6100")).toBeInTheDocument();
+    });
+  });
+
   describe("base models and settings schema", () => {
     it("keeps the latest dataset's catalog when responses arrive out of order", async () => {
       const resolvers: Record<number, (v: unknown) => void> = {};
@@ -562,6 +695,8 @@ function installMockResult(path: string, opts?: unknown) {
       return { data: settingsSchemaFixture };
     case "/training/runs/{run_id}":
       return { data: world.runDetail((opts as { params: { path: { run_id: number } } }).params.path.run_id) };
+    case "/training/runs/{run_id}/metrics":
+      return { data: { metrics: {}, history: [], per_class: [], confusion: null } };
     case "/training/models":
       return { data: [{ id: 3, training_run_id: 5, name: "m3", task_type: "detection", metrics: {}, is_active: false, base_model: "yolo11n.pt", base_model_version_id: null, created_at: "2026-10-09T00:00:00Z" }] };
     case "/training/models/{version_id}/metrics":

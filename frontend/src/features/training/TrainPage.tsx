@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../../shared/api/client";
 import type { components } from "../../shared/api/generated/schema";
 import { ActiveRunStrip } from "./ActiveRunStrip";
+import { CompareView } from "./CompareView";
+import { MAX_COMPARE } from "./compareLogic";
 import { DatasetRail } from "./DatasetRail";
 import { RunDetail } from "./RunDetail";
 import {
@@ -298,6 +300,41 @@ export function TrainPage() {
     setDeleteError(null);
   }, [selectedDatasetId, url.run]);
 
+  // The URL's compare ids, kept only once the list is loaded and only when
+  // they are finished runs of this dataset (order kept, capped).
+  const listLoaded = !loading && runsError === null;
+  const validCompareIds = listLoaded
+    ? url.compare
+        .filter((id) =>
+          liveRuns.some(
+            (run) => run.id === id && (run.status === "succeeded" || run.status === "stopped"),
+          ),
+        )
+        .slice(0, MAX_COMPARE)
+    : [];
+  const compareDropped = listLoaded && validCompareIds.length < url.compare.length;
+  const compareRuns = validCompareIds
+    .map((id) => liveRuns.find((run) => run.id === id))
+    .filter((run): run is TrainingRunRead => run !== undefined);
+  const showCompare = url.compareOpen && validCompareIds.length >= 2;
+
+  function handleToggleCompare(id: number) {
+    if (validCompareIds.includes(id)) {
+      update({ compare: validCompareIds.filter((other) => other !== id) });
+    } else if (validCompareIds.length < MAX_COMPARE) {
+      update({ compare: [...validCompareIds, id] });
+    }
+  }
+
+  function handleRemoveCompare(id: number) {
+    const remaining = validCompareIds.filter((other) => other !== id);
+    update(
+      remaining.length < 2
+        ? { compare: remaining, compareOpen: false }
+        : { compare: remaining },
+    );
+  }
+
   const lastPoint = activeMetrics.data?.history.at(-1);
   const headline =
     activeRun && lastPoint
@@ -399,7 +436,14 @@ export function TrainPage() {
           >
             {url.tab === "runs" && (
               <>
-                {openRun ? (
+                {showCompare ? (
+                  <CompareView
+                    runs={compareRuns}
+                    schema={settingsSchema}
+                    onBack={() => update({ compareOpen: false })}
+                    onRemove={handleRemoveCompare}
+                  />
+                ) : openRun ? (
                   <RunDetail
                     run={openRun}
                     view={url.view}
@@ -421,8 +465,16 @@ export function TrainPage() {
                         {`Run #${url.run} is not on this dataset (it may have been deleted).`}
                       </p>
                     )}
+                    {compareDropped && (
+                      <p className="mb-3 text-sm text-gray-500">
+                        Some runs in the link are not on this dataset and were left out.
+                      </p>
+                    )}
                     <RunsTable
                       runs={liveRuns}
+                      selectedForCompare={validCompareIds}
+                      onToggleCompare={handleToggleCompare}
+                      onCompare={() => update({ compareOpen: true })}
                       selectedRunId={url.run}
                       loading={loading && runs.length === 0}
                       error={runsError}
