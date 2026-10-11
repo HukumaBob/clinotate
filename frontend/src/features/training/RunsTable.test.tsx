@@ -152,4 +152,75 @@ describe("RunsTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete run 2" }));
     expect(screen.getByRole("button", { name: "Confirm delete run 2" })).toBeInTheDocument();
   });
+  describe("selection for comparison", () => {
+    it("renders a checkbox per row and toggles without opening the row", () => {
+      const onToggleCompare = vi.fn();
+      const { onOpen } = setup([run({ id: 1 }), run({ id: 2 })], { onToggleCompare });
+      expect(screen.getByRole("checkbox", { name: "Select run 1 for comparison" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select run 2 for comparison" }));
+      expect(onToggleCompare).toHaveBeenCalledWith(2);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it("disables the checkbox of runs that are not finished, with the reason", () => {
+      setup([
+        run({ id: 1, status: "failed" }),
+        run({ id: 2, status: "running", finished_at: null }),
+        run({ id: 3, status: "pending", started_at: null, finished_at: null }),
+        run({ id: 4, status: "stopped" }),
+      ]);
+      for (const id of [1, 2, 3]) {
+        const box = screen.getByRole("checkbox", { name: `Select run ${id} for comparison` });
+        expect(box).toBeDisabled();
+        expect(box).toHaveAttribute("title", "Only finished runs can be compared");
+      }
+      expect(screen.getByRole("checkbox", { name: "Select run 4 for comparison" })).toBeEnabled();
+    });
+
+    it("with 3 selected, disables the unselected boxes but keeps the selected ones enabled", () => {
+      setup([run({ id: 1 }), run({ id: 2 }), run({ id: 3 }), run({ id: 4 })], {
+        selectedForCompare: [1, 2, 3],
+      });
+      for (const id of [1, 2, 3]) {
+        const box = screen.getByRole("checkbox", { name: `Select run ${id} for comparison` });
+        expect(box).toBeChecked();
+        expect(box).toBeEnabled();
+      }
+      const fourth = screen.getByRole("checkbox", { name: "Select run 4 for comparison" });
+      expect(fourth).not.toBeChecked();
+      expect(fourth).toBeDisabled();
+      expect(fourth).toHaveAttribute("title", "You can compare up to 3 runs");
+    });
+
+    it("shows the hint and keeps Compare disabled with 0 or 1 selected", () => {
+      const { rerender, onOpen, onRepeat, onDelete } = setup([run({ id: 1 }), run({ id: 2 })]);
+      expect(screen.getByText("Select 2–3 runs of this dataset.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Compare (0)" })).toBeDisabled();
+      rerender(
+        <RunsTable runs={[run({ id: 1 }), run({ id: 2 })]} selectedRunId={null} loading={false}
+          error={null} deleteError={null} onOpen={onOpen} onRepeat={onRepeat} onDelete={onDelete}
+          selectedForCompare={[1]} />,
+      );
+      expect(screen.getByRole("button", { name: "Compare (1)" })).toBeDisabled();
+    });
+
+    it("enables Compare with 2 or 3 selected, shows the count and calls onCompare", () => {
+      const onCompare = vi.fn();
+      const { rerender, onOpen, onRepeat, onDelete } = setup(
+        [run({ id: 1 }), run({ id: 2 }), run({ id: 3 })],
+        { selectedForCompare: [1, 2], onCompare },
+      );
+      const button = screen.getByRole("button", { name: "Compare (2)" });
+      expect(button).toBeEnabled();
+      fireEvent.click(button);
+      expect(onCompare).toHaveBeenCalledTimes(1);
+      expect(onOpen).not.toHaveBeenCalled();
+      rerender(
+        <RunsTable runs={[run({ id: 1 }), run({ id: 2 }), run({ id: 3 })]} selectedRunId={null}
+          loading={false} error={null} deleteError={null} onOpen={onOpen} onRepeat={onRepeat}
+          onDelete={onDelete} selectedForCompare={[1, 2, 3]} onCompare={onCompare} />,
+      );
+      expect(screen.getByRole("button", { name: "Compare (3)" })).toBeEnabled();
+    });
+  });
 });

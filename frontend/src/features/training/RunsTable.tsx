@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
+import { MAX_COMPARE } from "./compareLogic";
 import { bestRunId, formatDuration, headlineScore, settingsLine } from "./runLogic";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
@@ -22,6 +23,9 @@ interface RunsTableProps {
   onRepeat: (run: TrainingRunRead) => void;
   onDelete: (run: TrainingRunRead) => void;
   deleteError: string | null;
+  selectedForCompare?: number[];
+  onToggleCompare?: (runId: number) => void;
+  onCompare?: () => void;
 }
 
 const BUTTON = "rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100";
@@ -36,6 +40,9 @@ export function RunsTable({
   onRepeat,
   onDelete,
   deleteError,
+  selectedForCompare = [],
+  onToggleCompare = () => {},
+  onCompare = () => {},
 }: RunsTableProps) {
   const [armed, setArmed] = useState<number | null>(null);
 
@@ -63,10 +70,24 @@ export function RunsTable({
           {deleteError}
         </p>
       )}
+      <div className="mb-2 flex items-center gap-3">
+        <button
+          type="button"
+          className={`${BUTTON} ${DISABLED}`}
+          disabled={selectedForCompare.length < 2}
+          onClick={onCompare}
+        >
+          {`Compare (${selectedForCompare.length})`}
+        </button>
+        <span className="text-xs text-gray-500">Select 2–3 runs of this dataset.</span>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm text-gray-200">
           <thead>
             <tr className="border-b border-gray-800 text-gray-400">
+              <th className="px-3 py-2 font-normal">
+                <span className="sr-only">Compare</span>
+              </th>
               <th className="px-3 py-2 font-normal">Run</th>
               <th className="px-3 py-2 font-normal">Name</th>
               <th className="px-3 py-2 font-normal">Base</th>
@@ -89,6 +110,14 @@ export function RunsTable({
                   ? "Stop the run first"
                   : undefined;
               const selected = run.id === selectedRunId;
+              const finished = run.status === "succeeded" || run.status === "stopped";
+              const checked = selectedForCompare.includes(run.id);
+              const full = selectedForCompare.length >= MAX_COMPARE && !checked;
+              const compareReason = !finished
+                ? "Only finished runs can be compared"
+                : full
+                  ? `You can compare up to ${MAX_COMPARE} runs`
+                  : undefined;
               return (
                 <tr
                   key={run.id}
@@ -97,10 +126,20 @@ export function RunsTable({
                     selected ? "bg-gray-800" : "hover:bg-gray-900"
                   }`}
                   onClick={(event) => {
-                    if ((event.target as HTMLElement).closest("button")) return;
+                    if ((event.target as HTMLElement).closest("button, input")) return;
                     onOpen(run.id);
                   }}
                 >
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select run ${run.id} for comparison`}
+                      checked={checked}
+                      disabled={compareReason !== undefined}
+                      title={compareReason}
+                      onChange={() => onToggleCompare(run.id)}
+                    />
+                  </td>
                   <td className="px-3 py-2 text-gray-400">{`#${run.id}`}</td>
                   <td className="max-w-[16rem] px-3 py-2">
                     {run.name && <div className="truncate">{run.name}</div>}
