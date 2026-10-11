@@ -46,6 +46,13 @@ describe("ConfusionCompare", () => {
     expect(document.querySelectorAll("[data-cell]")).toHaveLength(4);
   });
 
+  it("treats a confusion with labels but an empty matrix as missing for the difference too", () => {
+    render(
+      <ConfusionCompare runs={runs.slice(0, 2)} confusions={[a, { labels: ["polyp", "erosion"], matrix: [] }]} />,
+    );
+    expect(screen.getByRole("button", { name: /Show difference/ })).toBeDisabled();
+  });
+
   it("toggles to a signed difference table and back for two runs", async () => {
     render(<ConfusionCompare runs={runs.slice(0, 2)} confusions={[a, b]} />);
 

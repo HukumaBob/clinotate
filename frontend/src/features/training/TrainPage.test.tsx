@@ -523,24 +523,105 @@ describe("TrainPage", () => {
 
     it("a late metrics answer for an older selection never shows", async () => {
       const slow = deferred<{ data: unknown }>();
+      let calls268 = 0;
       vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: { params?: { path?: { run_id: number } } }) => {
-        if (path === "/training/runs/{run_id}/metrics" && opts?.params?.path?.run_id === 268) return slow.promise;
+        if (path === "/training/runs/{run_id}/metrics" && opts?.params?.path?.run_id === 268 && calls268++ === 0) return slow.promise;
+        if (path === "/training/runs/{run_id}/metrics") return { data: { metrics: { freshKey: 2 }, history: [], per_class: [], confusion: null } };
         return installMockResult(path, opts);
       }) as never);
       renderPage("/train?dataset=496&compare=268,199&cmp=1");
       await compareHeading("Comparing #268 alpha, #199 beta");
       expect(screen.getByText("Loading metrics…")).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Remove run 268 from the comparison" }));
+      // Selection changes while the first answer for 268 is outstanding; 268 stays selected.
+      fireEvent.click(screen.getByRole("button", { name: "Remove run 199 from the comparison" }));
       await screen.findByText("gamma");
       fireEvent.click(screen.getByRole("checkbox", { name: "Select run 77 for comparison" }));
       fireEvent.click(screen.getByRole("button", { name: "Compare (2)" }));
-      await compareHeading("Comparing #199 beta, #77 gamma");
-      await screen.findByRole("heading", { name: "Confusion matrices" });
+      await compareHeading("Comparing #268 alpha, #77 gamma");
+      expect(await screen.findByText("freshKey")).toBeInTheDocument();
       await act(async () => {
-        slow.resolve({ data: { metrics: { staleMetricKey: 1 }, history: [], per_class: [], confusion: null } });
+        slow.resolve({ data: { metrics: { staleKey: 1 }, history: [], per_class: [], confusion: null } });
       });
-      expect(screen.queryByText("staleMetricKey")).not.toBeInTheDocument();
-      expect(screen.queryByText(/#268/)).not.toBeInTheDocument();
+      expect(screen.queryByText("staleKey")).not.toBeInTheDocument();
+      expect(screen.getByText("freshKey")).toBeInTheDocument();
+    });
+
+    it("a background runs refresh keeps the compare view mounted, its toggle state and later removals", async () => {
+      const live = runRow({ id: 90, name: "going", status: "running", current_epoch: 1, total_epochs: 3, metrics: {} });
+      world.running = live;
+      world.runs[496] = (world.runs[496] as Array<{ id: number }>).map((r) => (r.id === 90 ? live : r));
+      vi.mocked(apiClient.POST).mockResolvedValue({ data: {}, error: undefined } as never);
+      const slow = deferred<{ data: unknown[] }>();
+      let slowOn = false;
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: { params?: { path?: { run_id: number }; query?: Record<string, unknown> } }) => {
+        if (slowOn && path === "/training/runs" && opts?.params?.query?.dataset_id === 496) return slow.promise;
+        if (path === "/training/runs/{run_id}/metrics") {
+          return { data: { metrics: {}, history: [], per_class: [], confusion: { labels: ["a"], matrix: [[1]] } } };
+        }
+        return installMockResult(path, opts);
+      }) as never);
+      renderPage("/train?dataset=496&compare=268,199,77&cmp=1");
+      await compareHeading("Comparing #268 alpha, #199 beta, #77 gamma");
+      await screen.findByRole("heading", { name: "Confusion matrices" });
+      expect(screen.queryByRole("button", { name: /Show difference/ })).not.toBeInTheDocument();
+      fireEvent.click(await screen.findByRole("button", { name: "Remove run 77 from the comparison" }));
+      await compareHeading("Comparing #268 alpha, #199 beta");
+      const toggle = screen.getByRole("button", { name: /Show difference/ });
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute("aria-pressed", "true");
+      slowOn = true;
+      await act(async () => {
+        fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+      });
+      await waitFor(() =>
+        expect(
+          getCalls("/training/runs").filter(
+            (c) => ((c as unknown as [string, { params: { query: { dataset_id?: number } } }])[1]).params.query.dataset_id === 496,
+          ).length,
+        ).toBeGreaterThan(1),
+      );
+      // Refresh in flight: view stays, toggle state stays.
+      expect(screen.getByRole("heading", { name: "Comparing #268 alpha, #199 beta" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Show difference/ })).toHaveAttribute("aria-pressed", "true");
+      // A removal during the refresh must not wipe the other ticks.
+      fireEvent.click(screen.getByRole("button", { name: "Remove run 268 from the comparison" }));
+      expect(where()).toBe("?dataset=496&compare=199");
+      await act(async () => {
+        slow.resolve({ data: world.runs[496] as unknown[] });
+      });
+      expect(await screen.findByRole("checkbox", { name: "Select run 199 for comparison" })).toBeChecked();
+    });
+
+    it("deleting a ticked run and then ticking another does not pop the view open", async () => {
+      renderPage("/train?dataset=496&compare=268,199");
+      await screen.findByText("gamma");
+      vi.mocked(apiClient.DELETE).mockResolvedValue({ data: null, error: undefined } as never);
+      world.runs[496] = (world.runs[496] as Array<{ id: number }>).filter((r) => r.id !== 199);
+      fireEvent.click(screen.getByRole("button", { name: "Delete run 199" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Confirm delete run 199" }));
+      });
+      await waitFor(() => expect(where()).toBe("?dataset=496&compare=268"));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select run 77 for comparison" }));
+      expect(where()).toBe("?dataset=496&compare=268%2C77");
+      expect(screen.queryByRole("heading", { name: /^Comparing/ })).not.toBeInTheDocument();
+    });
+
+    it("a deep link with one dropped id does not keep a latent cmp that reopens the view later", async () => {
+      renderPage("/train?dataset=496&compare=268,99999&cmp=1");
+      await screen.findByText("gamma");
+      await waitFor(() => expect(screen.getByRole("checkbox", { name: "Select run 268 for comparison" })).toBeChecked());
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select run 77 for comparison" }));
+      expect(where()).toBe("?dataset=496&compare=268%2C77");
+      expect(screen.queryByRole("heading", { name: /^Comparing/ })).not.toBeInTheDocument();
+    });
+
+    it("opening the active run from the strip on another dataset clears the compare selection", async () => {
+      world.running = runRow({ id: 8, dataset_id: 497, name: "other run", status: "running", metrics: {} });
+      world.runs[497] = [world.running];
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      fireEvent.click(await screen.findByRole("button", { name: /open/i }));
+      await waitFor(() => expect(where()).toBe("?dataset=497&run=8"));
     });
 
     it("allows a third tick but disables a fourth checkbox, and unfinished runs", async () => {

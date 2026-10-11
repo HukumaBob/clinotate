@@ -259,8 +259,18 @@ export function TrainPage() {
       return;
     }
     await refreshRuns();
-    if (url.run === run.id) {
-      update({ run: null });
+    const ticked = validCompareIds.includes(run.id);
+    const remaining = validCompareIds.filter((other) => other !== run.id);
+    if (url.run === run.id || ticked) {
+      update({
+        ...(url.run === run.id ? { run: null } : {}),
+        ...(ticked
+          ? {
+              compare: remaining,
+              compareOpen: remaining.length >= 2 ? url.compareOpen : false,
+            }
+          : {}),
+      });
     }
   }
 
@@ -302,7 +312,22 @@ export function TrainPage() {
 
   // The URL's compare ids, kept only once the list is loaded and only when
   // they are finished runs of this dataset (order kept, capped).
-  const listLoaded = !loading && runsError === null;
+  // "Loaded" means the first load for this dataset has completed; a background
+  // refresh (loading flips back to true) must not unmount the compare view.
+  const [loadedFor, setLoadedFor] = useState<number | null>(null);
+  const sawLoadingRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (loading) {
+      sawLoadingRef.current = selectedDatasetId;
+    } else if (
+      selectedDatasetId !== null &&
+      sawLoadingRef.current === selectedDatasetId &&
+      runsError === null
+    ) {
+      setLoadedFor(selectedDatasetId);
+    }
+  }, [loading, runsError, selectedDatasetId]);
+  const listLoaded = loadedFor === selectedDatasetId && runsError === null;
   const validCompareIds = listLoaded
     ? url.compare
         .filter((id) =>
@@ -319,10 +344,11 @@ export function TrainPage() {
   const showCompare = url.compareOpen && validCompareIds.length >= 2;
 
   function handleToggleCompare(id: number) {
+    // Ticking never opens the view; it also drops a latent cmp from the link.
     if (validCompareIds.includes(id)) {
-      update({ compare: validCompareIds.filter((other) => other !== id) });
+      update({ compare: validCompareIds.filter((other) => other !== id), compareOpen: false });
     } else if (validCompareIds.length < MAX_COMPARE) {
-      update({ compare: [...validCompareIds, id] });
+      update({ compare: [...validCompareIds, id], compareOpen: false });
     }
   }
 
@@ -372,6 +398,8 @@ export function TrainPage() {
             if (activeRun.dataset_id !== selectedDatasetId) {
               update({
                 dataset: activeRun.dataset_id,
+                compare: [],
+                compareOpen: false,
                 tab: "runs",
                 run: activeRun.id,
                 view: "overview",

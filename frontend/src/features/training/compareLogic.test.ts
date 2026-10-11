@@ -200,3 +200,35 @@ describe("confusionDifference", () => {
     expect(confusionDifference(a, { labels: ["x"], matrix: [[1]] })).toBeNull();
   });
 });
+
+describe("review leftovers", () => {
+  it("configDifferences stringifies objects and arrays instead of [object Object]", () => {
+    const rows = configDifferences(
+      [
+        { id: 1, base_model: "m", config: { aug: { flip: 1 }, sizes: [1, 2] } },
+        { id: 2, base_model: "m", config: { aug: { flip: 0 }, sizes: [1, 2] } },
+      ],
+      null,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].values).toEqual(['{"flip":1}', '{"flip":0}']);
+  });
+
+  it("curveSeries is sorted by epoch", () => {
+    const points = curveSeries([{ epoch: 3, v: 3 }, { epoch: 1, v: 1 }, { epoch: 2, v: 2 }], "v");
+    expect(points.map((p) => p.epoch)).toEqual([1, 2, 3]);
+  });
+
+  it("lowerIsBetter ignores case", () => {
+    expect(lowerIsBetter("train/Box_Loss")).toBe(true);
+  });
+
+  it("bestAndDeltas ignores non-finite values and never returns -1", () => {
+    const r = bestAndDeltas([NaN, 0.5, 0.7], false);
+    expect(r.bestIndex).toBe(2);
+    expect(r.deltas[0]).toBeNull();
+    expect(bestAndDeltas([Infinity, 1, 2], false).bestIndex).toBe(2);
+    expect(bestAndDeltas([NaN, 1], false).bestIndex).toBeNull();
+    expect(bestAndDeltas([1, 2, Infinity], false).deltas[2]).toBeNull();
+  });
+});

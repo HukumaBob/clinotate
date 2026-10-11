@@ -19,8 +19,9 @@ export function ConfusionCompare({ runs, confusions }: ConfusionCompareProps) {
   const [showDiff, setShowDiff] = useState(false);
 
   const canToggle = runs.length === 2;
+  const usable = (c: Confusion | null) => (c && c.matrix.length > 0 ? c : null);
   const difference = canToggle
-    ? confusionDifference(confusions[0] ?? null, confusions[1] ?? null)
+    ? confusionDifference(usable(confusions[0] ?? null), usable(confusions[1] ?? null))
     : null;
   const diffVisible = canToggle && showDiff && difference !== null;
 

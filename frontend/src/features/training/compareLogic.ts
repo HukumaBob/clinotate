@@ -43,13 +43,14 @@ export function runLabel(run: { id: number; name: string | null }): string {
 }
 
 export function lowerIsBetter(key: string): boolean {
-  return key.includes("loss");
+  return key.toLowerCase().includes("loss");
 }
 
 export function bestAndDeltas(
   values: Num[],
   lowerBetter: boolean,
 ): { bestIndex: number | null; deltas: Num[] } {
+  values = values.map((v) => (v !== null && Number.isFinite(v) ? v : null));
   const present = values.filter((v): v is number => v !== null);
   let bestIndex: number | null = null;
   if (present.length >= 2 && present.some((v) => v !== present[0])) {
@@ -64,7 +65,8 @@ export function bestAndDeltas(
 export function configDifferences(runs: RunLike[], schema: SettingsSchema | null): ConfigRow[] {
   const render = (run: RunLike, key: string): string => {
     const value = run.config[key];
-    return value === undefined || value === null ? MISSING : String(value);
+    if (value === undefined || value === null) return MISSING;
+    return typeof value === "object" ? JSON.stringify(value) : String(value);
   };
   const labels = new Map<string, string>();
   const order = new Map<string, number>();
@@ -172,7 +174,7 @@ export function curveSeries(history: HistoryPoint[], key: string): CurvePoint[] 
     const value = point[key];
     if (isNum(value) && isNum(point.epoch)) points.push({ epoch: point.epoch, value });
   }
-  return points;
+  return points.sort((a, b) => a.epoch - b.epoch);
 }
 
 export function confusionDifference(
