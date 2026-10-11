@@ -473,8 +473,8 @@ describe("TrainPage", () => {
 
     it("drops ids that are not finished runs of this dataset, shows a note and falls back to the table", async () => {
       renderPage("/train?dataset=496&compare=268,99999&cmp=1");
-      expect(await screen.findByText("gamma")).toBeInTheDocument();
-      expect(screen.getByText("Some runs in the link are not on this dataset and were left out.")).toBeInTheDocument();
+      expect(await screen.findByText("Some runs in the link are not on this dataset and were left out.")).toBeInTheDocument();
+      expect(screen.getByText("gamma")).toBeInTheDocument();
       expect(screen.getByRole("checkbox", { name: "Select run 268 for comparison" })).toBeChecked();
       expect(screen.queryByRole("heading", { name: /^Comparing/ })).not.toBeInTheDocument();
     });
