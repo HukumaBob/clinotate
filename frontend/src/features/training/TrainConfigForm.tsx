@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { components } from "../../shared/api/generated/schema";
 import type { DatasetOption } from "./DatasetSummary";
 import { RunSummary } from "./RunSummary";
-import { SettingsForm } from "./SettingsForm";
+import { PresetBar, SettingsForm } from "./SettingsForm";
 import {
   allFields,
   applyPreset,
@@ -127,13 +127,6 @@ export function TrainConfigForm({
           defaultValue: field.default === null ? "none" : String(field.default),
         }))
     : [];
-  const selectedBase = baseModels.find((option) => keyOf(option) === baseKey);
-  const baseLabel = selectedBase
-    ? selectedBase.kind === "model_version"
-      ? selectedBase.label
-      : (selectedBase.weights ?? "")
-    : "";
-
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!dataset || !dataset.exported || baseKey === "" || settingsSchema === null) {
@@ -150,121 +143,133 @@ export function TrainConfigForm({
     });
   }
 
+  const fieldLabel = "text-[13px] text-gray-400";
+  const control =
+    "w-full rounded border border-gray-700 bg-gray-950 px-2 text-sm text-gray-100";
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-gray-200">
-      <div className="flex flex-col gap-1">
-        <label htmlFor="train-base-model" className="text-xs uppercase tracking-wide text-gray-400">
-          Base model
-        </label>
-        <select
-          id="train-base-model"
-          className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100"
-          value={baseKey}
-          disabled={baseModels.length === 0}
-          onChange={(e) => setBaseKey(e.target.value)}
-        >
-          <optgroup label="Pretrained (YOLO11)">
-            {pretrainedOptions.map((option) => (
-              <option key={keyOf(option)} value={keyOf(option)}>
-                {optionText(option)}
-              </option>
-            ))}
-          </optgroup>
-          {versionOptions.length > 0 && (
-            <optgroup label="Your models (fine-tune)">
-              {versionOptions.map((option) => (
-                <option key={keyOf(option)} value={keyOf(option)}>
-                  {optionText(option)}
-                </option>
-              ))}
-            </optgroup>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="train-base-model" className={fieldLabel}>
+              Base model
+            </label>
+            <select
+              id="train-base-model"
+              className={`h-8 ${control}`}
+              value={baseKey}
+              disabled={baseModels.length === 0}
+              aria-describedby={baseKey.startsWith("version:") ? "train-base-model-help" : undefined}
+              onChange={(e) => setBaseKey(e.target.value)}
+            >
+              <optgroup label="Pretrained (YOLO11)">
+                {pretrainedOptions.map((option) => (
+                  <option key={keyOf(option)} value={keyOf(option)}>
+                    {optionText(option)}
+                  </option>
+                ))}
+              </optgroup>
+              {versionOptions.length > 0 && (
+                <optgroup label="Your models (fine-tune)">
+                  {versionOptions.map((option) => (
+                    <option key={keyOf(option)} value={keyOf(option)}>
+                      {optionText(option)}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            {baseKey.startsWith("version:") && (
+              <p id="train-base-model-help" className="text-[13px] text-gray-400">
+                Matching layers are kept. If this dataset's classes differ from the parent's, the
+                model's head is re-initialised — see the log.
+              </p>
+            )}
+            {baseModelsError && <p className="text-[13px] text-red-300">{baseModelsError}</p>}
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="train-name" className={fieldLabel}>
+              Run name (optional)
+            </label>
+            <input
+              id="train-name"
+              type="text"
+              maxLength={200}
+              className={`h-8 ${control}`}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="train-note" className={fieldLabel}>
+              Note (optional)
+            </label>
+            <textarea
+              id="train-note"
+              maxLength={5000}
+              rows={2}
+              className={`py-1 ${control}`}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+
+          {settingsSchema && (
+            <PresetBar
+              schema={settingsSchema}
+              onApplyPreset={(presetId) => setValues(applyPreset(settingsSchema, presetId))}
+            />
           )}
-        </select>
-        {baseKey.startsWith("version:") && (
-          <p className="text-xs text-gray-500">
-            Matching layers are kept. If this dataset's classes differ from the parent's, the
-            model's head is re-initialised — see the log.
-          </p>
-        )}
-        {baseModelsError && <p className="text-xs text-red-300">{baseModelsError}</p>}
+        </div>
+
+        <div className="min-w-0">
+          {settingsSchema ? (
+            <SettingsForm
+              schema={settingsSchema}
+              values={values}
+              errors={errors}
+              hidePresets
+              onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
+              onReset={(key) => {
+                const field = allFields(settingsSchema).find((candidate) => candidate.key === key);
+                setValues((current) => ({ ...current, [key]: field?.default ?? null }));
+              }}
+              onApplyPreset={(presetId) => setValues(applyPreset(settingsSchema, presetId))}
+            />
+          ) : settingsSchemaError ? (
+            <p className="text-[13px] text-red-300">{settingsSchemaError}</p>
+          ) : (
+            <p className="text-[13px] text-gray-400">Loading settings…</p>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="train-name" className="text-xs uppercase tracking-wide text-gray-400">
-          Run name (optional)
-        </label>
-        <input
-          id="train-name"
-          type="text"
-          maxLength={200}
-          className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <label htmlFor="train-note" className="text-xs uppercase tracking-wide text-gray-400">
-          Note (optional)
-        </label>
-        <textarea
-          id="train-note"
-          maxLength={5000}
-          rows={2}
-          className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-      </div>
-
-      {settingsSchema ? (
-        <SettingsForm
-          schema={settingsSchema}
-          values={values}
-          errors={errors}
-          onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
-          onReset={(key) => {
-            const field = allFields(settingsSchema).find((candidate) => candidate.key === key);
-            setValues((current) => ({ ...current, [key]: field?.default ?? null }));
-          }}
-          onApplyPreset={(presetId) => setValues(applyPreset(settingsSchema, presetId))}
-        />
-      ) : settingsSchemaError ? (
-        <p className="text-xs text-red-300">{settingsSchemaError}</p>
-      ) : (
-        <p className="text-xs text-gray-500">Loading settings…</p>
-      )}
-
-      <div className="sticky -bottom-4 -mx-4 -mb-4 flex flex-col gap-3 border-t border-gray-800 bg-gray-900 px-4 pb-4 pt-3">
-        {settingsSchema && dataset && (
-          <RunSummary
-            datasetName={dataset.name}
-            taskType={dataset.taskType}
-            baseLabel={baseLabel}
-            changes={changes}
-          />
-        )}
-
-        {errorCount > 0 && (
-          <p role="alert" className="text-xs text-red-300">
-            {errorCount === 1 ? "1 setting needs attention" : `${errorCount} settings need attention`}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={
-            disabled ||
-            !dataset ||
-            !dataset.exported ||
-            baseKey === "" ||
-            !settingsSchema ||
-            errorCount > 0
-          }
-          className="rounded border border-gray-700 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
-        >
-          Start training
-        </button>
+      <div className="sticky bottom-0 -mx-6 flex items-center gap-4 border-t border-gray-800 bg-gray-900 px-6 py-3">
+        {settingsSchema && <RunSummary changes={changes} />}
+        <div className="ml-auto flex items-center gap-4">
+          {errorCount > 0 && (
+            <p role="alert" className="text-[13px] text-red-300">
+              {errorCount === 1 ? "1 setting needs attention" : `${errorCount} settings need attention`}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={
+              disabled ||
+              !dataset ||
+              !dataset.exported ||
+              baseKey === "" ||
+              !settingsSchema ||
+              errorCount > 0
+            }
+            className="h-8 rounded border border-gray-700 bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+          >
+            Start training
+          </button>
+        </div>
       </div>
     </form>
   );

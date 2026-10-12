@@ -91,7 +91,7 @@ describe("TrainConfigForm", () => {
 
     expect(screen.getByLabelText(/base model/i)).toHaveValue("version:7");
     expect(screen.getByLabelText("Epochs")).toHaveValue(12);
-    const summary = screen.getByText(/what will run/i).closest("section")!;
+    const summary = screen.getByText("1 change").closest("details")!;
     expect(within(summary).getByText(/Epochs/)).toBeInTheDocument();
     expect(summary.textContent).toMatch(/12/);
     expect(summary.textContent).toMatch(/default 50/);
@@ -260,7 +260,7 @@ describe("TrainConfigForm", () => {
     expect(screen.getByLabelText("Epochs")).toHaveValue(50);
   });
 
-  it("lists the changes in the 'what will run' panel", async () => {
+  it("lists the changes in the bottom bar", async () => {
     const user = userEvent.setup();
     render(
       <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
@@ -270,11 +270,44 @@ describe("TrainConfigForm", () => {
     await user.clear(screen.getByLabelText("Epochs"));
     await user.type(screen.getByLabelText("Epochs"), "25");
 
-    const summary = screen.getByText(/what will run/i).closest("section")!;
+    const summary = screen.getByText("1 change").closest("details")!;
     expect(within(summary).getByText("Epochs")).toBeInTheDocument();
   });
 
-  it("shows the chosen version's label in the 'what will run' panel", async () => {
+  it("does not print a 'what will run' card any more", () => {
+    render(
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+    expect(screen.queryByText(/what will run/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/default settings/i)).toBeInTheDocument();
+  });
+
+  it("keeps Start training in a sticky bottom bar beside the change counter", async () => {
+    const user = userEvent.setup();
+    render(
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+    await user.clear(screen.getByLabelText("Epochs"));
+    await user.type(screen.getByLabelText("Epochs"), "25");
+
+    const bar = screen.getByRole("button", { name: /start training/i }).closest("div.sticky")!;
+    expect(bar).toContainElement(screen.getByText("1 change"));
+  });
+
+  it("puts the presets in the left column as a labelled group", () => {
+    render(
+      <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+        baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+    );
+    const presets = screen.getByRole("group", { name: "Presets" });
+    expect(presets).toContainElement(screen.getByRole("button", { name: "Quick check" }));
+    expect(presets.parentElement!.parentElement).toContainElement(screen.getByLabelText(/base model/i));
+    expect(screen.getAllByRole("button", { name: "Quick check" })).toHaveLength(1);
+  });
+
+  it("shows the chosen version's label in the base model select", async () => {
     const user = userEvent.setup();
     render(
       <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
@@ -283,8 +316,8 @@ describe("TrainConfigForm", () => {
 
     await user.selectOptions(screen.getByLabelText(/base model/i), "version:7");
 
-    const summary = screen.getByText(/what will run/i).closest("section")!;
-    expect(within(summary).getByText("polyps-v1-run7")).toBeInTheDocument();
+    expect(screen.getByLabelText(/base model/i)).toHaveValue("version:7");
+    expect(screen.getByRole("option", { name: /polyps-v1-run7/ })).toBeInTheDocument();
   });
 
   it("shows an error and keeps Start disabled when the settings schema failed to load", () => {
@@ -445,7 +478,7 @@ describe("TrainConfigForm", () => {
     await user.clear(screen.getByLabelText("Epochs"));
     await user.type(screen.getByLabelText("Epochs"), "25");
 
-    const list = screen.getByText(/what will run/i).closest("section")!.querySelector("ul")!;
+    const list = screen.getByText("1 change").closest("details")!.querySelector("ul")!;
     expect(list.className).toContain("max-h-[40vh]");
     expect(list.className).toContain("overflow-y-auto");
   });

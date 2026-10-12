@@ -4,41 +4,26 @@ import { describe, expect, it } from "vitest";
 
 import { RunSummary } from "./RunSummary";
 
-describe("RunSummary", () => {
-  it("names what will run and lists only the changed settings with their defaults", () => {
-    render(
-      <RunSummary
-        datasetName="009"
-        taskType="detection"
-        baseLabel="yolo11s.pt"
-        changes={[{ label: "Epochs", value: "30", defaultValue: "50" }]}
-      />,
-    );
+const epochs = { label: "Epochs", value: "30", defaultValue: "50" };
 
-    expect(screen.getByText(/what will run/i)).toBeInTheDocument();
-    expect(screen.getByText(/009/)).toBeInTheDocument();
-    expect(screen.getByText(/yolo11s\.pt/)).toBeInTheDocument();
+describe("RunSummary", () => {
+  it("lists only the changed settings with their defaults", () => {
+    render(<RunSummary changes={[epochs]} />);
+
     expect(screen.getByText("Epochs")).toBeInTheDocument();
     expect(screen.getByText(/30/)).toBeInTheDocument();
     expect(screen.getByText(/default 50/i)).toBeInTheDocument();
   });
 
   it("says when every setting is at its default", () => {
-    render(<RunSummary datasetName="009" taskType="detection" baseLabel="yolo11n.pt" changes={[]} />);
+    render(<RunSummary changes={[]} />);
 
     expect(screen.getByText(/default settings/i)).toBeInTheDocument();
   });
 
   it("keeps the change list in a closed details element that opens on click", async () => {
     const user = userEvent.setup();
-    render(
-      <RunSummary
-        datasetName="009"
-        taskType="detection"
-        baseLabel="yolo11s.pt"
-        changes={[{ label: "Epochs", value: "30", defaultValue: "50" }]}
-      />,
-    );
+    render(<RunSummary changes={[epochs]} />);
 
     const details = screen.getByText("1 change").closest("details")!;
     expect(details).not.toHaveAttribute("open");
@@ -49,25 +34,12 @@ describe("RunSummary", () => {
   });
 
   it("pluralises the change count", () => {
-    render(
-      <RunSummary
-        datasetName="009"
-        taskType="detection"
-        baseLabel="yolo11s.pt"
-        changes={[
-          { label: "Epochs", value: "30", defaultValue: "50" },
-          { label: "Batch", value: "8", defaultValue: "16" },
-        ]}
-      />,
-    );
+    render(<RunSummary changes={[epochs, { label: "Batch", value: "8", defaultValue: "16" }]} />);
     expect(screen.getByText("2 changes")).toBeInTheDocument();
   });
 
   it("shows no details element when there are no changes", () => {
-    const { container } = render(
-      <RunSummary datasetName="009" taskType="detection" baseLabel="yolo11n.pt" changes={[]} />,
-    );
+    const { container } = render(<RunSummary changes={[]} />);
     expect(container.querySelector("details")).toBeNull();
-    expect(screen.getByText(/default settings/i)).toBeInTheDocument();
   });
 });

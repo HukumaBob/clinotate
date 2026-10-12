@@ -13,10 +13,12 @@ interface SettingsFormProps {
   onChange: (key: string, value: SettingValue) => void;
   onReset: (key: string) => void;
   onApplyPreset: (presetId: string) => void;
+  // The parent shows <PresetBar> elsewhere (the form puts it in its left column).
+  hidePresets?: boolean;
 }
 
 const INPUT =
-  "rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-100 aria-[invalid=true]:border-red-600";
+  "h-8 w-full rounded border border-gray-700 bg-gray-950 px-2 text-sm text-gray-100 aria-[invalid=true]:border-red-600";
 
 function rangeText(field: SettingField): string | null {
   const { min, max } = field;
@@ -45,6 +47,7 @@ function FieldInput({
       <input
         id={id}
         type="checkbox"
+        className="h-4 w-4 accent-blue-500 [color-scheme:dark]"
         aria-describedby={describedBy}
         checked={value === true}
         onChange={(event) => onChange(event.target.checked)}
@@ -84,6 +87,37 @@ function FieldInput({
   );
 }
 
+export function PresetBar({
+  schema,
+  onApplyPreset,
+}: {
+  schema: SettingsSchema;
+  onApplyPreset: (presetId: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[13px] text-gray-400">Presets</span>
+      <div
+        role="group"
+        aria-label="Presets"
+        className="inline-flex flex-wrap self-start overflow-hidden rounded border border-gray-700"
+      >
+        {schema.presets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            title={preset.description}
+            className="h-8 border-r border-gray-700 px-3 text-[13px] text-gray-300 last:border-r-0 hover:bg-gray-800 hover:text-gray-100"
+            onClick={() => onApplyPreset(preset.id)}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsForm({
   schema,
   values,
@@ -91,28 +125,11 @@ export function SettingsForm({
   onChange,
   onReset,
   onApplyPreset,
+  hidePresets = false,
 }: SettingsFormProps) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <span className="text-xs uppercase tracking-wide text-gray-400">Presets</span>
-        <div className="flex flex-wrap gap-2">
-          {schema.presets.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              title={preset.description}
-              className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"
-              onClick={() => onApplyPreset(preset.id)}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-gray-500">
-          A preset fills the fields below; you can still change any of them.
-        </p>
-      </div>
+      {!hidePresets && <PresetBar schema={schema} onApplyPreset={onApplyPreset} />}
 
       {schema.groups.map((group) => (
         <details
@@ -120,10 +137,10 @@ export function SettingsForm({
           open={group.id === "basic" || group.fields.some((f) => errors[f.key])}
           className="rounded border border-gray-800 bg-gray-950"
         >
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-gray-200">
+          <summary className="cursor-pointer px-3 py-2 text-[15px] font-semibold text-gray-200">
             {group.label}
           </summary>
-          <div className="flex flex-col gap-3 px-3 pb-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-3 pb-3 xl:grid-cols-3">
             {group.fields.map((field) => {
               const value = values[field.key] ?? null;
               const changed = isChanged(field, value);
@@ -135,7 +152,8 @@ export function SettingsForm({
                 <div
                   key={field.key}
                   data-testid={`field-${field.key}`}
-                  className="flex flex-col gap-1"
+                  title={field.help}
+                  className="flex min-w-0 flex-col gap-1"
                 >
                   <div data-testid={`row-${field.key}`} className="flex items-center gap-2">
                     {field.type === "bool" && (
@@ -147,10 +165,10 @@ export function SettingsForm({
                         onChange={(next) => onChange(field.key, next)}
                       />
                     )}
-                    <label htmlFor={`setting-${field.key}`} className="text-xs text-gray-300">
+                    <label htmlFor={`setting-${field.key}`} className="text-[13px] text-gray-300">
                       {field.label}
                     </label>
-                    {range && <span className="text-xs text-gray-500">{range}</span>}
+                    {range && <span className="text-[13px] text-gray-400">{range}</span>}
                     {changed && (
                       <>
                         <span
@@ -164,7 +182,7 @@ export function SettingsForm({
                         <button
                           type="button"
                           aria-label={`Reset ${field.label}`}
-                          className="text-xs text-gray-500 hover:text-gray-200"
+                          className="text-[13px] text-gray-400 hover:text-gray-200"
                           onClick={() => onReset(field.key)}
                         >
                           Reset
@@ -181,11 +199,11 @@ export function SettingsForm({
                       onChange={(next) => onChange(field.key, next)}
                     />
                   )}
-                  <p id={helpId} className="text-xs text-gray-500">
+                  <p id={helpId} className="sr-only">
                     {field.help}
                   </p>
                   {error && (
-                    <p id={errorId} className="text-xs text-red-300">
+                    <p id={errorId} className="text-[13px] text-red-300">
                       {error}
                     </p>
                   )}

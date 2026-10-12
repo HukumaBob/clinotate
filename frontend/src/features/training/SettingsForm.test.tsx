@@ -32,11 +32,26 @@ describe("SettingsForm", () => {
     expect(screen.getByText("Basic").closest("details")).toHaveAttribute("open");
   });
 
-  it("explains every field in a sentence next to it", () => {
+  it("explains every field as a tooltip and an accessible description, not printed text", () => {
     setup();
 
     const epochs = screen.getByTestId("field-epochs");
-    expect(within(epochs).getByText(/passes over the training set/i)).toBeInTheDocument();
+    expect(epochs).toHaveAttribute("title", expect.stringMatching(/passes over the training set/i));
+    expect(screen.getByLabelText("Epochs")).toHaveAccessibleDescription(
+      expect.stringMatching(/passes over the training set/i),
+    );
+    expect(within(epochs).getByText(/passes over the training set/i)).toHaveClass("sr-only");
+  });
+
+  it("lays the fields of a group out in a grid", () => {
+    setup();
+    expect(screen.getByTestId("field-epochs").parentElement).toHaveClass("grid");
+  });
+
+  it("shows presets as one segmented group", () => {
+    setup();
+    const group = screen.getByRole("group", { name: "Presets" });
+    expect(group).toContainElement(screen.getByRole("button", { name: "Quick check" }));
   });
 
   it("reports edits with the field key and a numeric value, and empty as null", async () => {

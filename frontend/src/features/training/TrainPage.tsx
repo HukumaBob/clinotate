@@ -462,7 +462,7 @@ export function TrainPage() {
 
       {/* Stays mounted while the Runs view is shown, so edits and the kept
           settings survive a look at the table or a started run. */}
-      <div hidden={url.tab !== "new"} className="max-w-5xl">
+      <div hidden={url.tab !== "new"}>
         <TrainConfigForm
           dataset={selectedDataset}
           disabled={submitPending}
