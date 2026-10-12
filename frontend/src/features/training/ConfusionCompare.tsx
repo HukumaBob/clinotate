@@ -1,3 +1,4 @@
+import { SECTION_HEADING } from "./ui";
 import { useState } from "react";
 
 import type { CompareRunInfo } from "./CompareCurves";
@@ -12,7 +13,7 @@ interface ConfusionCompareProps {
 function formatDelta(n: number): { text: string; className: string } {
   if (n > 0) return { text: `+${n}`, className: "text-green-400" };
   if (n < 0) return { text: `−${Math.abs(n)}`, className: "text-red-400" };
-  return { text: "0", className: "text-gray-500" };
+  return { text: "0", className: "text-gray-400" };
 }
 
 export function ConfusionCompare({ runs, confusions }: ConfusionCompareProps) {
@@ -29,8 +30,8 @@ export function ConfusionCompare({ runs, confusions }: ConfusionCompareProps) {
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-gray-200">Confusion matrices</h3>
-          <p className="text-xs text-gray-500">
+          <h3 className={SECTION_HEADING}>Confusion matrices</h3>
+          <p className="text-[13px] text-gray-400">
             Rows are the true class, columns the predicted one.
           </p>
         </div>
@@ -54,14 +55,14 @@ export function ConfusionCompare({ runs, confusions }: ConfusionCompareProps) {
 
       {diffVisible && difference ? (
         <div className="space-y-2">
-          <p className="text-xs text-gray-400">
+          <p className="text-[13px] text-gray-400">
             {`A = ${runs[0].label}, B = ${runs[1].label}. Cells show B minus A over the labels both runs have.`}
           </p>
           <div className="overflow-x-auto">
             <table className="border-collapse text-xs">
               <thead>
                 <tr>
-                  <th className="border-b border-r border-gray-800 px-2 py-1 text-left align-bottom text-gray-500">
+                  <th className="border-b border-r border-gray-800 px-2 py-1 text-left align-bottom text-gray-400">
                     actual \ predicted
                   </th>
                   {difference.labels.map((label) => (
@@ -115,7 +116,7 @@ export function ConfusionCompare({ runs, confusions }: ConfusionCompareProps) {
                 {confusion && confusion.matrix.length > 0 ? (
                   <ConfusionMatrix confusion={confusion} />
                 ) : (
-                  <p className="text-xs text-gray-500">No confusion matrix for this run.</p>
+                  <p className="text-[13px] text-gray-400">No confusion matrix for this run.</p>
                 )}
               </div>
             );

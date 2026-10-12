@@ -49,3 +49,28 @@ describe("shouldStickToBottom", () => {
     expect(shouldStickToBottom(350, 100, 500, 60)).toBe(true);
   });
 });
+
+describe("LogView architecture fold", () => {
+  const raw = [
+    "Overriding model.yaml",
+    "                   from  n    params  module                                       arguments",
+    "  0                  -1  1       464  ultralytics.nn.modules.conv.Conv             [3, 16, 3, 2]",
+    "YOLO11n summary: 181 layers, 6.4 GFLOPs",
+    "Transferred 448/499 items",
+  ].join("\n");
+
+  it("folds the architecture block into a collapsed details with a line count", () => {
+    const { container } = render(<LogView text={raw} />);
+
+    const details = container.querySelector("details")!;
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByText("Model architecture (3 lines)")).toBeInTheDocument();
+    expect(screen.getByRole("log")).toHaveTextContent("Transferred 448/499 items");
+  });
+
+  it("caps the pane height", () => {
+    render(<LogView text="x" />);
+
+    expect(screen.getByRole("log").className).toContain("max-h-[60vh]");
+  });
+});

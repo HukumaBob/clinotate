@@ -14,7 +14,7 @@ export function RunLogView({ run }: RunLogViewProps) {
 
   return (
     <section className="rounded border border-gray-800 bg-gray-900 p-4">
-      <p className="mb-3 text-xs text-gray-600">
+      <p className="mb-3 text-xs text-gray-400">
         Cleaned view of the trainer's output; the stored log is kept raw.
       </p>
       {error && <p className="mb-2 text-sm text-red-400">Failed to load the log.</p>}

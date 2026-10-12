@@ -48,3 +48,40 @@ export function cleanLog(raw: string): string {
   }
   return out.join("\n").replace(/\n+$/, "");
 }
+
+export interface FoldedLog {
+  /** Cleaned lines before the model-architecture block. */
+  before: string;
+  /** The block itself (header through the "summary:" line), or null when absent. */
+  architecture: string[] | null;
+  /** Cleaned lines after the block. */
+  after: string;
+}
+
+const ARCH_HEADER = /^\s*from\s+n\s+params\s+module\s+arguments/;
+const ARCH_ROW = /^\s*\d+\s+\S/;
+const ARCH_SUMMARY = /^\S*\s*summary:/;
+
+/** Splits an already cleaned log around the Ultralytics model-architecture table
+ * (the `from  n  params  module  arguments` header, one row per layer, and the
+ * `YOLO11n summary:` line) so the view can fold it. A table still being written
+ * (no summary line yet) folds as far as it goes. */
+export function foldArchitecture(cleaned: string): FoldedLog {
+  const lines = cleaned.split("\n");
+  const start = lines.findIndex((line) => ARCH_HEADER.test(line));
+  if (start === -1) {
+    return { before: cleaned, architecture: null, after: "" };
+  }
+  let end = start + 1;
+  while (end < lines.length && ARCH_ROW.test(lines[end])) {
+    end += 1;
+  }
+  if (end < lines.length && ARCH_SUMMARY.test(lines[end])) {
+    end += 1;
+  }
+  return {
+    before: lines.slice(0, start).join("\n"),
+    architecture: lines.slice(start, end),
+    after: lines.slice(end).join("\n"),
+  };
+}

@@ -447,6 +447,7 @@ export function TrainPage() {
                 selectedForCompare={validCompareIds}
                 onToggleCompare={handleToggleCompare}
                 onCompare={() => update({ compareOpen: true })}
+                onClearCompare={() => update({ compare: [], compareOpen: false })}
                 selectedRunId={url.run}
                 loading={loading && runs.length === 0}
                 error={runsError}

@@ -1,3 +1,4 @@
+import { SECTION_HEADING } from "./ui";
 import { useEffect, useState } from "react";
 
 import { apiClient } from "../../shared/api/client";
@@ -54,14 +55,14 @@ export function RunModelView({ run, onChanged }: RunModelViewProps) {
 
   if (versionId == null) {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-400">
         This run has no model (it failed, was stopped before the first epoch, or its model was deleted)
       </p>
     );
   }
   if (!version) {
     return (
-      <p className="text-sm text-gray-500">{failed ? "Failed to load the model." : "Loading…"}</p>
+      <p className="text-sm text-gray-400">{failed ? "Failed to load the model." : "Loading…"}</p>
     );
   }
 
@@ -106,8 +107,8 @@ export function RunModelView({ run, onChanged }: RunModelViewProps) {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-sm font-semibold text-gray-100">{version.name}</h3>
-            <p className="text-xs text-gray-500">
-              {version.task_type} · {score.value} <span className="text-gray-600">{score.label}</span>
+            <p className="text-xs text-gray-400">
+              {version.task_type} · {score.value} <span className="text-gray-400">{score.label}</span>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -148,12 +149,12 @@ export function RunModelView({ run, onChanged }: RunModelViewProps) {
       </section>
 
       {failed && (
-        <p className="text-sm text-gray-500">Failed to load the model's artifacts.</p>
+        <p className="text-sm text-gray-400">Failed to load the model's artifacts.</p>
       )}
 
       {artifacts.length > 0 && (
         <section className="rounded border border-gray-800 bg-gray-900 p-4">
-          <h3 className="mb-2 text-xs font-medium uppercase text-gray-500">Artifacts</h3>
+          <h3 className={`mb-2 ${SECTION_HEADING}`}>Artifacts</h3>
           <ArtifactGallery versionId={versionId} artifacts={artifacts} />
         </section>
       )}

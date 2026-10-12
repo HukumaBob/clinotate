@@ -122,7 +122,7 @@ export function ArtifactGallery({ versionId, artifacts }: ArtifactGalleryProps) 
                   className="max-h-full max-w-full object-contain transition group-hover:scale-105"
                 />
               ) : (
-                <span className="text-[10px] text-gray-600">Loading…</span>
+                <span className="text-[10px] text-gray-400">Loading…</span>
               )}
             </div>
             <span className="truncate px-2 py-1.5 text-[11px] text-gray-400 group-hover:text-gray-200">
@@ -164,7 +164,7 @@ export function ArtifactGallery({ versionId, artifacts }: ArtifactGalleryProps) 
             <span>
               {active.name}
               {images.length > 1 && (
-                <span className="ml-2 text-gray-600">
+                <span className="ml-2 text-gray-400">
                   {lightboxPosition + 1} / {images.length}
                 </span>
               )}

@@ -45,7 +45,7 @@ export function CompareCurves({ runs, histories }: CompareCurvesProps) {
   const key = chosen && keys.includes(chosen) ? chosen : defaultCurveKey(keys);
 
   if (key === null) {
-    return <p className="text-sm text-gray-500">No training history to compare.</p>;
+    return <p className="text-sm text-gray-400">No training history to compare.</p>;
   }
 
   const series = runs.map((_, i) => curveSeries(histories[i] ?? [], key));
@@ -67,7 +67,7 @@ export function CompareCurves({ runs, histories }: CompareCurvesProps) {
 
   return (
     <div className="text-gray-200">
-      <label className="mb-2 flex items-center gap-2 text-xs text-gray-400">
+      <label className="mb-2 flex items-center gap-2 text-[13px] text-gray-400">
         Metric
         <select
           aria-label="Curve metric"
@@ -158,11 +158,11 @@ export function CompareCurves({ runs, histories }: CompareCurvesProps) {
               style={{ backgroundColor: run.color }}
             />
             <span>{run.label}</span>
-            {series[i].length === 0 && <span className="text-gray-500">(no data)</span>}
+            {series[i].length === 0 && <span className="text-gray-400">(no data)</span>}
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs text-gray-500">One line per run for the chosen metric.</p>
+      <p className="mt-2 text-[13px] text-gray-400">One line per run for the chosen metric.</p>
     </div>
   );
 }

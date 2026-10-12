@@ -1,3 +1,4 @@
+import { SECTION_HEADING } from "./ui";
 import type { components } from "../../shared/api/generated/schema";
 import { COMPARE_COLORS, CompareCurves, type CompareRunInfo } from "./CompareCurves";
 import { CompareTables } from "./CompareTables";
@@ -30,7 +31,7 @@ export function CompareView({ runs, schema, onBack, onRemove }: CompareViewProps
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-sm">
       <div className="space-y-2">
         <div className="flex items-center gap-3">
           <button
@@ -40,7 +41,7 @@ export function CompareView({ runs, schema, onBack, onRemove }: CompareViewProps
           >
             ← Runs
           </button>
-          <h2 className="text-base font-semibold text-gray-100">
+          <h2 className={SECTION_HEADING}>
             {`Comparing ${infos.map((info) => info.label).join(", ")}`}
           </h2>
         </div>
@@ -70,11 +71,11 @@ export function CompareView({ runs, schema, onBack, onRemove }: CompareViewProps
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading metrics…</p>
+        <p className="text-[13px] text-gray-400">Loading metrics…</p>
       ) : (
         <>
           {failed.map((info) => (
-            <p key={info.id} className="text-sm text-gray-500">
+            <p key={info.id} className="text-[13px] text-gray-400">
               {`Could not load metrics for ${info.label}; it is shown without numbers.`}
             </p>
           ))}

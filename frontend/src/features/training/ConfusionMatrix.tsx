@@ -62,7 +62,7 @@ export function ConfusionMatrix({ confusion }: ConfusionMatrixProps) {
         <table className="border-collapse text-xs">
           <thead>
             <tr>
-              <th className="border-b border-r border-gray-800 px-2 py-1 text-left align-bottom text-gray-500">
+              <th className="border-b border-r border-gray-800 px-2 py-1 text-left align-bottom text-gray-400">
                 actual \ predicted
               </th>
               {indices.map((col) => (

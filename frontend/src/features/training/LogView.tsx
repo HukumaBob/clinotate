@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 
-import { cleanLog } from "./cleanLog";
+import { cleanLog, foldArchitecture } from "./cleanLog";
 
 /** Pixels of slack between the visible bottom edge and the true bottom of the
  * content before the reader no longer counts as "at the bottom" (sub-pixel
@@ -24,11 +24,12 @@ interface LogViewProps {
 }
 
 export function LogView({ text, className = "" }: LogViewProps) {
-  const ref = useRef<HTMLPreElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   // Whether the reader was at the bottom just before this update, so new
   // output only moves the view when they were following it.
   const followingRef = useRef(true);
   const cleaned = useMemo(() => cleanLog(text), [text]);
+  const folded = useMemo(() => foldArchitecture(cleaned), [cleaned]);
 
   useEffect(() => {
     const el = ref.current;
@@ -38,7 +39,7 @@ export function LogView({ text, className = "" }: LogViewProps) {
   }, [cleaned]);
 
   return (
-    <pre
+    <div
       ref={ref}
       role="log"
       aria-live="off"
@@ -46,9 +47,24 @@ export function LogView({ text, className = "" }: LogViewProps) {
         const el = event.currentTarget;
         followingRef.current = shouldStickToBottom(el.scrollTop, el.clientHeight, el.scrollHeight);
       }}
-      className={`min-h-[24rem] overflow-auto whitespace-pre-wrap rounded border border-gray-800 bg-gray-950 p-3 font-mono text-xs text-gray-300 ${className}`}
+      className={`max-h-[60vh] min-h-[24rem] overflow-auto rounded border border-gray-800 bg-gray-950 p-3 font-mono text-xs text-gray-300 ${className}`}
     >
-      {cleaned === "" ? "No log output yet." : cleaned}
-    </pre>
+      {cleaned === "" ? (
+        <pre className="whitespace-pre-wrap">No log output yet.</pre>
+      ) : folded.architecture === null ? (
+        <pre className="whitespace-pre-wrap">{cleaned}</pre>
+      ) : (
+        <>
+          {folded.before !== "" && <pre className="whitespace-pre-wrap">{folded.before}</pre>}
+          <details className="my-1">
+            <summary className="cursor-pointer text-gray-400">
+              Model architecture ({folded.architecture.length} lines)
+            </summary>
+            <pre className="whitespace-pre-wrap">{folded.architecture.join("\n")}</pre>
+          </details>
+          {folded.after !== "" && <pre className="whitespace-pre-wrap">{folded.after}</pre>}
+        </>
+      )}
+    </div>
   );
 }

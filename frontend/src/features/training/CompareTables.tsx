@@ -1,3 +1,4 @@
+import { SECTION_HEADING } from "./ui";
 import { useState, type ReactNode } from "react";
 
 import type { CompareRunInfo } from "./CompareCurves";
@@ -25,16 +26,16 @@ function formatDelta(delta: number): string {
 
 function Section({ title, caption, children }: { title: string; caption: string; children: ReactNode }) {
   return (
-    <section className="mb-6">
-      <h3 className="text-sm font-semibold text-gray-200">{title}</h3>
-      <p className="mb-2 text-xs text-gray-500">{caption}</p>
+    <section className="space-y-2">
+      <h3 className={SECTION_HEADING}>{title}</h3>
+      <p className="mb-2 text-[13px] text-gray-400">{caption}</p>
       {children}
     </section>
   );
 }
 
 function Empty({ children }: { children: string }) {
-  return <p className="text-sm text-gray-500">{children}</p>;
+  return <p className="text-sm text-gray-400">{children}</p>;
 }
 
 function RunHeaders({ runs, first }: { runs: CompareRunInfo[]; first: string }) {
@@ -56,7 +57,7 @@ function MetricCells({ row }: { row: MetricRow }) {
       {row.values.map((value, i) => (
         <td key={i} className="px-2 py-1 align-top tabular-nums">
           {value === null ? (
-            <span className="text-gray-500">—</span>
+            <span className="text-gray-400">—</span>
           ) : (
             <span
               className={i === row.bestIndex ? "font-semibold text-green-300" : "text-gray-300"}
@@ -66,7 +67,7 @@ function MetricCells({ row }: { row: MetricRow }) {
             </span>
           )}
           {i > 0 && row.deltas[i] !== null && (
-            <div className="text-xs text-gray-500">{formatDelta(row.deltas[i] as number)}</div>
+            <div className="text-xs text-gray-400">{formatDelta(row.deltas[i] as number)}</div>
           )}
         </td>
       ))}

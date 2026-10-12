@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cleanLog } from "./cleanLog";
+import { cleanLog, foldArchitecture } from "./cleanLog";
 
 const ESC = "\x1b";
 const trainBar = (percent: number, step: number) =>
@@ -65,5 +65,40 @@ describe("cleanLog", () => {
 
   it("returns an empty string for an empty log", () => {
     expect(cleanLog("")).toBe("");
+  });
+});
+
+describe("foldArchitecture", () => {
+  const excerpt = [
+    "Overriding model.yaml nc=80 with nc=1",
+    "",
+    "                   from  n    params  module                                       arguments",
+    "  0                  -1  1       464  ultralytics.nn.modules.conv.Conv             [3, 16, 3, 2]",
+    "  1                  -1  1      4672  ultralytics.nn.modules.conv.Conv             [16, 32, 3, 2]",
+    " 23        [16, 19, 22]  1    430867  ultralytics.nn.modules.head.Detect           [1, [64, 128, 256]]",
+    "YOLO11n summary: 181 layers, 2,590,035 parameters, 2,590,019 gradients, 6.4 GFLOPs",
+    "",
+    "Transferred 448/499 items from pretrained weights",
+  ].join("\n");
+
+  it("splits the table from the header through the summary line", () => {
+    const folded = foldArchitecture(excerpt);
+
+    expect(folded.before).toBe("Overriding model.yaml nc=80 with nc=1\n");
+    expect(folded.architecture).toHaveLength(5);
+    expect(folded.architecture![0]).toMatch(/from\s+n\s+params/);
+    expect(folded.architecture![4]).toMatch(/^YOLO11n summary:/);
+    expect(folded.after).toBe("\nTransferred 448/499 items from pretrained weights");
+  });
+
+  it("folds a table that has no summary line yet", () => {
+    const folded = foldArchitecture(excerpt.split("\n").slice(0, 5).join("\n"));
+
+    expect(folded.architecture).toHaveLength(3);
+    expect(folded.after).toBe("");
+  });
+
+  it("reports no architecture when the header is absent", () => {
+    expect(foldArchitecture("a\nb")).toEqual({ before: "a\nb", architecture: null, after: "" });
   });
 });
