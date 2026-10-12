@@ -147,15 +147,17 @@ describe("TrainPage", () => {
     expect(getCalls("/datasets")).toHaveLength(1);
   });
 
-  it("shows the datasets in the rail, and this dataset's runs in the Runs tab", async () => {
+  it("shows the datasets in the toolbar select, and this dataset's runs without any tab strip", async () => {
     renderPage();
     expect(await screen.findByText("first try")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /polyps-v2/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Runs" })).toHaveAttribute("aria-selected", "true");
-    expect(within(screen.getByRole("tabpanel")).getByRole("table")).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Train" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "+ New run" })).toBeEnabled();
+    expect(screen.getByRole("table")).toBeInTheDocument();
   });
 
-  it("shows the run count in the dataset card", async () => {
+  it("shows the run count in the toolbar summary", async () => {
     renderPage();
     expect(await screen.findByText(/1 run\b/)).toBeInTheDocument();
   });
@@ -197,7 +199,7 @@ describe("TrainPage", () => {
     async function openNew() {
       renderPage();
       await screen.findByText("first try");
-      fireEvent.click(screen.getByRole("tab", { name: "New run" }));
+      fireEvent.click(screen.getByRole("button", { name: "+ New run" }));
       await waitFor(() => expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled());
     }
 
@@ -244,7 +246,7 @@ describe("TrainPage", () => {
         fireEvent.click(screen.getByRole("button", { name: /start training/i }));
       });
       await waitFor(() => expect(where()).toBe("?dataset=496&run=9"));
-      fireEvent.click(screen.getByRole("tab", { name: "New run" }));
+      fireEvent.click(screen.getByRole("button", { name: "+ New run" }));
       expect(await screen.findByLabelText(/run name/i)).toHaveValue("");
       expect(screen.getByLabelText("Epochs")).toHaveValue(25);
     });
@@ -294,10 +296,10 @@ describe("TrainPage", () => {
       world.history = [{ epoch: 3, "metrics/mAP50(B)": 0.412 }];
       vi.mocked(apiClient.POST).mockResolvedValue({ data: running(), error: undefined } as never);
       renderPage();
-      expect(await screen.findByText(/epoch 3 \/ 10/i)).toBeInTheDocument();
+      expect(await screen.findByText(/epoch 3\/10/i)).toBeInTheDocument();
       expect(await screen.findByText(/mAP50 0\.412/)).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("tab", { name: "New run" }));
-      expect(screen.getByText(/epoch 3 \/ 10/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "+ New run" }));
+      expect(screen.getByText(/epoch 3\/10/i)).toBeInTheDocument();
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Stop" }));
       });
@@ -309,7 +311,7 @@ describe("TrainPage", () => {
     it("shows a dash as the headline before the first epoch", async () => {
       world.running = running();
       renderPage();
-      expect(await screen.findByText(/epoch 3 \/ 10/i)).toBeInTheDocument();
+      expect(await screen.findByText(/epoch 3\/10/i)).toBeInTheDocument();
       expect(screen.getByText("—", { selector: "button span" })).toBeInTheDocument();
     });
 
@@ -325,7 +327,7 @@ describe("TrainPage", () => {
       world.running = running();
       world.runDetail = () => runRow({ id: 7, name: "done run" });
       renderPage();
-      await vi.waitFor(() => screen.getByText(/epoch 3 \/ 10/i));
+      await vi.waitFor(() => screen.getByText(/epoch 3\/10/i));
       world.runs[496] = [runRow({ id: 7, name: "done run" })];
       world.running = null;
       await vi.advanceTimersByTimeAsync(2100);

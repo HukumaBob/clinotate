@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
-import type { DatasetOption } from "./DatasetCard";
+import type { DatasetOption } from "./DatasetSummary";
 import { RunSummary } from "./RunSummary";
 import { SettingsForm } from "./SettingsForm";
 import {
@@ -17,7 +17,7 @@ import {
 
 type BaseModelOption = components["schemas"]["BaseModelOption"];
 
-export type { DatasetOption } from "./DatasetCard";
+export type { DatasetOption } from "./DatasetSummary";
 
 export interface TrainConfigValues {
   datasetId: number;

@@ -30,7 +30,7 @@ describe("ActiveRunStrip", () => {
     setup();
     expect(screen.getByText(/#7/)).toBeInTheDocument();
     expect(screen.getByText(/big frames/)).toBeInTheDocument();
-    expect(screen.getByText(/epoch 3 \/ 10/i)).toBeInTheDocument();
+    expect(screen.getByText(/epoch 3\/10/i)).toBeInTheDocument();
     expect(screen.getByText(/mAP50 0\.412/)).toBeInTheDocument();
   });
 
@@ -44,10 +44,11 @@ describe("ActiveRunStrip", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "30");
   });
 
-  it("Stop calls onStop and the epoch-boundary sentence is shown", () => {
+  it("Stop calls onStop and carries the epoch-boundary sentence as its tooltip", () => {
     const { onStop } = setup();
-    expect(screen.getByText("Stops after the current epoch finishes.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    const stop = screen.getByRole("button", { name: "Stop" });
+    expect(stop).toHaveAttribute("title", "Stops after the current epoch finishes.");
+    fireEvent.click(stop);
     expect(onStop).toHaveBeenCalled();
   });
 

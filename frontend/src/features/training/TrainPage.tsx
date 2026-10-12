@@ -5,7 +5,6 @@ import type { components } from "../../shared/api/generated/schema";
 import { ActiveRunStrip } from "./ActiveRunStrip";
 import { CompareView } from "./CompareView";
 import { MAX_COMPARE } from "./compareLogic";
-import { DatasetRail } from "./DatasetRail";
 import { RunDetail } from "./RunDetail";
 import {
   baseKeyFromRun,
@@ -20,10 +19,11 @@ import {
   type DatasetOption,
   type TrainConfigValues,
 } from "./TrainConfigForm";
+import { TrainToolbar } from "./TrainToolbar";
 import { useActiveRun } from "./useActiveRun";
 import { useRunMetrics } from "./useRunMetrics";
 import { useRuns } from "./useRuns";
-import { useTrainUrl, type TrainTab } from "./useTrainUrl";
+import { useTrainUrl } from "./useTrainUrl";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
 type BaseModelOption = components["schemas"]["BaseModelOption"];
@@ -33,11 +33,6 @@ interface Prefill {
   baseKey: string;
   values: SettingsValues;
 }
-
-const TAB_LABELS: Array<{ id: TrainTab; label: string }> = [
-  { id: "runs", label: "Runs" },
-  { id: "new", label: "New run" },
-];
 
 export function TrainPage() {
   const [url, update] = useTrainUrl();
@@ -368,25 +363,16 @@ export function TrainPage() {
       : { label: "", value: "—" };
 
   return (
-    <div className="flex flex-col gap-4 bg-gray-950 p-8 text-gray-100">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Train</h1>
-      </div>
-
-      <div
-        role="tablist"
-        aria-label="Training adapters"
-        className="flex gap-2 border-b border-gray-800"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected="true"
-          className="border-b-2 border-blue-500 px-3 py-2 text-sm font-medium text-gray-100"
-        >
-          YOLO
-        </button>
-      </div>
+    <div className="flex flex-col gap-3 bg-gray-950 px-6 py-4 text-gray-100">
+      <TrainToolbar
+        datasets={datasets}
+        selectedId={selectedDatasetId}
+        onSelect={(id) => update({ dataset: id })}
+        runCount={selectedDatasetId !== null ? runs.length : undefined}
+        onNewRun={() => update({ tab: "new" })}
+        formOpen={url.tab === "new"}
+        onCloseForm={() => update({ tab: "runs" })}
+      />
 
       {activeRun && activeIsLive && (
         <ActiveRunStrip
@@ -420,125 +406,74 @@ export function TrainPage() {
         </div>
       )}
 
-      <div className="flex items-start gap-6">
-        <aside className="sticky top-4 w-72 shrink-0">
-          <DatasetRail
-            datasets={datasets}
-            selectedId={selectedDatasetId}
-            onSelect={(id) => update({ dataset: id })}
-            runCount={selectedDatasetId !== null ? runs.length : undefined}
-          />
-        </aside>
-
-        <div className="min-w-0 flex-1">
-          <div
-            role="tablist"
-            aria-label="Train sections"
-            className="mb-4 flex gap-1 border-b border-gray-800"
-          >
-            {TAB_LABELS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                id={`train-tab-${tab.id}`}
-                aria-selected={url.tab === tab.id}
-                aria-controls={`train-tabpanel-${tab.id}`}
-                onClick={() => update({ tab: tab.id })}
-                className={`px-3 py-1.5 text-sm ${
-                  url.tab === tab.id
-                    ? "border-b-2 border-blue-500 text-gray-100"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div
-            role="tabpanel"
-            id="train-tabpanel-runs"
-            aria-labelledby="train-tab-runs"
-            hidden={url.tab !== "runs"}
-          >
-            {url.tab === "runs" && (
-              <>
-                {showCompare ? (
-                  <CompareView
-                    runs={compareRuns}
-                    schema={settingsSchema}
-                    onBack={() => update({ compareOpen: false })}
-                    onRemove={handleRemoveCompare}
-                  />
-                ) : openRun ? (
-                  <RunDetail
-                    run={openRun}
-                    view={url.view}
-                    onViewChange={(view) => update({ view })}
-                    onBack={() => update({ run: null, view: "overview" })}
-                    schema={settingsSchema}
-                    onRepeat={handleRepeat}
-                    onDeleteRun={handleDeleteRun}
-                    onChanged={() => {
-                      void refreshRuns();
-                      refreshCatalog();
-                    }}
-                    deleteError={deleteError}
-                  />
-                ) : (
-                  <>
-                    {missingRun && (
-                      <p className="mb-3 text-sm text-gray-500">
-                        {`Run #${url.run} is not on this dataset (it may have been deleted).`}
-                      </p>
-                    )}
-                    {compareDropped && (
-                      <p className="mb-3 text-sm text-gray-500">
-                        Some runs in the link are not on this dataset and were left out.
-                      </p>
-                    )}
-                    <RunsTable
-                      runs={liveRuns}
-                      selectedForCompare={validCompareIds}
-                      onToggleCompare={handleToggleCompare}
-                      onCompare={() => update({ compareOpen: true })}
-                      selectedRunId={url.run}
-                      loading={loading && runs.length === 0}
-                      error={runsError}
-                      onOpen={(runId) => update({ tab: "runs", run: runId })}
-                      onRepeat={handleRepeat}
-                      onDelete={handleDeleteRun}
-                      deleteError={deleteError}
-                    />
-                  </>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Stays mounted while the Runs tab is shown, so edits and the kept
-              settings survive a look at the table or a started run. */}
-          <div
-            role="tabpanel"
-            id="train-tabpanel-new"
-            aria-labelledby="train-tab-new"
-            hidden={url.tab !== "new"}
-            className="max-w-3xl"
-          >
-            <TrainConfigForm
-              dataset={selectedDataset}
-              disabled={submitPending}
-              onSubmit={handleSubmit}
-              baseModels={baseModels}
-              baseModelsError={baseModelsError}
-              settingsSchema={settingsSchema}
-              settingsSchemaError={settingsSchemaError}
-              prefill={prefill}
-              clearTextSignal={clearSignal}
+      {url.tab === "runs" && (
+        <>
+          {showCompare ? (
+            <CompareView
+              runs={compareRuns}
+              schema={settingsSchema}
+              onBack={() => update({ compareOpen: false })}
+              onRemove={handleRemoveCompare}
             />
-          </div>
-        </div>
+          ) : openRun ? (
+            <RunDetail
+              run={openRun}
+              view={url.view}
+              onViewChange={(view) => update({ view })}
+              onBack={() => update({ run: null, view: "overview" })}
+              schema={settingsSchema}
+              onRepeat={handleRepeat}
+              onDeleteRun={handleDeleteRun}
+              onChanged={() => {
+                void refreshRuns();
+                refreshCatalog();
+              }}
+              deleteError={deleteError}
+            />
+          ) : (
+            <>
+              {missingRun && (
+                <p className="mb-3 text-[13px] text-gray-400">
+                  {`Run #${url.run} is not on this dataset (it may have been deleted).`}
+                </p>
+              )}
+              {compareDropped && (
+                <p className="mb-3 text-[13px] text-gray-400">
+                  Some runs in the link are not on this dataset and were left out.
+                </p>
+              )}
+              <RunsTable
+                runs={liveRuns}
+                selectedForCompare={validCompareIds}
+                onToggleCompare={handleToggleCompare}
+                onCompare={() => update({ compareOpen: true })}
+                selectedRunId={url.run}
+                loading={loading && runs.length === 0}
+                error={runsError}
+                onOpen={(runId) => update({ tab: "runs", run: runId })}
+                onRepeat={handleRepeat}
+                onDelete={handleDeleteRun}
+                deleteError={deleteError}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* Stays mounted while the Runs view is shown, so edits and the kept
+          settings survive a look at the table or a started run. */}
+      <div hidden={url.tab !== "new"} className="max-w-5xl">
+        <TrainConfigForm
+          dataset={selectedDataset}
+          disabled={submitPending}
+          onSubmit={handleSubmit}
+          baseModels={baseModels}
+          baseModelsError={baseModelsError}
+          settingsSchema={settingsSchema}
+          settingsSchemaError={settingsSchemaError}
+          prefill={prefill}
+          clearTextSignal={clearSignal}
+        />
       </div>
     </div>
   );
