@@ -2165,3 +2165,37 @@ MinIO prefix); the tables match the recorded counts.
 - Still open from earlier plans: preset numbers are guesses; sizes `l`/`x` never
   run live; a validation-opened settings group closes when its last error is
   fixed; `useRuns.refresh` identity; `testDeferred.ts` is a non-test filename.
+
+### Train screen UI polish (2026-10-12)
+
+Design and plan: `docs/superpowers/plans/2026-10-12-train-ui-polish.md`. The screen is
+now full width with no left column: one toolbar (dataset select, one-line summary,
+`+ New run` / `← Runs`), a one-row active-run strip that owns progress, a runs list
+that opens on row click (Repeat button, `⋯` menu, compare bar only when rows are
+ticked), a run page with one header row, metric cards, changed settings and a
+collapsed "All settings", a two-column new-run form with a sticky action bar and
+tooltip help, a 14/13 px type scale, and the log's model-architecture block folded.
+
+Verified in a real browser at 1920 and 900 px (data starts at ~170 px instead of
+~390; one real 2-epoch YOLO11n run). The run, its model and job were removed
+afterwards, together with the earlier snapshot run 458; tables match the recorded
+counts (runs 199/200/217/268, one model version, 7 MODEL_TRAIN jobs).
+
+**Deviation log:**
+
+- **Review (one batch, T1–T5):** the run-page `⋯` menu was not keyboard-operable and
+  a click on the runs-menu padding opened the row; both fixed, with a shared
+  `useDismissableMenu` hook. The `← Runs` button stayed disabled without a dataset
+  (now enabled). Stale "New run tab" copy fixed.
+- **Live check:** Escape did not close a `⋯` menu whose items were all disabled;
+  the runs list scrolled horizontally at 900 px. Both fixed (44038b9).
+
+**Open / next:**
+
+- Compare view at 1920 px: the chart is ~900 px tall, the tables start below the fold.
+- Class popover in `DatasetSummary` does not close on Escape / outside click and
+  overflows the right edge at 900 px.
+- App header (outside Train) wraps at 900 px.
+- Backend, pre-existing: `metrics_history` looks shifted by one epoch (epoch 1 all
+  zeros, epoch 2 holds epoch 1's values), so short runs' curves start at 0.
+- Config-difference table is long for runs recorded before the settings schema.
