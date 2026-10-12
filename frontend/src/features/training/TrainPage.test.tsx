@@ -89,6 +89,15 @@ function Where() {
   return <div data-testid="where">{location.search}</div>;
 }
 
+function openRow(id: number) {
+  return within(screen.getByRole("table")).getByText(`#${id}`);
+}
+
+async function armDelete(id: number) {
+  fireEvent.click(await screen.findByRole("button", { name: `More actions for run ${id}` }));
+  fireEvent.click(screen.getByRole("menuitem", { name: `Delete run ${id}` }));
+}
+
 function renderPage(entry = "/train?dataset=496") {
   return render(
     <MemoryRouter initialEntries={[entry]}>
@@ -164,7 +173,8 @@ describe("TrainPage", () => {
 
   it("opens a run's details when its row is opened and puts it in the URL; Back returns to the table", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "Open run 5" }));
+    await screen.findByRole("table");
+    fireEvent.click(openRow(5));
     expect(await screen.findByRole("button", { name: /← Runs/ })).toBeInTheDocument();
     expect(where()).toBe("?dataset=496&run=5");
     fireEvent.click(screen.getByRole("button", { name: /← Runs/ }));
@@ -345,9 +355,9 @@ describe("TrainPage", () => {
       world.running = at(0, "pending");
       world.runDetail = () => at(4, "running");
       renderPage("/train?dataset=496&run=7");
-      await vi.waitFor(() => screen.getByText("Epoch 0 / 10"));
+      await vi.waitFor(() => screen.getByText(/epoch 0\/10/i));
       await vi.advanceTimersByTimeAsync(2100);
-      await vi.waitFor(() => screen.getByText("Epoch 4 / 10"));
+      await vi.waitFor(() => screen.getByText(/epoch 4\/10/i));
       expect(screen.getAllByText("running").length).toBeGreaterThan(0);
       expect(screen.queryByText("pending")).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /← Runs/ }));
@@ -361,7 +371,7 @@ describe("TrainPage", () => {
       world.running = runRow({ id: 7, status: "running", current_epoch: 3, total_epochs: 10 });
       renderPage("/train?dataset=496&run=5&view=log");
       await screen.findByRole("table");
-      fireEvent.click(screen.getAllByRole("button", { name: "Open run 7" })[0]);
+      fireEvent.click(screen.getByRole("button", { name: "Open run 7" }));
       await waitFor(() => expect(where()).toBe("?dataset=496&run=7"));
     });
   });
@@ -370,10 +380,11 @@ describe("TrainPage", () => {
     it("deleting the open run clears it from the URL", async () => {
       vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
       renderPage("/train?dataset=496&run=5");
-      fireEvent.click(await screen.findByRole("button", { name: "Delete run #5" }));
+      fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Delete run #5" }));
       world.runs[496] = [];
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Confirm delete run #5" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: "Confirm delete run #5" }));
       });
       await waitFor(() => expect(where()).toBe("?dataset=496"));
     });
@@ -381,22 +392,22 @@ describe("TrainPage", () => {
     it("clears a refused-delete message when another dataset is selected or a run is opened", async () => {
       vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: { detail: "Run 5 owns a model." } } as never);
       renderPage();
-      fireEvent.click(await screen.findByRole("button", { name: "Delete run 5" }));
+      await armDelete(5);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Confirm delete run 5" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: "Confirm delete run 5" }));
       });
       expect(await screen.findByRole("alert")).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Open run 5" }));
+      fireEvent.click(openRow(5));
       await waitFor(() => expect(screen.queryByText("Run 5 owns a model.")).not.toBeInTheDocument());
     });
 
     it("deletes after confirmation and refreshes the table", async () => {
       vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
       renderPage();
-      fireEvent.click(await screen.findByRole("button", { name: "Delete run 5" }));
+      await armDelete(5);
       world.runs[496] = [];
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Confirm delete run 5" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: "Confirm delete run 5" }));
       });
       expect(vi.mocked(apiClient.DELETE)).toHaveBeenCalledWith("/training/runs/{run_id}", {
         params: { path: { run_id: 5 } },
@@ -410,9 +421,9 @@ describe("TrainPage", () => {
         error: { detail: "Run 5 owns a model." },
       } as never);
       renderPage();
-      fireEvent.click(await screen.findByRole("button", { name: "Delete run 5" }));
+      await armDelete(5);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Confirm delete run 5" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: "Confirm delete run 5" }));
       });
       expect(await screen.findByRole("alert")).toHaveTextContent("Run 5 owns a model.");
       expect(screen.getByText("first try")).toBeInTheDocument();
@@ -458,7 +469,7 @@ describe("TrainPage", () => {
       tick(268);
       tick(199);
       expect(where()).toBe("?dataset=496&compare=268%2C199");
-      fireEvent.click(screen.getByRole("button", { name: "Compare (2)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Compare" }));
       expect(await compareHeading("Comparing #268 alpha, #199 beta")).toBeInTheDocument();
       expect(where()).toBe("?dataset=496&compare=268%2C199&cmp=1");
       expect(screen.queryByRole("table", { name: /runs/i })).not.toBeInTheDocument();
@@ -508,7 +519,7 @@ describe("TrainPage", () => {
     it("opening a single run from the table clears the compare view", async () => {
       renderPage("/train?dataset=496&compare=268,199");
       await screen.findByText("gamma");
-      fireEvent.click(screen.getByRole("button", { name: "Open run 77" }));
+      fireEvent.click(openRow(77));
       await waitFor(() => expect(where()).toContain("run=77"));
       expect(where()).not.toContain("cmp=1");
       expect(screen.queryByRole("heading", { name: /^Comparing/ })).not.toBeInTheDocument();
@@ -538,7 +549,7 @@ describe("TrainPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Remove run 199 from the comparison" }));
       await screen.findByText("gamma");
       fireEvent.click(screen.getByRole("checkbox", { name: "Select run 77 for comparison" }));
-      fireEvent.click(screen.getByRole("button", { name: "Compare (2)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Compare" }));
       await compareHeading("Comparing #268 alpha, #77 gamma");
       expect(await screen.findByText("freshKey")).toBeInTheDocument();
       await act(async () => {
@@ -599,9 +610,9 @@ describe("TrainPage", () => {
       await screen.findByText("gamma");
       vi.mocked(apiClient.DELETE).mockResolvedValue({ data: null, error: undefined } as never);
       world.runs[496] = (world.runs[496] as Array<{ id: number }>).filter((r) => r.id !== 199);
-      fireEvent.click(screen.getByRole("button", { name: "Delete run 199" }));
+      await armDelete(199);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Confirm delete run 199" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: "Confirm delete run 199" }));
       });
       await waitFor(() => expect(where()).toBe("?dataset=496&compare=268"));
       fireEvent.click(screen.getByRole("checkbox", { name: "Select run 77 for comparison" }));
@@ -634,7 +645,7 @@ describe("TrainPage", () => {
       tick(77);
       expect(screen.getByRole("checkbox", { name: "Select run 78 for comparison" })).toBeDisabled();
       expect(screen.getByRole("checkbox", { name: "Select run 90 for comparison" })).toBeDisabled();
-      expect(screen.getByRole("button", { name: "Compare (3)" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Compare" })).toBeEnabled();
     });
 
     it("shows a note for a run whose metrics failed while the other run's data renders", async () => {

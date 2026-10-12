@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../shared/api/generated/schema";
@@ -51,9 +51,10 @@ describe("RunsTable", () => {
     setup([run({ name: "big frames", note: "tried larger frames" })]);
     expect(screen.getByText("#1")).toBeInTheDocument();
     expect(screen.getByText("big frames")).toBeInTheDocument();
-    const note = screen.getByText("tried larger frames");
-    expect(note).toHaveAttribute("title", "tried larger frames");
-    expect(note.className).toContain("truncate");
+    expect(screen.queryByText("tried larger frames")).not.toBeInTheDocument();
+    expect(screen.getByText("#1").closest("td")).toHaveAttribute("title", "tried larger frames");
+    expect(screen.getByText("big frames").className).toContain("truncate");
+    expect(screen.queryByRole("columnheader", { name: "Name" })).not.toBeInTheDocument();
     expect(screen.getByText("yolo11n.pt")).toBeInTheDocument();
     expect(screen.getByText("640 · b4 · 50 ep")).toBeInTheDocument();
     expect(screen.getByText("succeeded")).toBeInTheDocument();
@@ -77,16 +78,20 @@ describe("RunsTable", () => {
     expect(best[0].className).toContain("font-semibold");
   });
 
-  it("opens a run from the Open button and from a click on the row", () => {
+  const openMenu = (id: number) =>
+    fireEvent.click(screen.getByRole("button", { name: `More actions for run ${id}` }));
+
+  it("opens a run from a click on its row; there is no Open button", () => {
     const { onOpen } = setup([run({ id: 4 })]);
-    fireEvent.click(screen.getByRole("button", { name: "Open run 4" }));
+    expect(screen.queryByRole("button", { name: /Open run/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("#4"));
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(onOpen).toHaveBeenCalledWith(4);
-    fireEvent.click(screen.getByText("#4"));
+    fireEvent.keyDown(screen.getByText("#4").closest("tr")!, { key: "Enter" });
     expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
-  it("repeats with changes", () => {
+  it("repeats with changes without opening the row", () => {
     const r = run({ id: 5 });
     const { onRepeat, onOpen } = setup([r]);
     fireEvent.click(screen.getByRole("button", { name: "Repeat run 5 with changes" }));
@@ -94,26 +99,41 @@ describe("RunsTable", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it("arms before deleting", () => {
+  it("arms inside the ⋯ menu before deleting", () => {
     const r = run({ id: 6 });
     const { onDelete, onOpen } = setup([r]);
-    fireEvent.click(screen.getByRole("button", { name: "Delete run 6" }));
+    expect(screen.queryByRole("button", { name: "Delete run 6" })).not.toBeInTheDocument();
+    openMenu(6);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete run 6" }));
     expect(onDelete).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm delete run 6" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Confirm delete run 6" }));
     expect(onDelete).toHaveBeenCalledWith(r);
     expect(onOpen).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("disarms when the runs change", () => {
-    const r = run({ id: 6 });
-    const { rerender, onOpen, onRepeat, onDelete } = setup([r]);
-    fireEvent.click(screen.getByRole("button", { name: "Delete run 6" }));
-    expect(screen.getByRole("button", { name: "Confirm delete run 6" })).toBeInTheDocument();
-    rerender(
-      <RunsTable runs={[r, run({ id: 7 })]} selectedRunId={null} loading={false} error={null}
-        deleteError={null} onOpen={onOpen} onRepeat={onRepeat} onDelete={onDelete} />,
-    );
-    expect(screen.queryByRole("button", { name: "Confirm delete run 6" })).not.toBeInTheDocument();
+  it("menu is keyboard operable: aria-haspopup, Escape closes and returns focus, and disarms", () => {
+    setup([run({ id: 6 })]);
+    const trigger = screen.getByRole("button", { name: "More actions for run 6" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const item = screen.getByRole("menuitem", { name: "Delete run 6" });
+    expect(item).toHaveFocus();
+    fireEvent.click(item);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menuitem", { name: "Delete run 6" })).toBeInTheDocument();
+  });
+
+  it("closes the menu on an outside click", () => {
+    setup([run({ id: 6 })]);
+    openMenu(6);
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("disables Delete for a run that owns a model and for an active run, with the reason", () => {
@@ -122,11 +142,15 @@ describe("RunsTable", () => {
       run({ id: 2, status: "running", finished_at: null }),
       run({ id: 3, status: "pending", started_at: null, finished_at: null }),
     ]);
+    openMenu(1);
     const owns = screen.getByTitle("Delete the model first");
     expect(owns).toBeDisabled();
-    const active = screen.getAllByTitle("Stop the run first");
-    expect(active).toHaveLength(2);
-    active.forEach((b) => expect(b).toBeDisabled());
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    openMenu(2);
+    expect(screen.getByTitle("Stop the run first")).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    openMenu(3);
+    expect(screen.getByTitle("Stop the run first")).toBeDisabled();
   });
 
   it("highlights the selected row", () => {
@@ -145,13 +169,13 @@ describe("RunsTable", () => {
   it("gives each row's actions a distinct accessible name", () => {
     setup([run({ id: 1 }), run({ id: 2 })]);
     for (const id of [1, 2]) {
-      expect(screen.getByRole("button", { name: `Open run ${id}` })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: `Repeat run ${id} with changes` })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: `Delete run ${id}` })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `More actions for run ${id}` })).toBeInTheDocument();
     }
-    fireEvent.click(screen.getByRole("button", { name: "Delete run 2" }));
-    expect(screen.getByRole("button", { name: "Confirm delete run 2" })).toBeInTheDocument();
+    openMenu(2);
+    expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Delete run 2" })).toBeInTheDocument();
   });
+
   describe("selection for comparison", () => {
     it("renders a checkbox per row and toggles without opening the row", () => {
       const onToggleCompare = vi.fn();
@@ -211,35 +235,52 @@ describe("RunsTable", () => {
       expect(fourth).toHaveAttribute("title", "You can compare up to 3 runs");
     });
 
-    it("shows the hint and keeps Compare disabled with 0 or 1 selected", () => {
-      const { rerender, onOpen, onRepeat, onDelete } = setup([run({ id: 1 }), run({ id: 2 })]);
-      expect(screen.getByText("Select 2–3 runs of this dataset.")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Compare (0)" })).toBeDisabled();
-      rerender(
-        <RunsTable runs={[run({ id: 1 }), run({ id: 2 })]} selectedRunId={null} loading={false}
-          error={null} deleteError={null} onOpen={onOpen} onRepeat={onRepeat} onDelete={onDelete}
-          selectedForCompare={[1]} />,
-      );
-      expect(screen.getByRole("button", { name: "Compare (1)" })).toBeDisabled();
+    it("hides the compare bar with nothing ticked", () => {
+      setup([run({ id: 1 }), run({ id: 2 })]);
+      expect(screen.queryByRole("button", { name: "Compare" })).not.toBeInTheDocument();
+      expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
     });
 
-    it("enables Compare with 2 or 3 selected, shows the count and calls onCompare", () => {
+    it("with 1 ticked shows the bar with Compare disabled", () => {
+      setup([run({ id: 1 }), run({ id: 2 })], { selectedForCompare: [1] });
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Compare" })).toBeDisabled();
+    });
+
+    it("with 2 or 3 ticked enables Compare and calls onCompare", () => {
       const onCompare = vi.fn();
-      const { rerender, onOpen, onRepeat, onDelete } = setup(
-        [run({ id: 1 }), run({ id: 2 }), run({ id: 3 })],
-        { selectedForCompare: [1, 2], onCompare },
-      );
-      const button = screen.getByRole("button", { name: "Compare (2)" });
+      const { onOpen } = setup([run({ id: 1 }), run({ id: 2 }), run({ id: 3 })], {
+        selectedForCompare: [1, 2, 3],
+        onCompare,
+      });
+      expect(screen.getByText("3 selected")).toBeInTheDocument();
+      const button = screen.getByRole("button", { name: "Compare" });
       expect(button).toBeEnabled();
       fireEvent.click(button);
       expect(onCompare).toHaveBeenCalledTimes(1);
       expect(onOpen).not.toHaveBeenCalled();
-      rerender(
-        <RunsTable runs={[run({ id: 1 }), run({ id: 2 }), run({ id: 3 })]} selectedRunId={null}
-          loading={false} error={null} deleteError={null} onOpen={onOpen} onRepeat={onRepeat}
-          onDelete={onDelete} selectedForCompare={[1, 2, 3]} onCompare={onCompare} />,
-      );
-      expect(screen.getByRole("button", { name: "Compare (3)" })).toBeEnabled();
+    });
+
+    it("Clear calls onClearCompare, or unticks each run when no handler is given", () => {
+      const onClearCompare = vi.fn();
+      const { unmount } = setup([run({ id: 1 }), run({ id: 2 })], {
+        selectedForCompare: [1, 2],
+        onClearCompare,
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      expect(onClearCompare).toHaveBeenCalledTimes(1);
+      unmount();
+      const onToggleCompare = vi.fn();
+      setup([run({ id: 1 }), run({ id: 2 })], { selectedForCompare: [1, 2], onToggleCompare });
+      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      expect(onToggleCompare.mock.calls).toEqual([[1], [2]]);
+    });
+
+    it("uses dark checkboxes", () => {
+      setup([run({ id: 1 })]);
+      const cls = screen.getByRole("checkbox").className;
+      expect(cls).toContain("accent-blue-500");
+      expect(cls).toContain("[color-scheme:dark]");
     });
   });
 });

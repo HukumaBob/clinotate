@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
 import { MAX_COMPARE } from "./compareLogic";
@@ -26,10 +26,115 @@ interface RunsTableProps {
   selectedForCompare?: number[];
   onToggleCompare?: (runId: number) => void;
   onCompare?: () => void;
+  onClearCompare?: () => void;
 }
 
-const BUTTON = "rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100";
-const DISABLED = "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-gray-300";
+const BUTTON = "rounded border border-gray-700 px-3 py-1 text-[13px] text-gray-300 hover:text-gray-100";
+const CHECKBOX = "h-4 w-4 accent-blue-500 [color-scheme:dark]";
+const ITEM =
+  "block w-full px-3 py-1.5 text-left text-[13px] text-gray-200 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+
+interface RowMenuProps {
+  run: TrainingRunRead;
+  blockReason: string | undefined;
+  onDelete: (run: TrainingRunRead) => void;
+}
+
+function RowMenu({ run, blockReason, onDelete }: RowMenuProps) {
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [armed, setArmed] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const open = pos !== null;
+
+  const close = (refocus: boolean) => {
+    setPos(null);
+    setArmed(false);
+    if (refocus) trigger.current?.focus();
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    menu.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menu.current?.contains(t) || trigger.current?.contains(t)) return;
+      close(false);
+    };
+    const onScroll = () => close(false);
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (open) return close(false);
+    const r = trigger.current!.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+  };
+
+  return (
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        className={`${BUTTON} px-2`}
+        aria-label={`More actions for run ${run.id}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={toggle}
+      >
+        ⋯
+      </button>
+      {open && (
+        <div
+          ref={menu}
+          role="menu"
+          className="fixed z-20 min-w-[9rem] rounded border border-gray-700 bg-gray-900 py-1 shadow-lg"
+          style={{ top: pos.top, right: pos.right }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              close(true);
+            }
+          }}
+        >
+          {armed && !blockReason ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={`${ITEM} text-red-300`}
+              aria-label={`Confirm delete run ${run.id}`}
+              onClick={() => {
+                onDelete(run);
+                close(true);
+              }}
+            >
+              Confirm delete
+            </button>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              className={ITEM}
+              disabled={blockReason !== undefined}
+              title={blockReason}
+              aria-label={`Delete run ${run.id}`}
+              onClick={() => setArmed(true)}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
 
 export function RunsTable({
   runs,
@@ -43,18 +148,13 @@ export function RunsTable({
   selectedForCompare = [],
   onToggleCompare = () => {},
   onCompare = () => {},
+  onClearCompare,
 }: RunsTableProps) {
-  const [armed, setArmed] = useState<number | null>(null);
-
-  useEffect(() => {
-    setArmed(null);
-  }, [runs]);
-
-  if (error) return <p className="text-sm text-red-400">{error}</p>;
-  if (loading) return <p className="text-sm text-gray-500">Loading runs…</p>;
+  if (error) return <p className="text-[14px] text-red-400">{error}</p>;
+  if (loading) return <p className="text-[14px] text-gray-400">Loading runs…</p>;
   if (runs.length === 0) {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-[14px] text-gray-400">
         No runs on this dataset yet. Start one from the New run tab.
       </p>
     );
@@ -66,37 +166,50 @@ export function RunsTable({
   return (
     <div>
       {deleteError && (
-        <p role="alert" className="mb-2 text-sm text-red-400">
+        <p role="alert" className="mb-2 text-[14px] text-red-400">
           {deleteError}
         </p>
       )}
-      <div className="mb-2 flex items-center gap-3">
-        <button
-          type="button"
-          className={`${BUTTON} ${DISABLED}`}
-          disabled={selectedForCompare.length < 2}
-          onClick={onCompare}
-        >
-          {`Compare (${selectedForCompare.length})`}
-        </button>
-        <span className="text-xs text-gray-500">Select 2–3 runs of this dataset.</span>
-      </div>
+      {selectedForCompare.length > 0 && (
+        <div className="mb-2 flex items-center gap-3 text-[13px] text-gray-400">
+          <span>{`${selectedForCompare.length} selected`}</span>
+          <button
+            type="button"
+            className={`${BUTTON} disabled:cursor-not-allowed disabled:opacity-40`}
+            disabled={selectedForCompare.length < 2}
+            title={selectedForCompare.length < 2 ? "Select at least 2 runs" : undefined}
+            onClick={onCompare}
+          >
+            Compare
+          </button>
+          <button
+            type="button"
+            className="text-gray-300 hover:text-gray-100"
+            onClick={() =>
+              onClearCompare ? onClearCompare() : selectedForCompare.forEach((id) => onToggleCompare(id))
+            }
+          >
+            Clear
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm text-gray-200">
+        <table className="w-full text-left text-[14px] text-gray-200">
           <thead>
-            <tr className="border-b border-gray-800 text-gray-400">
+            <tr className="border-b border-gray-800 text-[13px] text-gray-400">
               <th className="px-3 py-2 font-normal">
                 <span className="sr-only">Compare</span>
               </th>
-              <th className="px-3 py-2 font-normal">Run</th>
-              <th className="px-3 py-2 font-normal">Name</th>
+              <th className="px-3 py-2 font-normal">#</th>
               <th className="px-3 py-2 font-normal">Base</th>
               <th className="px-3 py-2 font-normal">Settings</th>
               <th className="px-3 py-2 font-normal">Status</th>
               <th className="px-3 py-2 font-normal">Score</th>
               <th className="px-3 py-2 font-normal">Duration</th>
               <th className="px-3 py-2 font-normal">Created</th>
-              <th className="px-3 py-2 text-right font-normal">Actions</th>
+              <th className="px-3 py-2 text-right font-normal">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -125,6 +238,10 @@ export function RunsTable({
                   className={`h-14 cursor-pointer border-b border-gray-900 ${
                     selected ? "bg-gray-800" : "hover:bg-gray-900"
                   }`}
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.target === event.currentTarget && event.key === "Enter") onOpen(run.id);
+                  }}
                   onClick={(event) => {
                     if ((event.target as HTMLElement).closest("button, input")) return;
                     onOpen(run.id);
@@ -133,6 +250,7 @@ export function RunsTable({
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
+                      className={CHECKBOX}
                       aria-label={`Select run ${run.id} for comparison`}
                       checked={checked}
                       disabled={compareReason !== undefined}
@@ -140,14 +258,9 @@ export function RunsTable({
                       onChange={() => onToggleCompare(run.id)}
                     />
                   </td>
-                  <td className="px-3 py-2 text-gray-400">{`#${run.id}`}</td>
-                  <td className="max-w-[16rem] px-3 py-2">
-                    {run.name && <div className="truncate">{run.name}</div>}
-                    {run.note && (
-                      <div className="truncate text-xs text-gray-500" title={run.note}>
-                        {run.note}
-                      </div>
-                    )}
+                  <td className="max-w-[16rem] px-3 py-2" title={run.note ?? undefined}>
+                    <div className="text-gray-300">{`#${run.id}`}</div>
+                    {run.name && <div className="truncate text-[13px] text-gray-400">{run.name}</div>}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-400">
                     {run.base_model_version_id !== null && run.base_model_version_id !== undefined
@@ -159,7 +272,7 @@ export function RunsTable({
                   </td>
                   <td className="px-3 py-2">
                     <span
-                      className={`rounded px-2 py-0.5 text-xs ${
+                      className={`rounded px-2 py-0.5 text-[13px] ${
                         STATUS_STYLES[run.status] ?? "bg-gray-700 text-gray-200"
                       }`}
                     >
@@ -174,7 +287,7 @@ export function RunsTable({
                     ) : (
                       <span>{score.value}</span>
                     )}{" "}
-                    <span className="text-xs text-gray-400">{score.label}</span>
+                    <span className="text-[13px] text-gray-400">{score.label}</span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-400">
                     {formatDuration(run.started_at ?? null, run.finished_at ?? null, now)}
@@ -186,43 +299,12 @@ export function RunsTable({
                     <button
                       type="button"
                       className={`mr-2 ${BUTTON}`}
-                      aria-label={`Open run ${run.id}`}
-                      onClick={() => onOpen(run.id)}
-                    >
-                      Open
-                    </button>
-                    <button
-                      type="button"
-                      className={`mr-2 ${BUTTON}`}
                       aria-label={`Repeat run ${run.id} with changes`}
                       onClick={() => onRepeat(run)}
                     >
-                      Repeat with changes
+                      Repeat
                     </button>
-                    {armed === run.id && !blockReason ? (
-                      <button
-                        type="button"
-                        className="rounded bg-red-700 px-2 py-1 text-xs text-white"
-                        aria-label={`Confirm delete run ${run.id}`}
-                        onClick={() => {
-                          onDelete(run);
-                          setArmed(null);
-                        }}
-                      >
-                        Confirm
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className={`${BUTTON} ${DISABLED}`}
-                        disabled={blockReason !== undefined}
-                        title={blockReason}
-                        aria-label={`Delete run ${run.id}`}
-                        onClick={() => setArmed(run.id)}
-                      >
-                        Delete
-                      </button>
-                    )}
+                    <RowMenu run={run} blockReason={blockReason} onDelete={onDelete} />
                   </td>
                 </tr>
               );
