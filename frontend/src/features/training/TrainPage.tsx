@@ -363,7 +363,7 @@ export function TrainPage() {
       : { label: "", value: "—" };
 
   return (
-    <div className="flex flex-col gap-3 bg-gray-950 px-6 py-4 text-gray-100">
+    <div className="flex flex-col gap-3 bg-gray-950 px-6 pb-10 pt-4 text-gray-100">
       <TrainToolbar
         datasets={datasets}
         selectedId={selectedDatasetId}
