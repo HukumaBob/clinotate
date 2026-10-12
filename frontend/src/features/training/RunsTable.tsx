@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
+import { useDismissableMenu } from "./useDismissableMenu";
 import { MAX_COMPARE } from "./compareLogic";
 import { bestRunId, formatDuration, headlineScore, settingsLine } from "./runLogic";
 
@@ -37,10 +38,11 @@ const ITEM =
 interface RowMenuProps {
   run: TrainingRunRead;
   blockReason: string | undefined;
+  rowsKey: string;
   onDelete: (run: TrainingRunRead) => void;
 }
 
-function RowMenu({ run, blockReason, onDelete }: RowMenuProps) {
+function RowMenu({ run, blockReason, rowsKey, onDelete }: RowMenuProps) {
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -53,24 +55,19 @@ function RowMenu({ run, blockReason, onDelete }: RowMenuProps) {
     if (refocus) trigger.current?.focus();
   };
 
+  useDismissableMenu(open, close, menu, trigger, true);
+
+  // Arming swaps the focused item out; keep focus inside so Escape still lands.
   useEffect(() => {
-    if (!open) return;
-    menu.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (menu.current?.contains(t) || trigger.current?.contains(t)) return;
-      close(false);
-    };
-    const onScroll = () => close(false);
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", onScroll);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, [open]);
+    if (open) menu.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+  }, [armed, open]);
+
+  // Rows shift when the list changes and a fixed-position menu would float
+  // next to the wrong row; a changed block reason must not keep Confirm armed.
+  useEffect(() => {
+    close(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockReason, rowsKey]);
 
   const toggle = () => {
     if (open) return close(false);
@@ -97,6 +94,7 @@ function RowMenu({ run, blockReason, onDelete }: RowMenuProps) {
           role="menu"
           className="fixed z-20 min-w-[9rem] rounded border border-gray-700 bg-gray-900 py-1 shadow-lg"
           style={{ top: pos.top, right: pos.right }}
+          onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.stopPropagation();
@@ -155,11 +153,12 @@ export function RunsTable({
   if (runs.length === 0) {
     return (
       <p className="text-[14px] text-gray-400">
-        No runs on this dataset yet. Start one from the New run tab.
+        No runs on this dataset yet. Start one with the + New run button.
       </p>
     );
   }
 
+  const rowsKey = runs.map((r) => r.id).join(",");
   const best = bestRunId(runs);
   const now = new Date();
 
@@ -304,7 +303,7 @@ export function RunsTable({
                     >
                       Repeat
                     </button>
-                    <RowMenu run={run} blockReason={blockReason} onDelete={onDelete} />
+                    <RowMenu run={run} blockReason={blockReason} rowsKey={rowsKey} onDelete={onDelete} />
                   </td>
                 </tr>
               );

@@ -67,4 +67,12 @@ describe("TrainToolbar", () => {
     expect(onCloseForm).toHaveBeenCalledTimes(1);
     expect(onNewRun).not.toHaveBeenCalled();
   });
+
+  it("keeps ← Runs enabled with the form open and no dataset selected", () => {
+    const { onCloseForm } = setup({ selectedId: null, formOpen: true });
+    const back = screen.getByRole("button", { name: "← Runs" });
+    expect(back).toBeEnabled();
+    fireEvent.click(back);
+    expect(onCloseForm).toHaveBeenCalledTimes(1);
+  });
 });

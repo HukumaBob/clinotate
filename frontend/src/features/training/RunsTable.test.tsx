@@ -37,7 +37,7 @@ function setup(runs: Run[], props: Partial<React.ComponentProps<typeof RunsTable
 describe("RunsTable", () => {
   it("shows an empty state, a loading state and an error instead of a blank table", () => {
     const { rerender, onOpen, onRepeat, onDelete } = setup([]);
-    expect(screen.getByText("No runs on this dataset yet. Start one from the New run tab.")).toBeInTheDocument();
+    expect(screen.getByText("No runs on this dataset yet. Start one with the + New run button.")).toBeInTheDocument();
     const common = { runs: [], selectedRunId: null, deleteError: null, onOpen, onRepeat, onDelete };
     rerender(<RunsTable {...common} loading={true} error={null} />);
     expect(screen.queryByText(/No runs on this dataset yet/)).not.toBeInTheDocument();
@@ -134,6 +134,27 @@ describe("RunsTable", () => {
     openMenu(6);
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("a click on the menu panel itself does not open the row", () => {
+    const { onOpen } = setup([run({ id: 6 })]);
+    openMenu(6);
+    fireEvent.click(screen.getByRole("menu"));
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("closes and disarms the menu when the runs list changes", () => {
+    const { rerender, onOpen, onRepeat, onDelete } = setup([run({ id: 6 }), run({ id: 7 })]);
+    openMenu(7);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete run 7" }));
+    expect(screen.getByRole("menuitem", { name: "Confirm delete run 7" })).toBeInTheDocument();
+    rerender(
+      <RunsTable runs={[run({ id: 7 })]} selectedRunId={null} loading={false} error={null}
+        deleteError={null} onOpen={onOpen} onRepeat={onRepeat} onDelete={onDelete} />,
+    );
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    openMenu(7);
+    expect(screen.getByRole("menuitem", { name: "Delete run 7" })).toBeInTheDocument();
   });
 
   it("disables Delete for a run that owns a model and for an active run, with the reason", () => {

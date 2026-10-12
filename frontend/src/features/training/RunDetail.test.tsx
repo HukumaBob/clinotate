@@ -109,6 +109,23 @@ describe("RunDetail", () => {
     expect(onDeleteRun).toHaveBeenCalledWith(expect.objectContaining({ id: 4 }));
   });
 
+  it("menu: focus moves in, Escape closes and returns focus and disarms, outside click closes", async () => {
+    setup({ model_version_id: null });
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    await userEvent.click(trigger);
+    const item = screen.getByRole("menuitem", { name: "Delete run #4" });
+    expect(item).toHaveFocus();
+    await userEvent.click(item);
+    expect(screen.getByRole("menuitem", { name: "Confirm delete run #4" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    await userEvent.click(trigger);
+    expect(screen.getByRole("menuitem", { name: "Delete run #4" })).toBeInTheDocument();
+    await userEvent.click(document.body);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   it("disables delete with the reason", async () => {
     setup();
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../../shared/api/client";
 import type { RunView } from "./useTrainUrl";
@@ -9,6 +9,7 @@ import { RunModelView } from "./RunModelView";
 import { RunOverview } from "./RunOverview";
 import { formatDuration, headlineScore, isActiveRun } from "./runLogic";
 import { STATUS_STYLES } from "./RunsTable";
+import { useDismissableMenu } from "./useDismissableMenu";
 import type { SettingsSchema } from "./settingsLogic";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
@@ -151,6 +152,20 @@ export function RunDetail({
   const [menuOpen, setMenuOpen] = useState(false);
   const [armed, setArmed] = useState(false);
 
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const closeMenu = (refocus: boolean) => {
+    setMenuOpen(false);
+    setArmed(false);
+    if (refocus) trigger.current?.focus();
+  };
+  useDismissableMenu(menuOpen, closeMenu, menu, trigger);
+
+  // Arming swaps the focused item out; keep focus inside so Escape still lands.
+  useEffect(() => {
+    if (menuOpen) menu.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+  }, [armed, menuOpen]);
+
   useEffect(() => {
     setMenuOpen(false);
     setArmed(false);
@@ -194,18 +209,26 @@ export function RunDetail({
             Repeat
           </button>
           <button
+            ref={trigger}
             type="button"
             aria-label="More actions"
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             className={BUTTON}
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={() => (menuOpen ? closeMenu(false) : setMenuOpen(true))}
           >
             ⋯
           </button>
           {menuOpen && (
             <div
+              ref={menu}
               role="menu"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  closeMenu(true);
+                }
+              }}
               className="absolute right-0 top-9 z-10 flex min-w-40 flex-col gap-2 rounded border border-gray-700 bg-gray-900 p-2"
             >
               {armed ? (

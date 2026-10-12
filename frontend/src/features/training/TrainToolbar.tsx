@@ -41,7 +41,7 @@ export function TrainToolbar({
       <DatasetSummary dataset={selected} runCount={selected ? runCount : undefined} />
       <button
         type="button"
-        disabled={selected === null}
+        disabled={!formOpen && selected === null}
         onClick={formOpen ? onCloseForm : onNewRun}
         className="ml-auto h-8 rounded bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-400"
       >
