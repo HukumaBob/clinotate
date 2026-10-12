@@ -85,6 +85,13 @@ function RowMenu({ run, blockReason, rowsKey, onDelete }: RowMenuProps) {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
+        onKeyDown={(e) => {
+          // With every item disabled focus stays on the trigger.
+          if (open && e.key === "Escape") {
+            e.stopPropagation();
+            close(true);
+          }
+        }}
       >
         ⋯
       </button>
@@ -192,7 +199,7 @@ export function RunsTable({
           </button>
         </div>
       )}
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full text-left text-[14px] text-gray-200">
           <thead>
             <tr className="border-b border-gray-800 text-[13px] text-gray-400">

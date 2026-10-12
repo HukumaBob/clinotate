@@ -216,6 +216,13 @@ export function RunDetail({
             aria-expanded={menuOpen}
             className={BUTTON}
             onClick={() => (menuOpen ? closeMenu(false) : setMenuOpen(true))}
+            onKeyDown={(e) => {
+              // With every item disabled focus stays on the trigger.
+              if (menuOpen && e.key === "Escape") {
+                e.stopPropagation();
+                closeMenu(true);
+              }
+            }}
           >
             ⋯
           </button>

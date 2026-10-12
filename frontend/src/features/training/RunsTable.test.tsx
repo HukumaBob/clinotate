@@ -143,6 +143,17 @@ describe("RunsTable", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it("Escape on the trigger closes the menu when every item is disabled", () => {
+    setup([run({ id: 1, model_version_id: 9 })]);
+    const trigger = screen.getByRole("button", { name: "More actions for run 1" });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("closes and disarms the menu when the runs list changes", () => {
     const { rerender, onOpen, onRepeat, onDelete } = setup([run({ id: 6 }), run({ id: 7 })]);
     openMenu(7);
