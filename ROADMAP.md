@@ -2099,3 +2099,69 @@ MinIO `models/268` as before).
   with a stale tracked run if it fell out of the 20-run window; a group
   auto-opened by Plan 1's validation still closes when its last error is fixed;
   the preset numbers are still guesses; `l`/`x` sizes were never run live.
+
+### Phase 2b: Train workspace, plan 3 (compare) — DONE (2026-10-12, browser-verified)
+
+Third and last plan of the Train workspace: comparing two or three runs of one
+dataset. Spec [2026-10-08-train-workspace-design.md](docs/superpowers/specs/2026-10-08-train-workspace-design.md)
+("Compare"), plan [2026-10-09-train-workspace-3-compare.md](docs/superpowers/plans/2026-10-09-train-workspace-3-compare.md),
+commits `7723493`..`9c5a8af`, executed subagent-driven. Frontend only; no
+backend or migration change.
+
+- **Selection:** checkboxes in the runs table (finished runs only, at most 3,
+  reasons as titles) and a "Compare (n)" button; the selection lives in the URL
+  (`compare=268,199`, `cmp=1` opens the view), survives reload and Back/Forward;
+  ids that are not finished runs of the selected dataset are dropped with a note.
+- **View:** configuration differences (only settings that differ), overlaid
+  training curves with a metric selector, final metrics with the best value
+  highlighted and deltas against the first run, per-class metrics (one metric at a
+  time, same rules), confusion matrices side by side and, for exactly two runs, a
+  signed difference B − A aligned by class name. "—" for anything a run did not
+  report, never 0; loss-like metrics are better when lower; a run without history,
+  per-class numbers or matrix gets an explicit empty state in each section.
+
+**Verified for real (2026-10-12):** the real runs 268 (50 epochs, full data) and
+199 (an older run with no history, per-class numbers or matrix): empty states,
+"(no data)" in the legend, a disabled difference toggle with its reason, the
+config difference (epochs 50 vs 100), correct best/delta marks (equal recall left
+unmarked). A third run 457 with the default settings (50 epochs, seed 0,
+deterministic): **it reproduced run 268's metrics to the last digit** — every delta
+0.000 and an all-zero difference matrix — so training here is reproducible and the
+compare view shows that honestly. A deep link with a reload opens the view; three
+runs show no difference toggle; removing a chip returns to two runs; an unknown id
+in the link falls back to the table with the "left out" note; no horizontal page
+scroll at 900 px. The run created for this was removed afterwards (model, run, job,
+MinIO prefix); the tables match the recorded counts.
+
+**Deviation log:**
+
+- **Silent loss-axis clipping (review).** The first chart clipped the y axis at the
+  95th percentile pooled across runs, which can hide a real spike or a whole short
+  run with high loss; removed, the axis now spans the real min and max. Also fixed
+  `preserveAspectRatio="none"` stretching, and a single-point run now draws.
+- **State loss on refresh (whole-plan review).** `loading` flips on every runs
+  refresh, so a finished run, Stop or delete emptied the valid ids, closed the view
+  and cleared the ticks; and a stale `cmp=1` could reopen the view by itself after a
+  delete. Both fixed (the first load gates the view; every patch that leaves fewer
+  than two ticks closes it in the same patch).
+- **Smaller:** a selected unfinished run's checkbox could not be unticked; a
+  zero-row confusion matrix counted as present in the difference; `configDifferences`
+  collapsed object values; curve points were not sorted by epoch.
+- **Process / environment:** per-task reviews were merged and some re-reviews
+  skipped to save tokens at the user's request. The host was power-cycled again
+  and `elitmed_db`/`elitmed_redis` again held ports 5432/6379 (stopped with the
+  user's approval; they restart at boot).
+- **Page tests are timing-sensitive under load:** delete-related `TrainPage` tests
+  failed in several runs while other test processes were running and passed in
+  isolation and on an idle machine (5/5 green); consider longer `waitFor` timeouts.
+
+**Open / next:**
+
+- On the 900 px viewport the chart is 223 px tall (its aspect ratio wins over the
+  280 px minimum).
+- The configuration-difference table lists every setting for runs recorded before
+  the settings schema (they only stored epochs/batch/imgsz); it is correct ("—"
+  means not recorded) but long.
+- Still open from earlier plans: preset numbers are guesses; sizes `l`/`x` never
+  run live; a validation-opened settings group closes when its last error is
+  fixed; `useRuns.refresh` identity; `testDeferred.ts` is a non-test filename.
