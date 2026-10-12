@@ -1,5 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../shared/api/client";
@@ -27,7 +26,7 @@ const run: TrainingRunRead = {
   config: { epochs: 80, batch: 8, mystery: "x" },
   status: "succeeded",
   stop_requested: false,
-  metrics: { "metrics/mAP50(B)": 0.65, label: "text" },
+  metrics: { "metrics/mAP50(B)": 0.65, "metrics/precision(B)": 0.8123, fitness: 0.5, label: "text" },
   current_epoch: 80,
   total_epochs: 80,
   error: null,
@@ -47,203 +46,74 @@ const metricsBody = {
 };
 
 function renderOverview(over: Partial<TrainingRunRead> = {}, props: Record<string, unknown> = {}) {
-  const handlers = { onRepeat: vi.fn(), onDeleteRun: vi.fn(), onChanged: vi.fn() };
-  render(
-    <RunOverview
-      run={{ ...run, ...over }}
-      schema={settingsSchemaFixture}
-      deleteError={null}
-      {...handlers}
-      {...props}
-    />,
+  return render(
+    <RunOverview run={{ ...run, ...over }} schema={settingsSchemaFixture} {...props} />,
   );
-  return handlers;
 }
 
 describe("RunOverview", () => {
   beforeEach(() => {
     vi.mocked(apiClient.GET).mockReset().mockResolvedValue({ data: metricsBody } as never);
-    vi.mocked(apiClient.PATCH).mockReset().mockResolvedValue({ data: {} } as never);
   });
 
-  it("groups settings by schema, emphasising non-default values with the default", () => {
+  it("shows result cards with 3 decimals and the full value in a title", () => {
     renderOverview();
-    expect(screen.getByText("Basic")).toBeInTheDocument();
-    const epochs = screen.getByText("80");
-    expect(epochs).toHaveClass("text-blue-300");
-    expect(screen.getByText("(default 50)")).toBeInTheDocument();
-    const batch = screen.getByText("8", { selector: "dd" });
-    expect(batch).not.toHaveClass("text-blue-300");
+    const results = screen.getByRole("region", { name: "Results" });
+    expect(within(results).getByText("mAP50")).toBeInTheDocument();
+    expect(within(results).getByText("0.650")).toBeInTheDocument();
+    expect(within(results).getByText("0.812")).toHaveAttribute("title", "0.8123");
+    expect(within(results).getByText("Fitness")).toBeInTheDocument();
+    expect(within(results).queryByText("Recall")).not.toBeInTheDocument();
+    expect(screen.queryByText("text")).not.toBeInTheDocument();
   });
 
-  it("lists unknown keys raw and works without a schema", () => {
+  it("falls back to every numeric metric under its own key", () => {
+    renderOverview({ metrics: { ap_50: 0.4 } });
+    expect(screen.getByText("ap_50")).toBeInTheDocument();
+    expect(screen.getByText("0.400")).toBeInTheDocument();
+  });
+
+  it("lists only changed settings, each with its default", () => {
     renderOverview();
-    expect(screen.getByText("Other settings")).toBeInTheDocument();
-    expect(screen.getByText("mystery")).toBeInTheDocument();
+    const changed = screen.getByRole("heading", { name: "Changed settings" }).closest("section")!;
+    expect(within(changed).getByText("80")).toHaveClass("text-blue-300");
+    expect(within(changed).getByText("(default 50)")).toBeInTheDocument();
+    expect(within(changed).queryByText("8")).not.toBeInTheDocument();
+  });
+
+  it("has no Changed settings section when everything is default", () => {
+    renderOverview({ config: { epochs: 50 } });
+    expect(screen.queryByText("Changed settings")).not.toBeInTheDocument();
+  });
+
+  it("keeps all settings in a collapsed details with a count", () => {
+    renderOverview();
+    const details = screen.getByText("All settings (3)").closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    expect(within(details).getByText("Basic")).toBeInTheDocument();
+    expect(within(details).getByText("8", { selector: "dd" })).not.toHaveClass("text-blue-300");
+    expect(within(details).getByText("Other settings")).toBeInTheDocument();
+    expect(within(details).getByText("mystery")).toBeInTheDocument();
   });
 
   it("with no schema shows one flat Settings list of raw keys", () => {
     renderOverview({}, { schema: null });
     expect(screen.getByText("Settings")).toBeInTheDocument();
     expect(screen.getByText("epochs")).toBeInTheDocument();
-    expect(screen.getByText("mystery")).toBeInTheDocument();
     expect(screen.queryByText("Basic")).not.toBeInTheDocument();
+    expect(screen.queryByText("Changed settings")).not.toBeInTheDocument();
   });
 
-  it("saves a changed name on blur, only the name, and not when unchanged", async () => {
-    const { onChanged } = renderOverview();
-    const input = screen.getByLabelText("Name");
-    await userEvent.click(input);
-    await userEvent.tab();
-    expect(apiClient.PATCH).not.toHaveBeenCalled();
-
-    await userEvent.clear(input);
-    await userEvent.type(input, "new");
-    await userEvent.tab();
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    expect(apiClient.PATCH).toHaveBeenCalledTimes(1);
-    expect(apiClient.PATCH).toHaveBeenCalledWith("/training/runs/{run_id}", {
-      params: { path: { run_id: 1 } },
-      body: { name: "new" },
-    });
-  });
-
-  it("saves a changed note alone", async () => {
-    renderOverview();
-    const note = screen.getByLabelText("Note");
-    await userEvent.type(note, " more");
-    await userEvent.tab();
-    await waitFor(() =>
-      expect(apiClient.PATCH).toHaveBeenCalledWith("/training/runs/{run_id}", {
-        params: { path: { run_id: 1 } },
-        body: { note: "a note more" },
-      }),
-    );
-  });
-
-  it("restores the name on Escape without saving", async () => {
-    renderOverview();
-    const input = screen.getByLabelText("Name") as HTMLInputElement;
-    await userEvent.type(input, "zzz");
-    await userEvent.keyboard("{Escape}");
-    expect(input.value).toBe("first");
-    await userEvent.tab();
-    expect(apiClient.PATCH).not.toHaveBeenCalled();
-  });
-
-  it("keeps the typed value and alerts when the save fails", async () => {
-    vi.mocked(apiClient.PATCH).mockResolvedValue({ error: { detail: "no" } } as never);
-    const { onChanged } = renderOverview();
-    const input = screen.getByLabelText("Name") as HTMLInputElement;
-    await userEvent.clear(input);
-    await userEvent.type(input, "bad");
-    await userEvent.tab();
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(input.value).toBe("bad");
-    expect(onChanged).not.toHaveBeenCalled();
-  });
-
-  it("alerts when the save throws", async () => {
-    vi.mocked(apiClient.PATCH).mockRejectedValue(new Error("net"));
-    renderOverview();
-    const input = screen.getByLabelText("Name") as HTMLInputElement;
-    await userEvent.type(input, "x");
-    await userEvent.tab();
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(input.value).toBe("firstx");
-  });
-
-  it("shows the error, and progress only for an active run", () => {
-    const { unmount } = render(
-      <RunOverview
-        run={{ ...run, status: "running", current_epoch: 3, total_epochs: 10, error: "boom" }}
-        schema={null}
-        deleteError={null}
-        onRepeat={vi.fn()}
-        onDeleteRun={vi.fn()}
-        onChanged={vi.fn()}
-      />,
-    );
+  it("shows the error and no progress block, even for an active run", () => {
+    renderOverview({ status: "running", current_epoch: 3, total_epochs: 10, error: "boom" });
     expect(screen.getByText("boom")).toBeInTheDocument();
-    expect(screen.getByRole("progressbar")).toBeInTheDocument();
-    expect(screen.getByText("Epoch 3 / 10")).toBeInTheDocument();
-    unmount();
-    renderOverview();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-  });
-
-  it("lists the numeric final metrics only", () => {
-    renderOverview();
-    expect(screen.getByText("metrics/mAP50(B)")).toBeInTheDocument();
-    expect(screen.getByText("0.65")).toBeInTheDocument();
-    expect(screen.queryByText("text")).not.toBeInTheDocument();
+    expect(screen.queryByText("Epoch 3 / 10")).not.toBeInTheDocument();
   });
 
   it("draws the training curve", async () => {
     renderOverview();
     await waitFor(() => expect(document.querySelectorAll("path[data-series]").length).toBeGreaterThan(0));
-  });
-
-  it("repeats with changes", async () => {
-    const { onRepeat } = renderOverview();
-    await userEvent.click(screen.getByRole("button", { name: "Repeat with changes" }));
-    expect(onRepeat).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
-  });
-
-  it("arms before deleting the run", async () => {
-    const { onDeleteRun } = renderOverview();
-    await userEvent.click(screen.getByRole("button", { name: "Delete run #1" }));
-    expect(onDeleteRun).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Confirm delete run #1" }));
-    expect(onDeleteRun).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
-  });
-
-  it("disables delete with the reason", () => {
-    renderOverview({ model_version_id: 3 });
-    const button = screen.getByRole("button", { name: "Delete run #1" });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Delete the model first");
-  });
-
-  it("disables delete for an active run", () => {
-    renderOverview({ status: "running" });
-    expect(screen.getByRole("button", { name: "Delete run #1" })).toHaveAttribute(
-      "title",
-      "Stop the run first",
-    );
-  });
-
-  it("shows the delete error", () => {
-    renderOverview({}, { deleteError: "nope" });
-    expect(screen.getByText("nope")).toHaveAttribute("role", "alert");
-  });
-
-  it("does not overwrite a focused field when the run updates", () => {
-    const { rerender } = render(
-      <RunOverview run={run} schema={null} deleteError={null} onRepeat={vi.fn()} onDeleteRun={vi.fn()} onChanged={vi.fn()} />,
-    );
-    const input = screen.getByLabelText("Name") as HTMLInputElement;
-    input.focus();
-    fireEvent.change(input, { target: { value: "typing" } });
-    rerender(
-      <RunOverview run={{ ...run, name: "server" }} schema={null} deleteError={null} onRepeat={vi.fn()} onDeleteRun={vi.fn()} onChanged={vi.fn()} />,
-    );
-    expect(input.value).toBe("typing");
-  });
-
-  it("keeps a saved name until the run catches up, then follows external changes", async () => {
-    const props = { schema: null, deleteError: null, onRepeat: vi.fn(), onDeleteRun: vi.fn(), onChanged: vi.fn() };
-    const { rerender } = render(<RunOverview run={run} {...props} />);
-    const input = screen.getByLabelText("Name") as HTMLInputElement;
-    await userEvent.clear(input);
-    await userEvent.type(input, "saved");
-    await userEvent.tab();
-    await waitFor(() => expect(props.onChanged).toHaveBeenCalled());
-    expect(input.value).toBe("saved");
-    rerender(<RunOverview run={{ ...run, name: "saved" }} {...props} />);
-    expect(input.value).toBe("saved");
-    rerender(<RunOverview run={{ ...run, name: "external" }} {...props} />);
-    expect(input.value).toBe("external");
   });
 
   it("hides setting groups with no value in an old-style config", () => {
@@ -259,11 +129,5 @@ describe("RunOverview", () => {
     renderOverview({ config });
     for (const group of settingsSchemaFixture.groups)
       expect(screen.getByText(group.label)).toBeInTheDocument();
-  });
-
-  it("rounds numeric final metrics to 4 decimals with the full value in the title", () => {
-    renderOverview({ metrics: { "metrics/mAP50(B)": 0.8974314322666428 } });
-    const cell = screen.getByText("0.8974");
-    expect(cell).toHaveAttribute("title", "0.8974314322666428");
   });
 });

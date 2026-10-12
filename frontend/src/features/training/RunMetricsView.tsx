@@ -22,8 +22,8 @@ function Section({
 }) {
   return (
     <section className="rounded border border-gray-800 bg-gray-900 p-4">
-      <h3 className="text-xs font-medium uppercase text-gray-500">{title}</h3>
-      <p className="mb-3 text-xs text-gray-600">{caption}</p>
+      <h3 className="text-[15px] font-semibold text-gray-200">{title}</h3>
+      <p className="mb-3 text-[13px] text-gray-400">{caption}</p>
       {children}
     </section>
   );
@@ -35,10 +35,10 @@ export function RunMetricsView({ run }: RunMetricsViewProps) {
   const { data, error, loading } = useRunMetrics(run.id, isActiveRun(run), run.current_epoch);
 
   if (error && !data) {
-    return <p className="text-sm text-gray-500">Failed to load the run's metrics.</p>;
+    return <p className="text-sm text-gray-400">Failed to load the run's metrics.</p>;
   }
   if (!data) {
-    return loading ? <p className="text-sm text-gray-500">Loading…</p> : null;
+    return loading ? <p className="text-sm text-gray-400">Loading…</p> : null;
   }
 
   const history = (data.history ?? []) as Array<Record<string, number>>;
@@ -63,7 +63,7 @@ export function RunMetricsView({ run }: RunMetricsViewProps) {
             confusion={data.confusion as unknown as { labels: string[]; matrix: number[][] }}
           />
         ) : (
-          <p className="text-sm text-gray-500">No confusion matrix for this run.</p>
+          <p className="text-sm text-gray-400">No confusion matrix for this run.</p>
         )}
       </Section>
 
@@ -71,7 +71,7 @@ export function RunMetricsView({ run }: RunMetricsViewProps) {
         {perClass.length > 0 ? (
           <PerClassTable rows={perClass} />
         ) : (
-          <p className="text-sm text-gray-500">No per-class metrics for this run.</p>
+          <p className="text-sm text-gray-400">No per-class metrics for this run.</p>
         )}
       </Section>
     </div>
