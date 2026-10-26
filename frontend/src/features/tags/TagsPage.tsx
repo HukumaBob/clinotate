@@ -28,9 +28,45 @@ export function TagsPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-gray-950 p-8 text-gray-100">
-      <div className="mb-4 flex shrink-0 items-center justify-between">
-        <h1 className="text-lg font-semibold">Tags</h1>
-        <div className="flex gap-2">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3 text-sm">
+        <label className="flex items-center gap-2">
+          <span>Classification</span>
+          <select
+            className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
+            value={evaluationTypeId ?? ""}
+            onChange={(e) => setEvaluationTypeId(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">All</option>
+            {evaluationTypes.map((evaluationType) => (
+              <option key={evaluationType.id} value={evaluationType.id}>
+                {evaluationType.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2">
+          <span>Procedure</span>
+          <select
+            className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
+            value={procedureId ?? ""}
+            onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">All</option>
+            {procedures.map((procedure) => (
+              <option key={procedure.id} value={procedure.id}>
+                {procedure.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <input
+          type="text"
+          placeholder="Search…"
+          className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="ml-auto flex gap-2">
           <button
             type="button"
             className="rounded border border-gray-700 px-3 py-1.5 text-sm text-gray-100 hover:bg-gray-800"
@@ -70,46 +106,6 @@ export function TagsPage() {
 
       {showProcedures && <ProceduresPanel />}
       {showClassifications && <ClassificationsPanel />}
-
-      <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3 text-sm">
-        <label className="flex items-center gap-2">
-          <span>Classification</span>
-          <select
-            className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
-            value={evaluationTypeId ?? ""}
-            onChange={(e) => setEvaluationTypeId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">All</option>
-            {evaluationTypes.map((evaluationType) => (
-              <option key={evaluationType.id} value={evaluationType.id}>
-                {evaluationType.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <span>Procedure</span>
-          <select
-            className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
-            value={procedureId ?? ""}
-            onChange={(e) => setProcedureId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">All</option>
-            {procedures.map((procedure) => (
-              <option key={procedure.id} value={procedure.id}>
-                {procedure.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <input
-          type="text"
-          placeholder="Search…"
-          className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
 
       {formState !== "closed" && (
         <div className="mb-4 shrink-0 rounded border border-gray-800 bg-gray-900 p-4">

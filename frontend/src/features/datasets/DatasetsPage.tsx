@@ -314,10 +314,6 @@ export function DatasetsPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-gray-950 p-8 text-gray-100">
-      <div className="mb-4 flex shrink-0 items-center justify-between">
-        <h1 className="text-lg font-semibold">Datasets</h1>
-      </div>
-
       <div className="grid flex-1 grid-cols-2 gap-6 overflow-hidden">
         <div className="flex flex-col gap-4 overflow-hidden">
           <div className="rounded border border-gray-800 bg-gray-900 p-4">

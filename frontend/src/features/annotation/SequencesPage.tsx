@@ -36,8 +36,6 @@ export function SequencesPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-gray-950 p-8 text-gray-100">
-      <h1 className="mb-4 shrink-0 text-lg font-semibold">Sequences</h1>
-
       <div className="mb-6 grid shrink-0 grid-cols-2 gap-4 md:grid-cols-4">
         <StatTile label="Total Sequences" value={stats?.total_sequences ?? 0} />
         <StatTile label="Total Frames" value={stats?.total_frames ?? 0} />

@@ -55,7 +55,6 @@ export function QcPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <h1 className="text-xl font-semibold text-gray-100">QC</h1>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-3">
           <RunForm
