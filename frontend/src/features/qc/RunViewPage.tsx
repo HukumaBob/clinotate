@@ -269,12 +269,12 @@ export function RunViewPage() {
       {run?.status === "succeeded" && video && video.browser_playable !== false && (
         <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
           <div className="flex min-w-0 flex-1 flex-col gap-3 lg:min-h-0 lg:overflow-y-auto">
-            <div className="relative bg-black">
+            <div className="relative bg-black lg:min-h-[16rem] lg:flex-1">
               <video
                 ref={videoRef}
                 src={video.stream_url}
                 controls
-                className="block max-h-[70vh] w-full lg:max-h-[calc(100dvh-24rem)]"
+                className="block max-h-[70vh] w-full lg:absolute lg:inset-0 lg:h-full lg:max-h-none"
               />
               {view && document && (
                 <PredictionOverlay videoRef={videoRef} index={view} classes={document.classes} />

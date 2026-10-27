@@ -26,7 +26,30 @@ beforeEach(() => {
 
 afterEach(() => {
   Object.defineProperty(document, "fullscreenEnabled", { value: undefined, configurable: true });
+  Object.defineProperty(window, "matchMedia", { value: undefined, configurable: true, writable: true });
 });
+
+/** A matchMedia whose `(display-mode: fullscreen)` result the test controls:
+ * the browser reports F11 this way, without touching the Fullscreen API. */
+function mockDisplayMode() {
+  let matches = false;
+  const listeners = new Set<() => void>();
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: () => ({
+      get matches() {
+        return matches;
+      },
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    }),
+  });
+  return (value: boolean) => {
+    matches = value;
+    listeners.forEach((fn) => fn());
+  };
+}
 
 describe("FullscreenButton", () => {
   it("enters fullscreen and then offers to exit", async () => {
@@ -59,5 +82,17 @@ describe("FullscreenButton", () => {
     Object.defineProperty(document, "fullscreenEnabled", { value: false, configurable: true });
     const { container } = render(<FullscreenButton />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("notices F11, which the Fullscreen API does not report, and cannot undo it itself", () => {
+    const setDisplayMode = mockDisplayMode();
+    render(<FullscreenButton />);
+    act(() => setDisplayMode(true));
+    const button = screen.getByRole("button", { name: "Exit full screen" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Press F11 to exit full screen");
+    expect(exitFullscreen).not.toHaveBeenCalled();
+    act(() => setDisplayMode(false));
+    expect(screen.getByRole("button", { name: "Enter full screen" })).toBeEnabled();
   });
 });
