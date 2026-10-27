@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import logo from "../assets/logo.svg";
 import { useAuth } from "../features/auth/useAuth";
+import { FullscreenButton } from "./FullscreenButton";
 
 const NAV_ITEMS = [
   { label: "Tags", path: "/tags" },
@@ -59,6 +60,7 @@ export function AppHeader() {
       </div>
       {user && (
         <div className="flex items-center gap-4">
+          <FullscreenButton />
           {user.role === "admin" && (
             <Link
               to="/settings"
