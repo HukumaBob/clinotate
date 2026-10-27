@@ -2,7 +2,7 @@
 
 Small, targeted refinements to the frame editor (`frontend/src/features/annotation/`)
 identified by comparing it against CVAT's annotation workspace
-(`/mnt/work-disk/Documents/Dev/svat/cvat`, `cvat-ui/src/components/annotation-page/`),
+(`svat/cvat` (a local CVAT checkout), `cvat-ui/src/components/annotation-page/`),
 a mature production annotation tool solving a similar core problem
 (point/box/mask prompts → model predict → accept/track). CVAT was read for UX
 patterns only, never for code to port — the stack and domain are unrelated.

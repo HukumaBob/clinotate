@@ -298,7 +298,7 @@ git commit -m "Add jobs domain: Job model, GET /jobs/{id} read endpoint"
 - [ ] **Step 1: Add celery dependency**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv add celery
 ```
 
@@ -626,7 +626,7 @@ This task has no new application logic (it's a settings/DB/storage scaffold, dir
 - [ ] **Step 1: Initialize the ml-worker uv project**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 mkdir -p ml-worker/app ml-worker/tests
 cd ml-worker
 uv init --name endoscopy-platform-ml-worker --python 3.12 --no-readme
@@ -949,7 +949,7 @@ Note on the base image tag: `nvidia/cuda:12.6.0-runtime-ubuntu22.04` matches the
 - [ ] **Step 2: Build and verify the image**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 docker compose build ml-worker
 ```
 
@@ -1078,7 +1078,7 @@ markers = ["requires_sam3_weights: needs real SAM-3 weights and GPU, see conftes
 
 Create the fixture: a real small PNG is needed. Generate it with:
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/ml-worker
+cd <repo-root>/ml-worker
 mkdir -p tests/fixtures
 uv run python -c "
 from PIL import Image
@@ -1165,7 +1165,7 @@ Expected: PASS (2 tests) — these don't touch the GPU or real weights.
 - [ ] **Step 6: Set up Hugging Face access and run the GPU tests**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/ml-worker
+cd <repo-root>/ml-worker
 export HF_TOKEN=<the token the human already has approved SAM-3 access with>
 uv run python -c "from huggingface_hub import login; login(token='$HF_TOKEN')"
 SAM3_WEIGHTS_AVAILABLE=1 uv run pytest tests/test_sam3_adapter.py -v
@@ -1972,7 +1972,7 @@ Expected: FAIL — the job stays `"pending"` forever and the 60-second wait for 
 - [ ] **Step 3: Start the ml-worker and full stack**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 docker compose up -d
 cd backend && uv run uvicorn app.main:app --reload &
 cd ../frontend && npm run dev &
@@ -1982,7 +1982,7 @@ docker compose up ml-worker &
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/frontend
+cd <repo-root>/frontend
 npm run test:e2e -- sam3-segment
 ```
 Expected: PASS — first run includes the SAM-3 checkpoint download/load time inside the worker; if the 60s timeout is exceeded purely due to a cold model load on a slow connection (not an actual failure), rerun once the worker has fully started (check its logs for "ready" via `docker compose logs ml-worker`) before concluding there's a real defect.
@@ -1998,7 +1998,7 @@ docker compose stop ml-worker
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 git add frontend/e2e/sam3-segment.spec.ts
 git commit -m "Add end-to-end test: real SAM-3 GPU segmentation through the full stack"
 ```

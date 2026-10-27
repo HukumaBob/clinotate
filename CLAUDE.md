@@ -23,7 +23,7 @@ Current status and phase history: [ROADMAP.md](ROADMAP.md).
   improvise in isolation.
 - Phase 1 plan (walking skeleton, done): [docs/plans/2026-07-22-walking-skeleton.md](docs/plans/2026-07-22-walking-skeleton.md)
 
-The sibling `/mnt/work-disk/Documents/Dev/segmentation` project is a
+The sibling `segmentation` project is a
 separate, older Django system — read it only for domain knowledge (what
 entities/workflows it needed), never port its code directly. This repo is
 an independent git repository, unrelated to it. The spec/plan above were

@@ -200,7 +200,7 @@ navigation and all six top-level screens were designed in one brainstorming
 session and written up in
 [docs/specs/2026-07-23-platform-ui-ux-design.md](docs/specs/2026-07-23-platform-ui-ux-design.md).
 
-The sibling `/mnt/work-disk/Documents/Dev/segmentation` Django project (see
+The sibling `segmentation` Django project (see
 CLAUDE.md) was used as the domain-knowledge reference for *what workflows a
 working platform needs* (its templates were read directly, not from memory)
 — but several of its concrete layouts were reworked, not copied, based on
@@ -319,7 +319,7 @@ discrepancies found between the adapter code and the real package.
 check — the same test that caught SAM-3's mask instability in Phase 2a (see
 that phase's own deviation log and `.superpowers/sdd/task-6-report.md`) —
 was run against `Sam2Adapter.predict()`: 25 point prompts on
-`/home/hukuma/Pictures/references/High_Grade_Displasia_Stomach01.jpg`, a 5x5
+`High_Grade_Displasia_Stomach01.jpg` (a local reference image, not in the repo), a 5x5
 grid spanning ±2px in each axis around a fixed base point. Result: **all 25
 predictions produced byte-identical masks** (mask area 24108px, score
 0.7346 in every case; coefficient of variation across mask area = 0.0000).

@@ -381,7 +381,7 @@ def test_run_sam2_predict_records_vram_usage():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/work-disk/Documents/Dev/endoscopy-platform && docker cp ml-worker/tests <ml-worker-container-name>:/app/tests && docker compose exec ml-worker uv run pytest tests/test_tasks_sam2.py -v -k vram`
+Run: `cd <repo-root> && docker cp ml-worker/tests <ml-worker-container-name>:/app/tests && docker compose exec ml-worker uv run pytest tests/test_tasks_sam2.py -v -k vram`
 
 (Per this project's documented ml-worker test workflow — the container's Dockerfile doesn't `COPY tests/`, and the host `.venv` lacks torch/numpy, so tests must be copied in and run via `docker compose exec`. Find the exact container name with `docker compose ps` if `ml-worker` alone doesn't resolve.)
 

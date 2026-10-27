@@ -124,7 +124,7 @@ def test_result_carries_optional_metric_collections(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 docker cp ml-worker/tests endoscopy-platform-ml-worker-1:/app/tests
 docker compose exec -T ml-worker /app/.venv/bin/python -m pytest tests/test_training_adapter.py -v
 ```
@@ -534,7 +534,7 @@ def test_model_version_carries_per_class_confusion_and_artifacts():
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run pytest tests/test_training_models.py -v
 ```
 
@@ -569,7 +569,7 @@ Mirror all four columns into the matching classes in `ml-worker/app/models.py`, 
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run pytest tests/test_training_models.py -v
 ```
 
@@ -578,7 +578,7 @@ Expected: PASS.
 - [ ] **Step 5: Generate and review the migration**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run alembic revision --autogenerate -m "add training metrics columns"
 ```
 
@@ -616,7 +616,7 @@ def downgrade() -> None:
 - [ ] **Step 6: Apply the migration and verify the columns exist**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run alembic upgrade head
 docker compose exec -T postgres psql -U endoscopy -c "\d model_versions" | grep -E "per_class_metrics|confusion_matrix|artifact_keys"
 docker compose exec -T postgres psql -U endoscopy -c "\d training_runs" | grep metrics_history
@@ -627,7 +627,7 @@ Expected: all four columns listed.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 git add backend/app/training/models.py ml-worker/app/models.py backend/alembic/versions/ backend/tests/test_training_models.py
 git commit -m "feat: add training metrics columns"
 ```
@@ -720,7 +720,7 @@ If `make_job_and_run` does not already exist as a fixture in this file, build th
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 docker cp ml-worker/tests endoscopy-platform-ml-worker-1:/app/tests
 docker compose exec -T ml-worker /app/.venv/bin/python -m pytest tests/test_tasks_training.py -v
 ```
@@ -893,7 +893,7 @@ Write `_make_version` to insert a `ModelVersion` (with a parent `TrainingRun`) f
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run pytest tests/test_training_api.py -k artifact -v
 ```
 
@@ -928,7 +928,7 @@ In `backend/app/datasets/router.py`'s `delete_dataset`, ensure every `ModelVersi
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run pytest tests/test_training_api.py -v
 ```
 
@@ -937,7 +937,7 @@ Expected: PASS, including the pre-existing deletion tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 git add backend/app/training/service.py backend/app/datasets/router.py backend/tests/test_training_api.py
 git commit -m "fix: delete a model version's artifacts along with its weights"
 ```
@@ -1029,7 +1029,7 @@ Extend `_make_version` from Task 5 to accept `per_class_metrics`, `confusion_mat
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run pytest tests/test_training_api.py -k "metrics_endpoint or artifact_download or out_of_range" -v
 ```
 
@@ -1131,7 +1131,7 @@ Add `ModelMetricsRead` to the router's schema imports.
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run pytest tests/test_training_api.py -v
 ```
 
@@ -1140,9 +1140,9 @@ Expected: PASS.
 - [ ] **Step 5: Regenerate the API contract**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 PYTHONPATH=. uv run python scripts/export_openapi.py
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 git diff --stat openapi.json
 ```
 
@@ -1223,7 +1223,7 @@ describe("MetricsChart", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/frontend
+cd <repo-root>/frontend
 npm test -- MetricsChart
 ```
 
@@ -1245,7 +1245,7 @@ Create `frontend/src/features/training/MetricsChart.tsx`. Requirements the imple
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/frontend
+cd <repo-root>/frontend
 npm test -- MetricsChart
 ```
 
@@ -1254,7 +1254,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 git add frontend/src/features/training/MetricsChart.tsx frontend/src/features/training/MetricsChart.test.tsx
 git commit -m "feat: add the training-curve chart"
 ```
@@ -1325,7 +1325,7 @@ describe("ConfusionMatrix", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/frontend
+cd <repo-root>/frontend
 npm test -- ConfusionMatrix
 ```
 
@@ -1345,7 +1345,7 @@ Create `frontend/src/features/training/ConfusionMatrix.tsx`. Requirements:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/frontend
+cd <repo-root>/frontend
 npm test -- ConfusionMatrix
 ```
 
@@ -1354,7 +1354,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 git add frontend/src/features/training/ConfusionMatrix.tsx frontend/src/features/training/ConfusionMatrix.test.tsx
 git commit -m "feat: add the confusion matrix component"
 ```
@@ -1478,7 +1478,7 @@ Reuse whatever fixture the existing tests in that file already build, rather tha
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/frontend
+cd <repo-root>/frontend
 npm test -- ModelInfoPanel ModelVersionsTable
 ```
 
@@ -1503,7 +1503,7 @@ In `TrainPage.tsx`, hold `selectedVersionId` state, pass `onInfo={setSelectedVer
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/frontend
+cd <repo-root>/frontend
 npm test -- ModelInfoPanel ModelVersionsTable TrainPage
 ```
 
@@ -1512,7 +1512,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 git add frontend/src/features/training/
 git commit -m "feat: add the model Info panel to the train screen"
 ```
@@ -1535,15 +1535,15 @@ This project has repeatedly shipped defects that passed every test — a 64 MB `
 - [ ] **Step 1: Run every affected suite**
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/backend
+cd <repo-root>/backend
 uv run pytest tests/test_training_api.py tests/test_training_models.py tests/test_training_service.py -v
 
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 docker cp ml-worker/tests endoscopy-platform-ml-worker-1:/app/tests
 docker cp ml-worker/app endoscopy-platform-ml-worker-1:/app/app
 docker compose exec -T ml-worker /app/.venv/bin/python -m pytest tests/test_training_adapter.py tests/test_ultralytics_yolo_adapter.py tests/test_tasks_training.py -v
 
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform/frontend
+cd <repo-root>/frontend
 npm test
 ```
 
@@ -1554,7 +1554,7 @@ Expected: PASS, excluding the documented pre-existing failures.
 The container has been running `docker cp`-ed code. The image itself must contain the new adapter, or the next real run trains with the old one — a mistake this project has made before.
 
 ```bash
-cd /mnt/work-disk/Documents/Dev/endoscopy-platform
+cd <repo-root>
 docker compose build ml-worker
 docker compose up -d ml-worker
 docker compose exec -T ml-worker /app/.venv/bin/python -c \

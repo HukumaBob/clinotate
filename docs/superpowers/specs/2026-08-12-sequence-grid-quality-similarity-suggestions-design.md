@@ -13,7 +13,7 @@ when the base toolbar shipped. This spec is that iteration.
 With long endoscopy sequences (hundreds of frames extracted from video),
 manually scanning for blurry/out-of-focus frames or near-duplicate frames
 to prune before annotation is slow. The reference Django project
-(`/mnt/work-disk/Documents/Dev/segmentation`) already solved this with a
+(`segmentation`) already solved this with a
 working `rank_frames`/`find_similar_frames` implementation
 (`segmentation/views.py`), which this design adapts to this codebase's
 architecture (FastAPI + Celery `ml-worker` + React), while upgrading both

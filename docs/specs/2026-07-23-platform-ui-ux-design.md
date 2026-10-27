@@ -9,7 +9,7 @@ on an annotation-workspace layout that had never been designed — so this
 spec covers the whole platform's navigation and every top-level screen, not
 just the one that triggered it.
 
-The sibling `/mnt/work-disk/Documents/Dev/segmentation` Django project (see
+The sibling `segmentation` Django project (see
 CLAUDE.md) was read as a domain-knowledge reference during this design —
 what workflows/screens a working platform for this domain has needed in
 practice — but its concrete layouts were deliberately not copied wholesale;

@@ -839,7 +839,7 @@ Run:
 ```bash
 cd backend && uv run python scripts/export_openapi.py
 ```
-Expected output: `Wrote OpenAPI schema to /mnt/work-disk/Documents/Dev/endoscopy-platform/openapi.json`
+Expected output: `Wrote OpenAPI schema to <repo-root>/openapi.json`
 
 - [ ] **Step 2: Verify the new paths are present**
 

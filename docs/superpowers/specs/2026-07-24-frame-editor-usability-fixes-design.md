@@ -66,7 +66,7 @@ Read directly from the current code
 ## Reference check: how the predecessor platform solved the transferable
 ## parts of this
 
-Read directly from `/mnt/work-disk/Documents/Dev/segmentation` (Django,
+Read directly from `segmentation` (Django,
 domain-knowledge source only, never a code source):
 
 - `segmentation/models.py`'s `Mask`/`Points`: every mask is its own row

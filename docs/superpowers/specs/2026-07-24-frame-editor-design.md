@@ -25,7 +25,7 @@ domains, not a redesign.
 
 ### 1. Video-less sequences
 
-The sibling Django project (`/mnt/work-disk/Documents/Dev/segmentation`)
+The sibling Django project (`segmentation`)
 modeled `Sequences.video` as `null=True, blank=True`, with `Procedure` as
 the grouping root for sequences built from standalone frame sets (e.g. a
 downloaded set of polyp images with no source video) — a real, previously

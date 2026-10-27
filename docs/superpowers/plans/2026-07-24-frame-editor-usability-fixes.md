@@ -719,7 +719,7 @@ PYTHONPATH=. uv run python scripts/export_openapi.py
 ```
 
 Expected output: `Wrote OpenAPI schema to
-/mnt/work-disk/Documents/Dev/endoscopy-platform/openapi.json`
+<repo-root>/openapi.json`
 
 - [ ] **Step 2: Verify the new surface is present**
 
