@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { SequenceGridPage } from "../features/annotation/SequenceGridPage";
 import { SequencesPage } from "../features/annotation/SequencesPage";
+import { AboutPage } from "../features/about/AboutPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
 import { DatasetsPage } from "../features/datasets/DatasetsPage";
@@ -41,6 +42,7 @@ export function App() {
           <Route path="/qc" element={<QcPage />} />
           <Route path="/qc/compare/:runA/:runB" element={<AbComparePage />} />
           <Route path="/qc/:runId" element={<RunViewPage />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />

@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+import logo from "../assets/logo.svg";
 import { useAuth } from "../features/auth/useAuth";
 
 const NAV_ITEMS = [
@@ -25,7 +26,9 @@ export function AppHeader() {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-800 bg-gray-950 px-6 text-gray-100">
       <div className="flex items-center gap-8">
-        <span className="font-semibold">Endoscopy Annotation Platform</span>
+        <Link to="/about" aria-label="About" className="flex items-center">
+          <img src={logo} alt="AIIRIS DX" className="h-5 w-auto" />
+        </Link>
         <nav className="flex items-center gap-6">
           {NAV_ITEMS.map((item) =>
             item.path ? (

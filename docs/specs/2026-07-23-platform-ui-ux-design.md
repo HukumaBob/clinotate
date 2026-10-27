@@ -318,6 +318,19 @@ result).
 
 Approved at the same rough/draft level as Dataset and Train.
 
+## About
+
+Not a top-nav section: the AIIRIS DX logo in the header (left of the six
+sections) is a link to `/about`. The page is a full-width reference for the
+platform: a hero with a search box, a sticky "On this page" table of contents
+on the left, and one card per section on the right — Overview, Workflow (a
+clickable six-step diagram), one section per screen (Tags … QC), Architecture
+(a services diagram and a stack table), Glossary and License. Content lives
+as data in `features/about/aboutContent.ts`; search (`/` or Ctrl+K focuses it)
+filters sections and the table of contents to those containing every query
+word at a word start, and highlights the matches. About searches only its own
+text, not the rest of the platform.
+
 ## What this spec does not cover
 
 - Exact pixel values, spacing, and typography — the mockups used placeholder

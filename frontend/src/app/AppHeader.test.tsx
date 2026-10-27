@@ -43,3 +43,14 @@ describe("AppHeader navigation", () => {
     expect(screen.queryByText("Results")).not.toBeInTheDocument();
   });
 });
+
+describe("AppHeader branding", () => {
+  it("shows the logo as a link to the About page, with no About nav item", () => {
+    mockAuth("annotator");
+    render(<AppHeader />, { wrapper: MemoryRouter });
+    const logo = screen.getByRole("img", { name: "AIIRIS DX" });
+    expect(logo.closest("a")).toHaveAttribute("href", "/about");
+    expect(screen.queryByText("Endoscopy Annotation Platform")).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId("app-header-nav-item").map((el) => el.textContent)).not.toContain("About");
+  });
+});

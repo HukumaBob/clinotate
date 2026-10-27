@@ -27,7 +27,7 @@ describe("AppLayout", () => {
 
     render(<RouterProvider router={router} />);
 
-    expect(screen.getByText("Endoscopy Annotation Platform")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "AIIRIS DX" })).toBeInTheDocument();
     expect(screen.getByText("Videos page content")).toBeInTheDocument();
   });
 });
