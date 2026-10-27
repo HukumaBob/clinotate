@@ -29,6 +29,7 @@ function setup(flags: QcFlag[], overrides = {}) {
     onRemove: vi.fn(),
     onNoteChange: vi.fn(),
     onSend: vi.fn(),
+    activeFlagId: null as number | null,
     lastSequence: null as { id: number; name: string } | null,
     ...overrides,
   };
@@ -164,5 +165,17 @@ describe("FlagsPanel", () => {
     await user.click(field);
     await user.tab();
     expect(onNoteChange).not.toHaveBeenCalled();
+  });
+
+  it("makes the time look clickable", () => {
+    setup([flag({ id: 1, timestamp_ms: 202000 })]);
+    expect(screen.getByRole("button", { name: "3:22" })).toHaveAttribute("title", "Jump to this frame");
+  });
+
+  it("marks the flag the playhead is on", () => {
+    setup([flag({ id: 1 }), flag({ id: 2, frame_index: 10, timestamp_ms: 400000 })], { activeFlagId: 2 });
+    const [first, second] = screen.getAllByRole("listitem");
+    expect(second).toHaveAttribute("aria-current", "true");
+    expect(first).not.toHaveAttribute("aria-current");
   });
 });

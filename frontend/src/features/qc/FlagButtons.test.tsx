@@ -37,4 +37,12 @@ describe("FlagButtons", () => {
     expect(screen.getByText("Snapped to processed frame 3:22")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("This frame was already sent to training");
   });
+
+  it("is a labelled group whose buttons are named after the flag kind", () => {
+    setup();
+    const group = screen.getByRole("group", { name: "Flag this frame" });
+    expect(group).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /false positive/i })).toHaveClass("text-red-200");
+    expect(screen.getByRole("button", { name: /missed object/i })).toHaveClass("text-blue-200");
+  });
 });

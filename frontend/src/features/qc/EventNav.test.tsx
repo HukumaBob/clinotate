@@ -29,4 +29,15 @@ describe("EventNav", () => {
     expect(screen.getByRole("button", { name: "Previous event" })).toHaveAttribute("title", "Previous event ([)");
     expect(screen.getByRole("button", { name: "Next event" })).toHaveAttribute("title", "Next event (])");
   });
+
+  it("is a labelled group and shows how many events there are", () => {
+    render(<EventNav count={430} onPrev={vi.fn()} onNext={vi.fn()} />);
+    expect(screen.getByRole("group", { name: "Events" })).toBeInTheDocument();
+    expect(screen.getByText("430 events")).toBeInTheDocument();
+  });
+
+  it("says 'event' for exactly one", () => {
+    render(<EventNav count={1} onPrev={vi.fn()} onNext={vi.fn()} />);
+    expect(screen.getByText("1 event")).toBeInTheDocument();
+  });
 });

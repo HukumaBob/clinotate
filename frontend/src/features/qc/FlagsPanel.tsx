@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import type { QcFlag } from "../../entities/useQcFlags";
@@ -11,6 +12,7 @@ interface FlagsPanelProps {
   onRemove: (flagId: number) => void;
   onNoteChange: (flag: QcFlag, note: string) => void;
   onSend: () => void;
+  activeFlagId: number | null;
   lastSequence: { id: number; name: string } | null;
 }
 
@@ -22,6 +24,7 @@ export function FlagsPanel({
   onRemove,
   onNoteChange,
   onSend,
+  activeFlagId,
   lastSequence,
 }: FlagsPanelProps) {
   const pending = flags.filter((f) => f.committed_at === null);
@@ -29,6 +32,15 @@ export function FlagsPanel({
   const sequenceIds = [
     ...new Set(flags.map((f) => f.sequence_id).filter((id): id is number => id !== null)),
   ];
+
+  const listRef = useRef<HTMLUListElement>(null);
+  // A flag just made (or jumped to) may sit below the fold of the list.
+  useEffect(() => {
+    if (activeFlagId === null) return;
+    listRef.current
+      ?.querySelector('[aria-current="true"]')
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [activeFlagId]);
 
   return (
     <section aria-label="Flags" className="flex flex-col gap-2 text-sm text-gray-300">
@@ -50,18 +62,26 @@ export function FlagsPanel({
           <p className="text-xs text-gray-400">{`${pending.length} pending · ${sent} sent`}</p>
 
           {pending.length > 0 && (
-            <ul className="flex flex-col gap-2">
+            <ul ref={listRef} className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
               {pending.map((flag) => {
                 const time = formatClock(flag.timestamp_ms);
                 return (
-                  <li key={flag.id} className="flex flex-col gap-1 rounded border border-gray-800 p-2">
+                  <li
+                    key={flag.id}
+                    aria-current={flag.id === activeFlagId ? "true" : undefined}
+                    className={`flex flex-col gap-1 rounded border p-2 ${
+                      flag.id === activeFlagId ? "border-blue-500 bg-gray-800" : "border-gray-800"
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => onSeek(flag.timestamp_ms)}
-                          className="text-blue-400 hover:underline"
+                          title="Jump to this frame"
+                          className="inline-flex items-center gap-1 rounded border border-blue-800 bg-blue-950 px-1.5 py-0.5 text-blue-300 hover:border-blue-500 hover:text-blue-100"
                         >
+                          <span aria-hidden="true" className="text-[10px]">▶</span>
                           {time}
                         </button>
                         <span

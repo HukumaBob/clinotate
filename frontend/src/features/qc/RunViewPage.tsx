@@ -13,6 +13,7 @@ import {
 } from "../../entities/useQcFlags";
 import { useVideo } from "../../entities/useVideo";
 import { TranscodePrompt } from "../media/TranscodePrompt";
+import { useActiveFlagId } from "./activeFlag";
 import { nextEvent, prevEvent } from "./analysis/events";
 import { findFlickers, type FlickerEvent } from "./analysis/flicker";
 import { useViewParams } from "./analysis/useViewParams";
@@ -100,6 +101,16 @@ export function RunViewPage() {
     const el = videoRef.current;
     if (el) el.currentTime = ms / 1000;
   }, []);
+
+  // Jumping to a flag parks on its frame, so what was flagged can be inspected.
+  const seekToFlag = useCallback(
+    (ms: number) => {
+      videoRef.current?.pause();
+      seekTo(ms);
+    },
+    [seekTo],
+  );
+  const activeFlagId = useActiveFlagId(videoRef, flags);
 
   const events = flicker?.events ?? NO_EVENTS;
   const jump = useCallback(
@@ -229,7 +240,7 @@ export function RunViewPage() {
     );
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4 p-6 lg:h-full lg:min-h-0">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-gray-100">
           {video?.title ?? "Run"} · {run?.model_name}
@@ -256,14 +267,14 @@ export function RunViewPage() {
       )}
 
       {run?.status === "succeeded" && video && video.browser_playable !== false && (
-        <div className="flex flex-col gap-4 lg:flex-row">
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
+          <div className="flex min-w-0 flex-1 flex-col gap-3 lg:min-h-0 lg:overflow-y-auto">
             <div className="relative bg-black">
               <video
                 ref={videoRef}
                 src={video.stream_url}
                 controls
-                className="block max-h-[70vh] w-full"
+                className="block max-h-[70vh] w-full lg:max-h-[calc(100dvh-24rem)]"
               />
               {view && document && (
                 <PredictionOverlay videoRef={videoRef} index={view} classes={document.classes} />
@@ -291,20 +302,22 @@ export function RunViewPage() {
                   durationMs={durationMs}
                   onSeek={seekTo}
                 />
-                <EventNav count={events.length} onPrev={() => jump("prev")} onNext={() => jump("next")} />
-                <FlagButtons
-                  disabled={processedFrames.length === 0}
-                  onFlag={flagFrame}
-                  snapNote={snapNote}
-                  error={flagError}
-                />
+                <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+                  <EventNav count={events.length} onPrev={() => jump("prev")} onNext={() => jump("next")} />
+                  <FlagButtons
+                    disabled={processedFrames.length === 0}
+                    onFlag={flagFrame}
+                    snapNote={snapNote}
+                    error={flagError}
+                  />
+                </div>
               </>
             ) : (
               <div aria-hidden="true" className="h-5 rounded bg-gray-800/50" />
             )}
           </div>
 
-          <aside className="flex w-full shrink-0 flex-col gap-5 rounded border border-gray-800 bg-gray-900 p-4 lg:w-72">
+          <aside className="flex w-full shrink-0 flex-col gap-5 rounded border border-gray-800 bg-gray-900 p-4 lg:min-h-0 lg:w-72 lg:overflow-y-auto">
             {document && view ? (
               <DisplayPanel
                 params={viewParams}
@@ -325,7 +338,8 @@ export function RunViewPage() {
                 flags={flags}
                 loadFailed={flagsQuery.isError}
                 onRetry={() => void flagsQuery.refetch()}
-                onSeek={seekTo}
+                onSeek={seekToFlag}
+                activeFlagId={activeFlagId}
                 onRemove={(id) =>
                   deleteFlagMutate(id, {
                     onError: (error) => setFlagError(errorMessage(error, "Could not remove the flag")),
