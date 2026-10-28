@@ -64,7 +64,7 @@ This is checked first because everything else depends on it; a failure changes t
 - Modify: `ml-worker/pyproject.toml`, `ml-worker/uv.lock`, `ml-worker/Dockerfile` (only if the install order needs it)
 
 **Interfaces:**
-- Produces: confirmed Hub model ids for ViT-S/16, ViT-B/16, ViT-L/16 and the `transformers` class used to load them (`AutoModel`), recorded in a comment block at the top of `ml-worker/app/dinov3_model.py` in Task 6.
+- Produces: confirmed Hub model ids for ViT-S/16, ViT-B/16, ViT-L/16 and the `transformers` class used to load them (`AutoModel`), written to this task's report file (the controller passes them to Tasks 7 and 9, which copy them into `ml-worker/app/dinov3_model.py`'s header comment and the backend catalog).
 
 - [ ] **Step 1: Add `transformers` to `ml-worker/pyproject.toml` dependencies; `uv lock`; confirm `git diff ml-worker/uv.lock` does not change the `torch`/`torchvision` entries.**
 - [ ] **Step 2: Rebuild the image and in the container run `python -c "import transformers, torch; print(transformers.__version__, torch.__version__)"`.** Expected: torch `2.7.1+cu126`, a `transformers` version that contains DINOv3 (`from transformers import DINOv3ViTModel` imports).
