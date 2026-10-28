@@ -104,6 +104,17 @@ committed in a worktree branch the whole time).
   than leaving it stranded — see the recovery approach logged in
   ROADMAP.md around the EvaluationType annotation-scope work.
 
+## Releases
+
+One SemVer version for the whole repo (`0.x.y` until 1.0), tagged `vX.Y.Z`.
+To release: add an entry to `CHANGELOG.md`, set the same version in
+`backend/pyproject.toml`, `ml-worker/pyproject.toml` (and the matching
+`version =` line of each `uv.lock`), `frontend/package.json` (+ `package-lock.json`)
+and `FastAPI(version=...)` in `backend/app/main.py`, re-export `openapi.json`,
+commit, then `git tag vX.Y.Z`, push with `--tags`, and
+`gh release create vX.Y.Z --generate-notes`. Releasing and pushing are the
+user's call; ask first.
+
 ## Running the stack
 
 ```bash

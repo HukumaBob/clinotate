@@ -12,7 +12,7 @@ from app.taxonomy.router import router as taxonomy_router
 from app.training.router import router as training_router
 
 
-app = FastAPI(title="Endoscopy Annotation Platform API")
+app = FastAPI(title="Endoscopy Annotation Platform API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
