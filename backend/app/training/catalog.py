@@ -13,7 +13,16 @@ from dataclasses import dataclass
 
 from app.datasets.models import TaskType
 
-ADAPTER_NAME = "ultralytics_yolo"
+YOLO_ADAPTER = "ultralytics_yolo"
+ADAPTER_NAME = YOLO_ADAPTER  # alias kept for existing imports
+DINOV3_ADAPTER = "dinov3_classifier"
+
+# Which dataset task types each adapter can train on, in display order.
+ADAPTER_TASKS: dict[str, tuple[TaskType, ...]] = {
+    YOLO_ADAPTER: (TaskType.DETECTION, TaskType.SEGMENTATION, TaskType.CLASSIFICATION),
+    DINOV3_ADAPTER: (TaskType.DETECTION, TaskType.SEGMENTATION),
+}
+ADAPTER_LABELS = {YOLO_ADAPTER: "YOLO11", DINOV3_ADAPTER: "DINOv3 crop classifier"}
 
 # The host GPU is 8 GB and has hard-rebooted under VRAM pressure. The note
 # warns; it never blocks -- the person decides.
@@ -49,7 +58,14 @@ def _yolo11(task_type: TaskType) -> list[PretrainedModel]:
     ]
 
 
-_TABLES = {ADAPTER_NAME: _yolo11}
+_TABLES = {YOLO_ADAPTER: _yolo11}
+
+
+def adapters_for(task_type: TaskType) -> list[dict]:
+    return [
+        {"id": adapter, "label": ADAPTER_LABELS[adapter], "supported": task_type in tasks}
+        for adapter, tasks in ADAPTER_TASKS.items()
+    ]
 
 
 def pretrained_models(adapter: str, task_type: TaskType) -> list[PretrainedModel]:

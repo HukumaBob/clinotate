@@ -71,3 +71,22 @@ def test_resolve_normalises_the_legacy_unsuffixed_name():
 )
 def test_resolve_rejects_anything_not_in_the_catalog(task_type, name):
     assert catalog.resolve_pretrained(catalog.ADAPTER_NAME, task_type, name) is None
+
+
+def test_adapters_for_detection_lists_both():
+    options = catalog.adapters_for(TaskType.DETECTION)
+
+    assert options == [
+        {"id": "ultralytics_yolo", "label": "YOLO11", "supported": True},
+        {"id": "dinov3_classifier", "label": "DINOv3 crop classifier", "supported": True},
+    ]
+
+
+def test_adapters_for_classification_marks_dinov3_unsupported():
+    options = {o["id"]: o["supported"] for o in catalog.adapters_for(TaskType.CLASSIFICATION)}
+
+    assert options == {"ultralytics_yolo": True, "dinov3_classifier": False}
+
+
+def test_adapter_name_alias_is_the_yolo_adapter():
+    assert catalog.ADAPTER_NAME == catalog.YOLO_ADAPTER == "ultralytics_yolo"

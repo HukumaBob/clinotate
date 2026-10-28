@@ -8,9 +8,10 @@ import pytest
 from app.auth.models import User, UserRole
 from app.datasets.models import Dataset, TaskType
 from app.jobs.models import Job, JobStatus, JobType
-from app.training.models import TrainingRun, TrainingRunStatus
+from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 from app.training.service import (
     DatasetNotExported,
+    InvalidBaseModel,
     RunAlreadyActive,
     RunNotStoppable,
     create_training_run,
@@ -492,4 +493,92 @@ def test_force_stop_unblocks_create_training_run(monkeypatch):
         _cleanup(session, dataset.id)
         if dataset_b is not None:
             _cleanup(session, dataset_b.id, user_id)
+        session.close()
+
+
+def test_create_run_defaults_to_yolo_adapter(monkeypatch):
+    session = _session()
+    try:
+        monkeypatch.setattr("app.training.service.celery_app.send_task", lambda *a, **kw: None)
+        user_id = _make_user(session).id
+        dataset = _make_dataset(session, user_id)
+        _succeeded_export(session, dataset.id, user_id)
+
+        run = create_training_run(
+            session,
+            dataset_id=dataset.id,
+            base_model="yolo11n.pt",
+            settings={"epochs": 1, "batch": 2},
+            created_by=_User(user_id),
+        )
+
+        assert run.adapter == "ultralytics_yolo"
+    finally:
+        _cleanup(session, dataset.id, user_id)
+        session.close()
+
+
+def test_create_run_rejects_dinov3_on_classification_dataset():
+    session = _session()
+    try:
+        user_id = _make_user(session).id
+        dataset = _make_dataset(session, user_id)
+        dataset.task_type = TaskType.CLASSIFICATION
+        session.commit()
+        _succeeded_export(session, dataset.id, user_id)
+
+        with pytest.raises(InvalidBaseModel, match="does not support classification"):
+            create_training_run(
+                session,
+                dataset_id=dataset.id,
+                base_model="anything",
+                adapter="dinov3_classifier",
+                created_by=_User(user_id),
+            )
+    finally:
+        _cleanup(session, dataset.id, user_id)
+        session.close()
+
+
+def test_fine_tune_parent_must_share_adapter():
+    session = _session()
+    try:
+        user_id = _make_user(session).id
+        dataset = _make_dataset(session, user_id)
+        _succeeded_export(session, dataset.id, user_id)
+        parent_run = TrainingRun(
+            dataset_id=dataset.id,
+            adapter="ultralytics_yolo",
+            base_model="yolo11n.pt",
+            task_type=TaskType.DETECTION,
+            config={},
+            status=TrainingRunStatus.SUCCEEDED,
+            total_epochs=1,
+            created_by_id=user_id,
+        )
+        session.add(parent_run)
+        session.commit()
+        parent = ModelVersion(
+            training_run_id=parent_run.id,
+            name="yolo-parent",
+            task_type=TaskType.DETECTION,
+            storage_key=f"models/{parent_run.id}/best.pt",
+            metrics={},
+        )
+        session.add(parent)
+        session.commit()
+
+        with pytest.raises(InvalidBaseModel, match="was not trained by dinov3_classifier"):
+            create_training_run(
+                session,
+                dataset_id=dataset.id,
+                base_model_version_id=parent.id,
+                adapter="dinov3_classifier",
+                created_by=_User(user_id),
+            )
+    finally:
+        session.rollback()
+        session.query(ModelVersion).filter(ModelVersion.name == "yolo-parent").delete()
+        session.commit()
+        _cleanup(session, dataset.id, user_id)
         session.close()

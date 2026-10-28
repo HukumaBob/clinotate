@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.datasets.models import TaskType
+from app.training import catalog
 from app.training.models import TrainingRunStatus
 
 
@@ -20,6 +21,7 @@ class TrainingRunCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dataset_id: int
+    adapter: str = catalog.YOLO_ADAPTER
     # Exactly one of base_model / base_model_version_id: a pretrained
     # weights name, or an earlier ModelVersion to fine-tune from.
     base_model: str | None = Field(default=None, min_length=1, max_length=200)
@@ -35,6 +37,13 @@ class TrainingRunCreate(BaseModel):
         if (self.base_model is None) == (self.base_model_version_id is None):
             raise ValueError("Provide exactly one of base_model and base_model_version_id")
         return self
+
+    @field_validator("adapter")
+    @classmethod
+    def _known_adapter(cls, value: str) -> str:
+        if value not in catalog.ADAPTER_TASKS:
+            raise ValueError(f"Unknown adapter {value!r}")
+        return value
 
     @field_validator("name", "note")
     @classmethod
@@ -180,3 +189,9 @@ class RunMetricsRead(BaseModel):
     history: list[dict]
     per_class: list[dict]
     confusion: dict | None
+
+
+class AdapterOption(BaseModel):
+    id: str
+    label: str
+    supported: bool

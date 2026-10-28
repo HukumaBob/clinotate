@@ -5,9 +5,10 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import get_session
 from app.storage import StorageService, get_storage_service
-from app.training import params, service
+from app.training import catalog, params, service
 from app.training.models import TrainingRunStatus
 from app.training.schemas import (
+    AdapterOption,
     BaseModelOption,
     ModelDownloadRead,
     ModelMetricsRead,
@@ -39,6 +40,7 @@ def create_run(
             name=body.name,
             note=body.note,
             created_by=current_user,
+            adapter=body.adapter,
         )
     except service.DatasetNotExported as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
@@ -65,10 +67,22 @@ def update_run(
 @router.get("/settings-schema", response_model=SettingsSchemaRead)
 def settings_schema(
     dataset_id: int = Query(),
+    adapter: str = Query(default=catalog.YOLO_ADAPTER),
     session: Session = Depends(get_session),
 ):
     try:
-        return service.get_settings_schema(session, dataset_id)
+        return service.get_settings_schema(session, dataset_id, adapter)
+    except service.DatasetNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/adapters", response_model=list[AdapterOption])
+def list_adapters(
+    dataset_id: int = Query(),
+    session: Session = Depends(get_session),
+):
+    try:
+        return service.list_adapters(session, dataset_id)
     except service.DatasetNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
@@ -76,10 +90,11 @@ def settings_schema(
 @router.get("/base-models", response_model=list[BaseModelOption])
 def list_base_models(
     dataset_id: int = Query(),
+    adapter: str = Query(default=catalog.YOLO_ADAPTER),
     session: Session = Depends(get_session),
 ):
     try:
-        return service.list_base_models(session, dataset_id)
+        return service.list_base_models(session, dataset_id, adapter)
     except service.DatasetNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 

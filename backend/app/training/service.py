@@ -22,7 +22,7 @@ from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 
 logger = logging.getLogger(__name__)
 
-ADAPTER_NAME = catalog.ADAPTER_NAME
+ADAPTER_NAME = catalog.YOLO_ADAPTER
 
 ACTIVE_STATUSES = (TrainingRunStatus.PENDING, TrainingRunStatus.RUNNING)
 
@@ -80,7 +80,10 @@ def find_export_job(session: Session, dataset_id: int) -> Job | None:
     return None
 
 
-def _headline(task_type: TaskType, metrics: dict) -> str | None:
+def _headline(adapter: str, task_type: TaskType, metrics: dict) -> str | None:
+    if adapter == catalog.DINOV3_ADAPTER:
+        value = metrics.get("val/macro_f1")
+        return f"macro-F1 {value:.3f}" if isinstance(value, (int, float)) else None
     if task_type == TaskType.CLASSIFICATION:
         value, label = metrics.get("metrics/accuracy_top1"), "top-1"
     else:
@@ -88,7 +91,9 @@ def _headline(task_type: TaskType, metrics: dict) -> str | None:
     return f"{label} {value:.3f}" if isinstance(value, (int, float)) else None
 
 
-def list_base_models(session: Session, dataset_id: int) -> list[dict]:
+def list_base_models(
+    session: Session, dataset_id: int, adapter: str = catalog.YOLO_ADAPTER
+) -> list[dict]:
     dataset = session.get(Dataset, dataset_id)
     if dataset is None:
         raise DatasetNotFound(f"Dataset {dataset_id} not found")
@@ -103,20 +108,20 @@ def list_base_models(session: Session, dataset_id: int) -> list[dict]:
             "note": model.note,
             "model_version_id": None,
         }
-        for model in catalog.pretrained_models(ADAPTER_NAME, dataset.task_type)
+        for model in catalog.pretrained_models(adapter, dataset.task_type)
     ]
     versions = session.scalars(
         select(ModelVersion)
         .join(TrainingRun, ModelVersion.training_run_id == TrainingRun.id)
         .where(
             ModelVersion.task_type == dataset.task_type,
-            TrainingRun.adapter == ADAPTER_NAME,
+            TrainingRun.adapter == adapter,
         )
         .order_by(ModelVersion.id.desc())
     )
     for version in versions:
         parts = [
-            _headline(version.task_type, version.metrics or {}),
+            _headline(adapter, version.task_type, version.metrics or {}),
             version.created_at.date().isoformat(),
         ]
         options.append(
@@ -140,11 +145,20 @@ def _clean_text(value: str | None) -> str | None:
     return value or None
 
 
-def get_settings_schema(session: Session, dataset_id: int) -> dict:
+def list_adapters(session: Session, dataset_id: int) -> list[dict]:
     dataset = session.get(Dataset, dataset_id)
     if dataset is None:
         raise DatasetNotFound(f"Dataset {dataset_id} not found")
-    return params.settings_schema(ADAPTER_NAME, dataset.task_type)
+    return catalog.adapters_for(dataset.task_type)
+
+
+def get_settings_schema(
+    session: Session, dataset_id: int, adapter: str = catalog.YOLO_ADAPTER
+) -> dict:
+    dataset = session.get(Dataset, dataset_id)
+    if dataset is None:
+        raise DatasetNotFound(f"Dataset {dataset_id} not found")
+    return params.settings_schema(adapter, dataset.task_type)
 
 
 def update_run_meta(session: Session, run_id: int, fields: dict) -> TrainingRun:
@@ -167,6 +181,7 @@ def create_training_run(
     name: str | None = None,
     note: str | None = None,
     created_by: User,
+    adapter: str = catalog.YOLO_ADAPTER,
 ) -> TrainingRun:
     dataset = session.get(Dataset, dataset_id)
     if dataset is None:
@@ -186,6 +201,9 @@ def create_training_run(
         # explains itself where a silent "pending" does not.
         raise RunAlreadyActive(f"Training run {active.id} is still active")
 
+    if dataset.task_type not in catalog.ADAPTER_TASKS.get(adapter, ()):
+        raise InvalidBaseModel(f"{adapter} does not support {dataset.task_type.value} datasets")
+
     parent_id = None
     if base_model_version_id is not None:
         parent = session.get(ModelVersion, base_model_version_id)
@@ -197,22 +215,22 @@ def create_training_run(
                 f"Model version {parent.id} is a {parent.task_type.value} model; "
                 f"this dataset is {dataset.task_type.value}"
             )
-        if parent_run is None or parent_run.adapter != ADAPTER_NAME:
-            raise InvalidBaseModel(f"Model version {parent.id} was not trained by {ADAPTER_NAME}")
+        if parent_run is None or parent_run.adapter != adapter:
+            raise InvalidBaseModel(f"Model version {parent.id} was not trained by {adapter}")
         parent_id = parent.id
         resolved_base = parent.name
     else:
-        resolved_base = catalog.resolve_pretrained(ADAPTER_NAME, dataset.task_type, base_model)
+        resolved_base = catalog.resolve_pretrained(adapter, dataset.task_type, base_model)
         if resolved_base is None:
             raise InvalidBaseModel(
-                f"{base_model!r} is not a {dataset.task_type.value} base model for {ADAPTER_NAME}"
+                f"{base_model!r} is not a {dataset.task_type.value} base model for {adapter}"
             )
 
-    resolved_settings = params.resolve_settings(ADAPTER_NAME, dataset.task_type, settings)
+    resolved_settings = params.resolve_settings(adapter, dataset.task_type, settings)
 
     run = TrainingRun(
         dataset_id=dataset_id,
-        adapter=ADAPTER_NAME,
+        adapter=adapter,
         base_model=resolved_base,
         base_model_version_id=parent_id,
         task_type=dataset.task_type,

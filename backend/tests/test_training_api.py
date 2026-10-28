@@ -1233,3 +1233,56 @@ def test_delete_run_refuses_a_run_that_still_owns_a_model():
     finally:
         _cleanup(session, dataset.id)
         session.close()
+
+
+def test_adapters_lists_support_for_the_datasets_task_type():
+    email = "train-ad1@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    user_id = _user_id(session, email)
+    det = _make_dataset(session, user_id)
+    cls = _make_dataset(session, user_id)
+    cls.task_type = TaskType.CLASSIFICATION
+    session.commit()
+    try:
+        r_det = client.get(f"/training/adapters?dataset_id={det.id}", headers=headers)
+        r_cls = client.get(f"/training/adapters?dataset_id={cls.id}", headers=headers)
+
+        assert r_det.status_code == 200
+        assert {o["id"]: o["supported"] for o in r_det.json()} == {
+            "ultralytics_yolo": True,
+            "dinov3_classifier": True,
+        }
+        assert {o["id"]: o["supported"] for o in r_cls.json()} == {
+            "ultralytics_yolo": True,
+            "dinov3_classifier": False,
+        }
+        assert r_det.json()[0]["label"] == "YOLO11"
+    finally:
+        _cleanup(session, det.id)
+        _cleanup(session, cls.id)
+        session.close()
+
+
+def test_adapters_unknown_dataset_is_404():
+    headers = _register_and_login("train-ad2@example.com")
+
+    assert client.get("/training/adapters?dataset_id=99999999", headers=headers).status_code == 404
+
+
+def test_create_run_with_unknown_adapter_is_422():
+    email = "train-ad3@example.com"
+    headers = _register_and_login(email)
+    session = _session()
+    dataset = _make_dataset(session, _user_id(session, email))
+    try:
+        response = client.post(
+            "/training/runs",
+            headers=headers,
+            json={"dataset_id": dataset.id, "base_model": "yolo11n.pt", "adapter": "nope"},
+        )
+
+        assert response.status_code == 422
+    finally:
+        _cleanup(session, dataset.id)
+        session.close()

@@ -3778,6 +3778,16 @@
               "type": "integer",
               "title": "Dataset Id"
             }
+          },
+          {
+            "name": "adapter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "ultralytics_yolo",
+              "title": "Adapter"
+            }
           }
         ],
         "responses": {
@@ -3787,6 +3797,57 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SettingsSchemaRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/adapters": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "List Adapters",
+        "operationId": "list_adapters_training_adapters_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdapterOption"
+                  },
+                  "title": "Response List Adapters Training Adapters Get"
                 }
               }
             }
@@ -3824,6 +3885,16 @@
             "schema": {
               "type": "integer",
               "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "adapter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "ultralytics_yolo",
+              "title": "Adapter"
             }
           }
         ],
@@ -4807,6 +4878,29 @@
   },
   "components": {
     "schemas": {
+      "AdapterOption": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "supported": {
+            "type": "boolean",
+            "title": "Supported"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "supported"
+        ],
+        "title": "AdapterOption"
+      },
       "AnnotationCreate": {
         "properties": {
           "label_id": {
@@ -8025,6 +8119,11 @@
           "dataset_id": {
             "type": "integer",
             "title": "Dataset Id"
+          },
+          "adapter": {
+            "type": "string",
+            "title": "Adapter",
+            "default": "ultralytics_yolo"
           },
           "base_model": {
             "anyOf": [
