@@ -13,6 +13,7 @@ dependencies = [
     "pyiqa>=0.1.13",
     "opencv-python-headless>=4.10.0",
     "ultralytics>=8.3.0",
+    "transformers>=4.56.0",
     # sam3's model_builder.py imports pkg_resources at module load time, but
     # setuptools>=81 no longer bundles pkg_resources by default (it was split
     # out and the compatibility shim was removed) -- an unpinned resolve can
