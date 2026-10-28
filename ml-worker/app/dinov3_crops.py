@@ -16,6 +16,9 @@ import cv2
 import numpy as np
 
 
+VALID_SPLITS = ("train", "val", "test")
+
+
 @dataclass
 class Sample:
     image_path: Path
@@ -63,6 +66,9 @@ def load_samples(
         img = images.get(ann["image_id"])
         if img is None:
             skipped["unknown image"] += 1
+            continue
+        if img.get("split") not in VALID_SPLITS:
+            skipped["unknown or missing split"] += 1
             continue
         path = dataset_dir / "images" / img["split"] / img["file_name"]
         if img["id"] not in exists_cache:

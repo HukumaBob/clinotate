@@ -37,6 +37,11 @@ def test_crop_is_square_and_imgsz():
     assert abs(bar_h - 20 * 2.24) <= 2
     assert abs(bar_w - 4 * 2.24) <= 2
     assert abs(bar_w / bar_h - 4 / 20) < 0.05
+    # Centred: box is 100x20 padded to 100x100, so 40 pad rows above and
+    # below; bar spans rows 40..60 -> 89.6..134.4 after the 2.24 scale.
+    assert abs(ys.min() - 40 * 2.24) <= 2
+    assert abs(ys.max() + 1 - 60 * 2.24) <= 2
+    assert (out[:80] == out[0, 0]).all() and (out[150:] == out[0, 0]).all()
 
 
 def test_crop_clamps_at_image_border():
@@ -166,6 +171,7 @@ def test_load_samples_skips_degenerate_and_missing_and_logs_count(tmp_path):
     assert "Skipped 3 regions" in skipped[0]
     assert "1 missing image file" in skipped[0]
     assert "1 empty box" in skipped[0]
+    assert "1 unknown category" in skipped[0]
 
 
 def test_load_samples_keeps_short_polygon_regions(tmp_path):
@@ -208,3 +214,70 @@ def test_read_rgb_converts_from_bgr(tmp_path):
     cv2.imwrite(str(p), bgr)
     rgb = read_rgb(p)
     assert (rgb[0, 0] == (255, 0, 0)).all()
+
+
+def test_mask_zero_wide_box_with_margin_keeps_offsets():
+    rng = np.random.default_rng(3)
+    img = rng.integers(0, 256, size=(120, 200, 3), dtype=np.uint8)
+    # bbox (50,40,80,20), margin 0.2 -> mx=16, my=4 -> crop x 34..146,
+    # y 36..64 (112x28). side=112, off_x=0, off_y=(112-28)//2=42.
+    # imgsz=112 so no resize. Polygon rectangle x 60..120, y 40..60 maps to
+    # square cols 26..86, rows 46..66.
+    poly = [(60, 40), (120, 40), (120, 60), (60, 60)]
+    out = crop_region(img, (50, 40, 80, 20), poly, margin=0.2,
+                      mask_mode="zero", imgsz=112)
+    mean = np.round(img[36:64, 34:146].reshape(-1, 3).mean(axis=0)).astype(np.uint8)
+    # Inside: square (row 56, col 50) = image (y=56-42+36=50, x=50+34=84).
+    # Dropping off_y would put the polygon at rows 4..24; dropping the crop
+    # origin would put it at cols 60..120 -> both would make this mean.
+    assert (out[56, 50] == img[50, 84]).all()
+    # Outside, square (56, 90) = image x=124 > 120. Only true if the crop
+    # origin is applied (without it the polygon would cover col 90).
+    assert (out[56, 90] == mean).all()
+    # Outside, square (56, 10) = image x=44 < 60.
+    assert (out[56, 10] == mean).all()
+
+
+def test_mask_zero_box_clamped_at_corner():
+    rng = np.random.default_rng(4)
+    img = rng.integers(0, 256, size=(100, 100, 3), dtype=np.uint8)
+    # bbox (0,0,40,40), margin 0.3 -> mx=my=12; unclamped origin -12,
+    # clamped crop is x 0..52, y 0..52 (square, origin 0, no pad).
+    # Triangle (0,0),(50,0),(0,50). imgsz=52 so no resize.
+    tri = [(0, 0), (50, 0), (0, 50)]
+    out = crop_region(img, (0, 0, 40, 40), tri, margin=0.3,
+                      mask_mode="zero", imgsz=52)
+    mean = np.round(img[0:52, 0:52].reshape(-1, 3).mean(axis=0)).astype(np.uint8)
+    # (10,10): x+y=20 <= 50 inside. An unclamped origin of -12 would shift
+    # the triangle to start at 12, making (10,10) outside.
+    assert (out[10, 10] == img[10, 10]).all()
+    # (30,30): x+y=60 > 50 outside; with the shifted triangle (x+y <= 74)
+    # it would wrongly stay inside.
+    assert (out[30, 30] == mean).all()
+
+
+def _split_dataset(tmp_path, images):
+    return _write_dataset(
+        tmp_path,
+        images,
+        [{"id": 1, "name": "a"}],
+        [_ann(i["id"], i["id"], 1) for i in images],
+        files=[],
+    )
+
+
+def test_load_samples_skips_unknown_or_missing_split(tmp_path):
+    good = _img(1, "test")
+    no_split = _img(2)
+    del no_split["split"]
+    holdout = _img(3, "holdout")
+    root = _split_dataset(tmp_path, [good, no_split, holdout])
+    (root / "images" / "test").mkdir()
+    cv2.imwrite(str(root / "images" / "test" / "f1.png"), np.zeros((20, 20, 3), np.uint8))
+    logs: list[str] = []
+    samples, _ = load_samples(root, logs.append)
+    assert [(s.image_path.name, s.split) for s in samples] == [("f1.png", "test")]
+    line = [m for m in logs if "Skipped" in m]
+    assert len(line) == 1
+    assert "Skipped 2 regions" in line[0]
+    assert "2 unknown or missing split" in line[0]
