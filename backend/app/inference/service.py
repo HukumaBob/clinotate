@@ -25,6 +25,7 @@ from app.media.models import Frame, Sequence, Video
 from app.media.service import FramesOutOfRange, extract_frames_at
 from app.storage import StorageService
 from app.training import service as training_service
+from app.training.catalog import YOLO_ADAPTER
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,12 @@ def create_inference_run(
         raise UnsupportedModelType(
             f"A {version.task_type.value} model cannot be run yet; "
             "only detection and segmentation models are supported"
+        )
+    adapter = version.training_run.adapter
+    if adapter != YOLO_ADAPTER:
+        raise UnsupportedModelType(
+            f"Model version {version.id} was trained by {adapter}, "
+            "which QC inference cannot run"
         )
 
     run = InferenceRun(

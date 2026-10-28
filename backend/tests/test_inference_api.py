@@ -118,6 +118,22 @@ def test_create_run_rejects_bad_input(committed_inference_rows, overrides, expec
     assert _create(headers, committed_inference_rows, **overrides).status_code == expected
 
 
+def test_inference_rejects_version_from_other_adapter(committed_inference_rows):
+    """A DINOv3 version cannot be loaded by the Ultralytics runner."""
+    session = db_module.SessionLocal()
+    try:
+        version = session.get(ModelVersion, committed_inference_rows.detect_version_id)
+        version.training_run.adapter = "dinov3_classifier"
+        session.commit()
+    finally:
+        session.close()
+    headers = _register_and_login("infer-dino@example.com")
+    response = _create(headers, committed_inference_rows)
+    assert response.status_code == 422
+    assert "dinov3_classifier" in response.json()["detail"]
+    assert "QC inference cannot run" in response.json()["detail"]
+
+
 def test_create_run_rejects_a_classification_model(committed_inference_rows):
     headers = _register_and_login("infer-classify@example.com")
     response = _create(
