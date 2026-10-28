@@ -335,6 +335,55 @@ def test_confusion_is_none_when_the_trainer_supplies_none():
     assert _confusion_from(_Bare(), "detection") is None
 
 
+def test_class_names_come_out_ordered_by_class_id():
+    from app.ultralytics_yolo_adapter import _class_names_from
+
+    class _Model:
+        names = {1: "dirty", 0: "clean", 2: "polyp (large)"}
+
+    assert _class_names_from(_Model()) == ["clean", "dirty", "polyp (large)"]
+
+
+def test_class_names_are_empty_when_the_model_exposes_none():
+    from app.ultralytics_yolo_adapter import _class_names_from
+
+    class _Bare:
+        pass
+
+    class _NoneNames:
+        names = None
+
+    assert _class_names_from(_Bare()) == []
+    assert _class_names_from(_NoneNames()) == []
+
+
+def test_train_returns_the_class_names_the_weights_carry(tmp_path):
+    fake_yolo = _make_fake_yolo(
+        epochs=1,
+        weights_dir=tmp_path / "out" / "run" / "weights",
+        log_lines_via_print=[],
+        log_lines_via_logger=[],
+    )
+    fake_yolo.names = {0: "polyp", 1: "ulcer"}
+    request = TrainingRequest(
+        dataset_dir=tmp_path / "ds",
+        task_type="detection",
+        base_model="yolo11n.pt",
+        config={"epochs": 1},
+        output_dir=tmp_path / "out",
+    )
+
+    with mock.patch("app.ultralytics_yolo_adapter.YOLO", fake_yolo):
+        result = UltralyticsYoloAdapter().train(
+            request,
+            on_log=lambda line: None,
+            on_epoch=lambda e, t, m=None: None,
+            should_stop=lambda: False,
+        )
+
+    assert result.class_names == ["polyp", "ulcer"]
+
+
 def test_artifacts_collect_known_extensions_and_skip_large_files(tmp_path):
     from app.ultralytics_yolo_adapter import _collect_artifacts
 

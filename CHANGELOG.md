@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 include breaking changes). Phase-by-phase decisions and deviations live in
 [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased]
+
+### Added
+- Model versions record the class names they were trained on (`class_names`,
+  ordered by class id) and ship a `classes.json` next to the weights, served
+  through the existing artifact download. Versions trained earlier have an
+  empty list; their checkpoint still carries the names.
+
 ## [0.2.0] - 2026-10-28
 
 First public release.

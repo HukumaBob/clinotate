@@ -48,6 +48,9 @@ class TrainingResult:
     confusion: dict | None = None
     # Files the trainer wrote that the platform stores without parsing.
     artifacts: list[Path] = field(default_factory=list)
+    # The classes the weights were trained on, ordered by class id (index ==
+    # the id the model emits). Empty if the trainer cannot say.
+    class_names: list[str] = field(default_factory=list)
 
 
 class TrainingAdapter(Protocol):

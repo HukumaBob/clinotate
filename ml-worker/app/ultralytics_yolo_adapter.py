@@ -137,6 +137,24 @@ def _confusion_from(results, task_type: str) -> dict | None:
         return None
 
 
+def _class_names_from(model) -> list[str]:
+    """The class names the trained weights carry, ordered by class id.
+
+    Ultralytics stores them in the checkpoint as `names` ({id: name}); this
+    reads them off the model rather than the dataset yaml so what is recorded
+    is what the weights actually emit.
+    """
+    names = getattr(model, "names", None)
+    try:
+        if isinstance(names, dict):
+            return [str(names[key]) for key in sorted(names)]
+        if isinstance(names, (list, tuple)):
+            return [str(name) for name in names]
+    except Exception:  # noqa: BLE001 -- metadata must never fail a finished run
+        pass
+    return []
+
+
 def _collect_artifacts(output_dir: Path) -> list[Path]:
     """The trainer's own files, stored without being parsed."""
     if not output_dir.exists():
@@ -297,4 +315,5 @@ class UltralyticsYoloAdapter:
             per_class=_per_class_rows(results),
             confusion=_confusion_from(results, request.task_type),
             artifacts=_collect_artifacts(request.output_dir),
+            class_names=_class_names_from(model),
         )

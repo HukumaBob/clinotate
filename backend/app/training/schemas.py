@@ -130,6 +130,7 @@ class ModelVersionRead(BaseModel):
     base_model_version_id: int | None
     task_type: TaskType
     metrics: dict
+    class_names: list[str]
     is_active: bool
     created_at: datetime
 

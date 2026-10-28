@@ -240,6 +240,8 @@ class ModelVersion(Base):
     # Keys of the trainer's own files in object storage. Deleted with this
     # row -- see delete_model_version.
     artifact_keys: Mapped[list] = mapped_column(JSON, default=list)
+    # Ordered by class id; mirrors backend/app/training/models.py.
+    class_names: Mapped[list] = mapped_column(JSON, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

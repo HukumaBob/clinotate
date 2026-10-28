@@ -193,6 +193,51 @@ def test_successful_run_creates_a_model_version(training_job, db_session, monkey
     assert job.status == JobStatus.SUCCEEDED
 
 
+def test_the_model_version_records_its_class_names_and_ships_a_classes_file(
+    db_session, make_job_and_run, fake_storage
+):
+    import json
+
+    from app.tasks import model_train
+
+    class _Adapter:
+        def train(self, request, on_log, on_epoch, should_stop):
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            return TrainingResult(weights_path=weights, class_names=["clean", "polyp (large)"])
+
+    job, run = make_job_and_run()
+    model_train(job.id, adapter=_Adapter())
+
+    version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
+    assert version.class_names == ["clean", "polyp (large)"]
+
+    classes_key = f"models/{run.id}/classes.json"
+    assert classes_key in version.artifact_keys
+    assert json.loads(fake_storage.uploaded[classes_key]) == {
+        "classes": ["clean", "polyp (large)"]
+    }
+
+
+def test_a_trainer_that_reports_no_class_names_gets_no_classes_file(
+    db_session, make_job_and_run, fake_storage
+):
+    from app.tasks import model_train
+
+    class _Adapter:
+        def train(self, request, on_log, on_epoch, should_stop):
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            return TrainingResult(weights_path=weights)
+
+    job, run = make_job_and_run()
+    model_train(job.id, adapter=_Adapter())
+
+    version = db_session.query(ModelVersion).filter_by(training_run_id=run.id).one()
+    assert version.class_names == []
+    assert version.artifact_keys == []
+
+
 def test_stop_requested_ends_as_stopped_and_still_keeps_weights(
     training_job, db_session, monkeypatch, fake_storage
 ):

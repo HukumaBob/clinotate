@@ -917,6 +917,19 @@ def model_train(job_id: int, adapter=None) -> None:
                 )
                 artifact_keys.append(artifact_key)
 
+            # A plain-text list of the classes next to the weights, so a user
+            # who cannot (or does not want to) open the checkpoint still gets
+            # the id -> name mapping. Rides the artifact list: it is served by
+            # the existing artifact download and deleted with the version.
+            if result.class_names:
+                classes_key = f"models/{run.id}/classes.json"
+                storage.upload(
+                    classes_key,
+                    json.dumps({"classes": result.class_names}, indent=2).encode(),
+                    "application/json",
+                )
+                artifact_keys.append(classes_key)
+
         if run.base_model_version_id is not None:
             suffix = f"-ft-run{run.id}"
             # ModelVersion.name is String(200); a fine-tune chain grows the
@@ -933,6 +946,7 @@ def model_train(job_id: int, adapter=None) -> None:
             per_class_metrics=result.per_class,
             confusion_matrix=result.confusion,
             artifact_keys=artifact_keys,
+            class_names=result.class_names,
         )
         session.add(version)
 

@@ -6565,6 +6565,13 @@
             "type": "object",
             "title": "Metrics"
           },
+          "class_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Class Names"
+          },
           "is_active": {
             "type": "boolean",
             "title": "Is Active"
@@ -6584,6 +6591,7 @@
           "base_model_version_id",
           "task_type",
           "metrics",
+          "class_names",
           "is_active",
           "created_at"
         ],

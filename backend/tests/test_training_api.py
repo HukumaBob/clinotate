@@ -383,6 +383,7 @@ def _make_version(
     per_class_metrics: list[dict] | None = None,
     confusion_matrix: dict | None = None,
     history: list[dict] | None = None,
+    class_names: list[str] | None = None,
 ) -> ModelVersion:
     """Build a ModelVersion with the parent Dataset/TrainingRun/User rows it
     needs to satisfy real foreign keys, following the pattern established
@@ -413,6 +414,7 @@ def _make_version(
         artifact_keys=artifact_keys or [],
         per_class_metrics=per_class_metrics or [],
         confusion_matrix=confusion_matrix,
+        class_names=class_names or [],
     )
     session.add(version)
     session.commit()
@@ -420,6 +422,29 @@ def _make_version(
     version._test_dataset_id = dataset.id  # noqa: SLF001 -- test-only bookkeeping
     version._test_headers = headers  # noqa: SLF001 -- test-only bookkeeping
     return version
+
+
+def test_models_list_exposes_each_versions_class_names():
+    session = _session()
+    version = _make_version(
+        session,
+        storage_key="models/12/best.pt",
+        class_names=["clean", "polyp (large)"],
+    )
+    version_id = version.id
+    headers = version._test_headers  # noqa: SLF001
+    dataset_id = version._test_dataset_id  # noqa: SLF001
+    session.close()
+
+    try:
+        rows = client.get("/training/models", headers=headers).json()
+
+        row = next(r for r in rows if r["id"] == version_id)
+        assert row["class_names"] == ["clean", "polyp (large)"]
+    finally:
+        cleanup_session = _session()
+        _cleanup(cleanup_session, dataset_id)
+        cleanup_session.close()
 
 
 def test_deleting_a_model_version_removes_its_artifacts():
