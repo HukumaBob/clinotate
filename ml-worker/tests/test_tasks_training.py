@@ -466,3 +466,52 @@ def test_a_missing_parent_weights_object_fails_the_run_readably(
     assert run.status == TrainingRunStatus.FAILED
     assert "parent-model" in run.error
     assert "weights" in run.error.lower()
+
+
+def test_model_train_dispatches_on_run_adapter(
+    db_session, make_job_and_run, fake_storage, monkeypatch
+):
+    import app.adapters as adapters
+    from app.tasks import model_train
+
+    used = []
+
+    class _Stub:
+        def train(self, request, on_log, on_epoch, should_stop):
+            used.append(request)
+            weights = request.output_dir / "best.pt"
+            weights.write_bytes(b"w")
+            return TrainingResult(weights_path=weights, metrics={"fitness": 0.5})
+
+    requested = []
+
+    def _lookup(name):
+        requested.append(name)
+        return _Stub()
+
+    monkeypatch.setattr(adapters, "get_training_adapter", _lookup)
+
+    job, run = make_job_and_run()
+    run.adapter = "stub"
+    db_session.commit()
+    model_train(job.id)
+    db_session.refresh(run)
+
+    assert requested == ["stub"]
+    assert len(used) == 1
+    assert run.status == TrainingRunStatus.SUCCEEDED
+
+
+def test_model_train_unknown_adapter_fails_the_run(db_session, make_job_and_run, fake_storage):
+    from app.tasks import model_train
+
+    job, run = make_job_and_run()
+    run.adapter = "no-such-adapter"
+    db_session.commit()
+    model_train(job.id)
+    db_session.refresh(run)
+    db_session.refresh(job)
+
+    assert run.status == TrainingRunStatus.FAILED
+    assert "Unknown training adapter 'no-such-adapter'" in run.error
+    assert job.status == JobStatus.FAILED

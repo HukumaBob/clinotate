@@ -803,11 +803,6 @@ def model_train(job_id: int, adapter=None) -> None:
         session.close()
         return
 
-    if adapter is None:
-        from app.ultralytics_yolo_adapter import UltralyticsYoloAdapter
-
-        adapter = UltralyticsYoloAdapter()
-
     job.status = JobStatus.RUNNING
     job.started_at = datetime.now(timezone.utc)
     run.status = TrainingRunStatus.RUNNING
@@ -838,6 +833,11 @@ def model_train(job_id: int, adapter=None) -> None:
         return bool(run.stop_requested)
 
     try:
+        if adapter is None:
+            from app.adapters import get_training_adapter
+
+            adapter = get_training_adapter(run.adapter)
+
         with tempfile.TemporaryDirectory() as workdir:
             work = Path(workdir)
             dataset_dir = work / "dataset"
