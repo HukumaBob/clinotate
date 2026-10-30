@@ -2251,8 +2251,9 @@ rendered in the Models table. ViT-L is deliberately never run on the 8 GB card.
   sub-project, not started. Sequence-level aggregation of crop predictions too, since
   histology is per polyp and samples are per frame.
 - Partial-mode checkpoints contain modified DINOv3 weights; downloading one is
-  redistribution under Meta's licence. Decide whether the download or the Models UI
-  should carry the licence text.
+  redistribution under Meta's licence. Decided: every DINOv3 version ships Meta's
+  licence text as the artifact `DINOv3-LICENSE.md` (fetched from the Hub repo, or a
+  pointer file naming the licence URL if the fetch fails).
 - Pre-existing hazard: ml-worker's `db_session` / `make_job_and_run` fixtures run against
   the real `endoscopy` database by default. This work added pure tests that avoid them
   (`test_tasks_training_pure.py`), but the conftest itself needs pointing at

@@ -115,6 +115,48 @@ def _generator(seed: int) -> torch.Generator:
     return g
 
 
+LICENCE_FILENAME = "DINOv3-LICENSE.md"
+LICENCE_URL = "https://ai.meta.com/resources/models-and-libraries/dinov3-license/"
+
+
+def _fetch_licence(hub_id: str) -> bytes:
+    """The authoritative licence file of the (gated) Hub model repo. Test seam."""
+    from huggingface_hub import hf_hub_download
+
+    return Path(hf_hub_download(repo_id=hub_id, filename="LICENSE.md")).read_bytes()
+
+
+def _write_licence_file(output_dir: Path, hub_id: str, on_log) -> Path:
+    """Write Meta's DINOv3 licence next to the weights (redistribution requires it).
+
+    Never fails the run: if the Hub text cannot be fetched, a pointer file says
+    where to get it. The exception text is logged, the token never is.
+    """
+    path = Path(output_dir) / LICENCE_FILENAME
+    try:
+        path.write_bytes(_fetch_licence(hub_id))
+    except Exception as exc:  # noqa: BLE001 -- must not fail a finished training run
+        on_log(f"Could not fetch the DINOv3 licence text from the Hub: "
+               f"{type(exc).__name__}: {_redact(exc)}; wrote a pointer file instead")
+        path.write_text(
+            "# DINOv3 licence\n\n"
+            "This model was built on Meta's DINOv3 (Hub repository "
+            f"`{hub_id}`).\n\n"
+            "Redistributing it requires including Meta's DINOv3 licence text. "
+            "The text could not be bundled automatically; obtain it from\n\n"
+            f"- {LICENCE_URL}\n"
+            f"- the `LICENSE.md` file of the Hub repository `{hub_id}`\n\n"
+            "and ship it alongside these weights.\n",
+            encoding="utf-8")
+    return path
+
+
+def _redact(exc: Exception) -> str:
+    import re
+
+    return re.sub(r"hf_[A-Za-z0-9]+", "hf_***", str(exc))[:300]
+
+
 def _load_into(model, path: Path, backbone_id: str, class_names, on_log) -> set[str]:
     """Load a parent checkpoint; return the state_dict keys taken from it."""
     ckpt = torch.load(path, map_location="cpu", weights_only=True)
@@ -367,12 +409,13 @@ class Dinov3ClassifierAdapter:
             "metrics": result_metrics, "per_class": summary.per_class,
             "class_names": class_names, "config": safe_cfg, "history": history,
         }, indent=2))
+        licence_path = _write_licence_file(out_dir, str(cfg["backbone"]), on_log)
         return TrainingResult(
             weights_path=best_path,
             metrics=result_metrics,
             per_class=summary.per_class,
             confusion=to_result_confusion(cm, class_names),
             class_names=list(class_names),
-            artifacts=[metrics_path],
+            artifacts=[metrics_path, licence_path],
             history=[],
         )

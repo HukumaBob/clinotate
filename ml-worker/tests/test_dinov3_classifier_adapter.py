@@ -62,6 +62,8 @@ def backbone(monkeypatch):
     bb = FakeBackbone()
     monkeypatch.setattr(adapter_module, "_load_backbone", lambda hub_id: bb)
     monkeypatch.setattr(adapter_module, "_device", lambda: torch.device("cpu"))
+    # Never reach the Hub from a unit test.
+    monkeypatch.setattr(adapter_module, "_fetch_licence", lambda hub_id: b"STUB LICENCE")
     return bb
 
 
@@ -127,7 +129,8 @@ def test_on_epoch_called_with_trainer_keys_each_epoch(backbone, dataset, tmp_pat
     assert type(result.metrics["best_epoch"]) is int
     assert all(type(result.metrics[k]) is float for k in keys - {"train/loss", "val/loss"})
     assert result.history == []
-    assert result.artifacts == [tmp_path / "out" / "metrics.json"]
+    assert result.artifacts == [tmp_path / "out" / "metrics.json",
+                                tmp_path / "out" / "DINOv3-LICENSE.md"]
     doc = json.loads(result.artifacts[0].read_text())
     assert len(doc["history"]) == 3 and doc["metrics"] == result.metrics
     assert sum("macro-F1" in line for line in logs) >= 3
@@ -407,3 +410,33 @@ def test_defaults_match_backend_schema_literals():
         "dropout": 0.0,
     }
     assert {k: v for k, v in DEFAULTS.items() if k != "backbone"} == expected
+
+
+@pytest.mark.parametrize("mode", ["frozen", "partial"])
+def test_licence_text_ships_verbatim_as_an_artifact(backbone, dataset, tmp_path, monkeypatch, mode):
+    text = b"LICENCE TEXT"
+    asked = []
+    monkeypatch.setattr(adapter_module, "_fetch_licence", lambda hub_id: asked.append(hub_id) or text)
+    result, _, _ = _run(dataset, tmp_path, {"mode": mode, "epochs": 1})
+    lic = [a for a in result.artifacts if Path(a).name == "DINOv3-LICENSE.md"]
+    assert len(lic) == 1
+    assert lic[0] == tmp_path / "out" / "DINOv3-LICENSE.md"
+    assert lic[0].read_bytes() == text
+    assert asked == [BASE["backbone"]]
+
+
+@pytest.mark.parametrize("mode", ["frozen", "partial"])
+def test_licence_fetch_failure_writes_pointer_and_leaks_nothing(
+        backbone, dataset, tmp_path, monkeypatch, mode):
+    def boom(hub_id):
+        raise RuntimeError("401 Unauthorized, token hf_SECRET123")
+    monkeypatch.setattr(adapter_module, "_fetch_licence", boom)
+    result, logs, _ = _run(dataset, tmp_path, {"mode": mode, "epochs": 1})
+    lic = tmp_path / "out" / "DINOv3-LICENSE.md"
+    assert lic in result.artifacts and lic.is_file()
+    body = lic.read_text()
+    assert "https://ai.meta.com/resources/models-and-libraries/dinov3-license/" in body
+    assert BASE["backbone"] in body
+    assert "hf_SECRET123" not in body
+    assert not any("hf_SECRET123" in line for line in logs)
+    assert any("Could not fetch the DINOv3 licence text" in line for line in logs)
