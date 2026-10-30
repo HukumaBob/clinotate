@@ -13,6 +13,16 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   ordered by class id) and ship a `classes.json` next to the weights, served
   through the existing artifact download. Versions trained earlier have an
   empty list; their checkpoint still carries the names.
+- DINOv3 crop classifier as a second training adapter (`dinov3_classifier`): cuts
+  box or mask regions out of an exported detection/segmentation dataset and
+  classifies them with a DINOv3 backbone (frozen features or last-blocks
+  fine-tuning), with class-imbalance handling and macro-F1 model selection.
+  The Train form has a `Model family` select. Not yet verified end to end on a
+  real dataset; see ROADMAP.md.
+
+### Changed
+- QC inference lists only models trained with Ultralytics; the backend refuses others.
+- `NOTICE` now summarises the DINOv3 licence cautiously and points at the licence text.
 
 ## [0.2.0] - 2026-10-28
 

@@ -2199,3 +2199,66 @@ counts (runs 199/200/217/268, one model version, 7 MODEL_TRAIN jobs).
 - Backend, pre-existing: `metrics_history` looks shifted by one epoch (epoch 1 all
   zeros, epoch 2 holds epoch 1's values), so short runs' curves start at 0.
 - Config-difference table is long for runs recorded before the settings schema.
+
+### DINOv3 histology crop classifier (2026-10-30)
+
+Design: `docs/superpowers/specs/2026-10-28-dinov3-histology-classifier-design.md`;
+plan: `docs/superpowers/plans/2026-10-28-dinov3-histology-classifier.md`. The second
+training adapter, `dinov3_classifier`: a region (box or mask) is cut out of an
+exported detection or segmentation dataset and a DINOv3 backbone plus a linear head
+classifies it (second stage after YOLO). Two modes: `frozen` (features cached once,
+only the head trains) and `partial` (last N blocks unfrozen, fp16, gradient
+checkpointing). Class imbalance is handled by a weighted loss or a balanced sampler;
+the best epoch is chosen by validation macro-F1, never accuracy. Splits come from the
+export (grouped by video) and are never re-split.
+
+**Verified:** unit tests in all three layers (backend, ml-worker, frontend); a real
+ViT-S/16 on synthetic crops in the ml-worker container (frozen 164 MiB, partial
+157 MiB peak VRAM, gradient checkpointing and fp16 with GradScaler working).
+
+**Not verified (the live check is still open):** a full-stack run in a real browser
+on a real exported dataset; ViT-B on real data; `workers > 0` DataLoader workers
+(only `workers=0` ran); the real gated-weights failure message; the version name as
+rendered in the Models table. ViT-L is deliberately never run on the 8 GB card.
+
+**Deviation log:**
+
+- **The platform was not adapter-aware.** The backend service, `model_train` and the
+  Train form were hard-wired to `ultralytics_yolo`; making them adapter-aware was a
+  prerequisite not in the spec (`/training/adapters`, an `adapter` parameter on
+  base-models, settings-schema and run creation, `get_training_adapter` in the worker).
+- **No family tabs.** The 2026-08-19 spec promised tabs by model family; the shipped
+  screen never had them, so the form got a `Model family` select instead.
+- **QC inference guard.** A DINOv3 version carries its dataset's detection or
+  segmentation task type, so QC would have offered it and then failed. The backend
+  refuses it (`UnsupportedModelType`, 422), `ModelVersionRead` gained `adapter`, and the
+  QC picker only lists Ultralytics versions.
+- **Hub layout.** DINOv3 in `transformers` 5.x keeps its blocks at `model.model.layer`
+  and has 4 register tokens, so pooling skips 5 prefix tokens, not 1.
+- **Review catches worth remembering:** fine-tuning from a partial parent into a frozen
+  child silently dropped the inherited backbone tensors from the child checkpoint
+  (fixed with `extra_keys`); `bestRunId` compared macro-F1 with mAP50 in mixed lists
+  (now no badge); run details used the form's family schema for another family's run;
+  `model_train` evicted no resident SAM models before training.
+- **NOTICE:** DINOv3's licence was recorded as "non-commercial research use"; the
+  licence text dated 2025-08-19 does not say that. The entry is now a hedged summary
+  that points at the licence as authoritative. Re-read it before relying on it.
+
+**Open / next:**
+
+- The live check above, and the first real class-balance numbers.
+- Chained inference (YOLO box, crop, DINOv3 label) on video and QC runs: its own
+  sub-project, not started. Sequence-level aggregation of crop predictions too, since
+  histology is per polyp and samples are per frame.
+- Partial-mode checkpoints contain modified DINOv3 weights; downloading one is
+  redistribution under Meta's licence. Decide whether the download or the Models UI
+  should carry the licence text.
+- Pre-existing hazard: ml-worker's `db_session` / `make_job_and_run` fixtures run against
+  the real `endoscopy` database by default. This work added pure tests that avoid them
+  (`test_tasks_training_pure.py`), but the conftest itself needs pointing at
+  `endoscopy_test` with a schema.
+- Classes with no training samples are excluded from the loss but still count in
+  validation macro-F1 (as F1 = 0) when they appear in validation.
+- Small deferred items: `transformers>=4.56.0` floor is untested below 5.15.1;
+  `catalog.ADAPTER_NAME` alias is still used by `params.py`; the adapter is not in
+  the Train URL.
