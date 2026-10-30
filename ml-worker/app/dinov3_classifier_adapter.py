@@ -182,6 +182,13 @@ class Dinov3ClassifierAdapter:
             )
         n = len(class_names)
         counts = np.bincount([s.class_id for s in train], minlength=n)
+        trained = [class_names[i] for i in range(n) if counts[i] > 0]
+        if len(trained) < 2:
+            named = f" ({', '.join(trained)})" if trained else ""
+            raise RuntimeError(
+                "A classifier needs at least two classes with training samples; "
+                f"this dataset has {len(trained)}{named}"
+            )
         missing = [class_names[i] for i in range(n) if counts[i] == 0]
         if missing:
             on_log(f"Classes with no training samples (excluded from the loss): {', '.join(missing)}")
@@ -247,7 +254,7 @@ class Dinov3ClassifierAdapter:
                 model.eval()
                 with torch.no_grad():
                     for x, y in loader:
-                        with _autocast(device, True):
+                        with _autocast(device, use_amp):
                             f = model.features(x.to(device))
                         feats.append(f.float().cpu())
                         labels.append(y)

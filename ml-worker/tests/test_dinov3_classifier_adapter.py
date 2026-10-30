@@ -249,6 +249,29 @@ def test_missing_train_split_raises_readable_error(backbone, tmp_path):
         _run(ds, tmp_path)
 
 
+def test_single_class_dataset_raises_instead_of_scoring_a_perfect_one(backbone, tmp_path):
+    ds = _write_dataset(tmp_path / "ds", {"train": [4], "val": [3]}, cat_ids=(1,))
+    with pytest.raises(RuntimeError, match=r"at least two classes with training samples.*has 1 \(adenoma\)"):
+        _run(ds, tmp_path)
+
+
+def test_two_classes_where_one_has_no_train_samples_raises(backbone, tmp_path):
+    ds = _write_dataset(tmp_path / "ds", {"train": [4, 0], "val": [3, 3]}, cat_ids=(1, 2))
+    with pytest.raises(RuntimeError, match=r"at least two classes with training samples.*has 1 \(adenoma\)"):
+        _run(ds, tmp_path)
+
+
+@pytest.mark.parametrize("amp", [True, False])
+def test_frozen_feature_caching_follows_the_amp_setting(backbone, dataset, tmp_path, monkeypatch, amp):
+    seen = []
+    real = adapter_module._autocast
+    monkeypatch.setattr(adapter_module, "_autocast",
+                        lambda device, enabled: (seen.append(enabled), real(device, enabled))[1])
+    _run(dataset, tmp_path, {"amp": amp, "epochs": 1})
+    # CPU-only here, so amp is never effective: no autocast may be requested on.
+    assert seen and not any(seen)
+
+
 def test_missing_backbone_config_raises(backbone, dataset, tmp_path):
     req = TrainingRequest(dataset_dir=dataset, task_type="classification", base_model="x",
                           config={"workers": 0}, output_dir=tmp_path)
