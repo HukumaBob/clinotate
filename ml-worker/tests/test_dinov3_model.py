@@ -167,3 +167,24 @@ def test_load_backbone_failure_message_mentions_licence(monkeypatch):
     msg = str(ei.value)
     assert "facebook/dinov3-vits16-pretrain-lvd1689m" in msg
     assert "licence" in msg and "HF_TOKEN" in msg
+
+
+def test_save_checkpoint_extra_keys_include_frozen_tensors(tmp_path):
+    m = _model()
+    m.set_trainable(0)
+    path = tmp_path / "ckpt.pt"
+    extra = ["backbone.model.layer.3.lin.weight", "backbone.norm.weight"]
+    save_checkpoint(path, m, backbone_id="b", class_names=["a", "b", "c"], preprocess={},
+                    extra_keys=extra)
+    state = torch.load(path, map_location="cpu", weights_only=True)["trained_state"]
+    assert set(extra) <= set(state)
+    assert any(k.startswith("head") for k in state)
+    assert not any(k.startswith("backbone.model.layer.0.") for k in state)
+    assert torch.equal(state[extra[0]], m.state_dict()[extra[0]])
+
+
+def test_save_checkpoint_unknown_extra_key_raises(tmp_path):
+    m = _model()
+    with pytest.raises(ValueError):
+        save_checkpoint(tmp_path / "c.pt", m, backbone_id="b", class_names=[], preprocess={},
+                        extra_keys=["nope.weight"])

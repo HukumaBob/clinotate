@@ -14,6 +14,7 @@ register tokens + patch tokens.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterable
 
 import numpy as np
 import torch
@@ -90,11 +91,17 @@ def save_checkpoint(
     backbone_id: str,
     class_names: list[str],
     preprocess: dict,
+    extra_keys: Iterable[str] = (),
 ) -> None:
-    trainable = {n for n, p in model.named_parameters() if p.requires_grad}
-    state = {
-        k: v.detach().cpu().clone() for k, v in model.state_dict().items() if k in trainable
-    }
+    """Save the trainable tensors plus ``extra_keys`` (e.g. tensors inherited from
+    a fine-tune parent that are frozen in this run but differ from the Hub)."""
+    full = model.state_dict()
+    extra = set(extra_keys)
+    unknown = extra - set(full)
+    if unknown:
+        raise ValueError(f"extra_keys not in the model's state_dict: {sorted(unknown)}")
+    keep = {n for n, p in model.named_parameters() if p.requires_grad} | extra
+    state = {k: v.detach().cpu().clone() for k, v in full.items() if k in keep}
     torch.save(
         {
             "backbone_id": backbone_id,

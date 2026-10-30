@@ -85,6 +85,11 @@ def _run(dataset_dir, tmp_path, config=None, *, base_model="stub", should_stop=N
 
 
 def _val_macro_f1(backbone, weights_path, dataset_dir, imgsz=32):
+    return _reevaluate(backbone, weights_path, dataset_dir, imgsz)[0]
+
+
+def _reevaluate(backbone, weights_path, dataset_dir, imgsz=32):
+    """(val macro-F1, mean val CE loss) of a checkpoint loaded onto ``backbone``."""
     samples, names = load_samples(dataset_dir, lambda m: None)
     model = CropClassifier(backbone, len(names))
     load_trained_state(model, weights_path)
@@ -93,10 +98,12 @@ def _val_macro_f1(backbone, weights_path, dataset_dir, imgsz=32):
     x = torch.stack([to_tensor(crop_region(read_rgb(s.image_path), s.bbox, s.polygon,
                                            margin=0.15, mask_mode="none", imgsz=imgsz))
                      for s in val])
+    y = torch.tensor([s.class_id for s in val])
     with torch.no_grad():
-        pred = model(x).argmax(1).numpy()
-    cm = confusion_matrix([s.class_id for s in val], pred, len(names))
-    return summarize(cm, names).macro_f1
+        logits = model(x)
+    loss = torch.nn.functional.cross_entropy(logits, y).item()
+    cm = confusion_matrix(y.numpy(), logits.argmax(1).numpy(), len(names))
+    return summarize(cm, names).macro_f1, loss
 
 
 def test_frozen_run_learns_separable_classes(backbone, dataset, tmp_path):
@@ -267,6 +274,31 @@ def test_fine_tune_with_other_classes_reinitialises_head(backbone, dataset, tmp_
                            sub="b")
     assert result.class_names == ["adenoma", "hyperplastic"]
     assert any("re-initialis" in line for line in logs)
+
+
+def test_frozen_child_of_partial_parent_keeps_inherited_backbone_tensors(
+        backbone, dataset, tmp_path):
+    parent, _, _ = _run(dataset, tmp_path, {"mode": "partial", "unfreeze_blocks": 2,
+                                            "epochs": 2, "backbone_lr": 0.05}, sub="a")
+    child, _, epochs = _run(dataset, tmp_path, {"mode": "frozen", "epochs": 3, "lr": 0.01},
+                            base_model=str(parent.weights_path), sub="b")
+    state = torch.load(child.weights_path, map_location="cpu", weights_only=True)["trained_state"]
+    parent_state = torch.load(parent.weights_path, map_location="cpu",
+                              weights_only=True)["trained_state"]
+    block_keys = {k for k in parent_state if k.startswith("backbone.model.layer.")}
+    assert block_keys and block_keys <= set(state)
+    # A fresh backbone with the pristine base weights, as the Hub would give at inference.
+    torch.manual_seed(123)
+    fresh = FakeBackbone()
+    best = epochs[child.metrics["best_epoch"] - 1][2]
+    f1, loss = _reevaluate(fresh, child.weights_path, dataset)
+    assert f1 == pytest.approx(best["val/macro_f1"])
+    assert loss == pytest.approx(best["val/loss"], rel=1e-5)
+
+
+def test_base_model_neither_file_nor_backbone_is_logged(backbone, dataset, tmp_path):
+    _, logs, _ = _run(dataset, tmp_path, {"epochs": 1}, base_model="facebook/something-else")
+    assert any("base_model is not a file and not the backbone id" in line for line in logs)
 
 
 def test_fine_tune_from_other_backbone_raises(backbone, dataset, tmp_path):

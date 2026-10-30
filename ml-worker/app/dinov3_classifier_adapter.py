@@ -115,7 +115,8 @@ def _generator(seed: int) -> torch.Generator:
     return g
 
 
-def _load_into(model, path: Path, backbone_id: str, class_names, on_log) -> None:
+def _load_into(model, path: Path, backbone_id: str, class_names, on_log) -> set[str]:
+    """Load a parent checkpoint; return the state_dict keys taken from it."""
     ckpt = torch.load(path, map_location="cpu", weights_only=True)
     if ckpt.get("backbone_id") != backbone_id:
         raise RuntimeError(
@@ -124,13 +125,14 @@ def _load_into(model, path: Path, backbone_id: str, class_names, on_log) -> None
         )
     if list(ckpt.get("class_names", [])) == list(class_names):
         dinov3_model.load_trained_state(model, path)
-        return
+        return set(ckpt["trained_state"])
     state = {k: v for k, v in ckpt["trained_state"].items() if not k.startswith("head.")}
     result = model.load_state_dict(state, strict=False)
     if result.unexpected_keys:
         raise RuntimeError(f"Checkpoint has keys the model does not: {sorted(result.unexpected_keys)}")
     on_log("Parent checkpoint has different classes "
            f"({ckpt.get('class_names')} vs {list(class_names)}): head re-initialised")
+    return set(state)
 
 
 def _param_groups(model: CropClassifier, cfg) -> list[dict]:
@@ -188,8 +190,14 @@ class Dinov3ClassifierAdapter:
         use_amp = bool(cfg["amp"]) and device.type == "cuda"
         model = CropClassifier(_load_backbone(cfg["backbone"]), n, dropout=float(cfg["dropout"]))
         base = Path(request.base_model) if request.base_model else None
+        # Tensors inherited from a parent must be saved even if frozen in this run:
+        # at inference the rest of the backbone comes from the Hub.
+        inherited: set[str] = set()
         if base is not None and base.is_file():
-            _load_into(model, base, cfg["backbone"], class_names, on_log)
+            inherited = _load_into(model, base, cfg["backbone"], class_names, on_log)
+        elif request.base_model and request.base_model != cfg["backbone"]:
+            on_log("base_model is not a file and not the backbone id; "
+                   "starting from the Hub backbone")
         partial = cfg["mode"] == "partial"
         model.set_trainable(int(cfg["unfreeze_blocks"]) if partial else 0)
         model.to(device)
@@ -276,7 +284,8 @@ class Dinov3ClassifierAdapter:
 
         def save():
             save_checkpoint(best_path, model, backbone_id=cfg["backbone"],
-                            class_names=class_names, preprocess=preprocess)
+                            class_names=class_names, preprocess=preprocess,
+                            extra_keys=inherited)
 
         for epoch in range(1, epochs + 1):
             if partial:
@@ -288,7 +297,8 @@ class Dinov3ClassifierAdapter:
             for x, y in train_loader:
                 x, y = x.to(device), y.to(device)
                 optimizer.zero_grad(set_to_none=True)
-                with _autocast(device, use_amp):
+                # Head-only training stays fp32: GradScaler is off in frozen mode.
+                with _autocast(device, use_amp and partial):
                     loss = loss_fn(forward(x).float(), y)
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
