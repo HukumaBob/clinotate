@@ -161,6 +161,8 @@ describe("curves", () => {
   it("defaults to a known headline key when present, else the first key, else null", () => {
     expect(defaultCurveKey(["val/box_loss", "metrics/mAP50(B)"])).toBe("metrics/mAP50(B)");
     expect(defaultCurveKey(["metrics/accuracy_top1", "x"])).toBe("metrics/accuracy_top1");
+    expect(defaultCurveKey(["train/loss", "val/macro_f1"])).toBe("val/macro_f1");
+    expect(defaultCurveKey(["val/macro_f1", "metrics/mAP50(B)"])).toBe("metrics/mAP50(B)");
     expect(defaultCurveKey(["ap_50"])).toBe("ap_50");
     expect(defaultCurveKey([])).toBeNull();
   });

@@ -26,7 +26,17 @@ export interface TrainConfigValues {
   name: string;
   note: string;
   settings: Record<string, number | boolean | string>;
+  adapter: string;
 }
+
+export interface AdapterOption {
+  id: string;
+  label: string;
+  supported: boolean;
+}
+
+/** The adapter a run uses unless another one is chosen. */
+export const DEFAULT_ADAPTER = "ultralytics_yolo";
 
 interface TrainConfigFormProps {
   dataset: DatasetOption | null;
@@ -34,6 +44,11 @@ interface TrainConfigFormProps {
   onSubmit: (values: TrainConfigValues) => void;
   baseModels?: BaseModelOption[];
   baseModelsError?: string | null;
+  // The model families on offer for this dataset, and the chosen one.
+  adapters?: AdapterOption[];
+  adapter?: string;
+  adaptersError?: string | null;
+  onAdapterChange?: (id: string) => void;
   settingsSchema?: SettingsSchema | null;
   settingsSchemaError?: string | null;
   // Settings and base model of an earlier run, applied once per nonce.
@@ -52,6 +67,14 @@ const optionText = (option: BaseModelOption) => {
   return option.note ? `${name} — ${option.note}` : name;
 };
 
+// Named after the weights family the catalog reports, never per adapter id.
+const FAMILY_NAMES: Record<string, string> = { yolo11: "YOLO11", dinov3: "DINOv3" };
+
+const pretrainedGroupLabel = (options: BaseModelOption[]) => {
+  const family = options.find((option) => option.kind === "pretrained")?.family;
+  return family && FAMILY_NAMES[family] ? `Pretrained (${FAMILY_NAMES[family]})` : "Pretrained";
+};
+
 const firstPretrainedKey = (options: BaseModelOption[]) => {
   const first = options.find((option) => option.kind === "pretrained");
   return first ? keyOf(first) : "";
@@ -63,6 +86,10 @@ export function TrainConfigForm({
   onSubmit,
   baseModels = [],
   baseModelsError = null,
+  adapters = [],
+  adapter = DEFAULT_ADAPTER,
+  adaptersError = null,
+  onAdapterChange,
   settingsSchema = null,
   settingsSchemaError = null,
   prefill = null,
@@ -140,6 +167,7 @@ export function TrainConfigForm({
       name: name.trim(),
       note: note.trim(),
       settings: changedSettings(settingsSchema, values),
+      adapter,
     });
   }
 
@@ -152,6 +180,31 @@ export function TrainConfigForm({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
+            <label htmlFor="train-adapter" className={fieldLabel}>
+              Model family
+            </label>
+            <select
+              id="train-adapter"
+              aria-label="Model family"
+              className={`h-8 ${control}`}
+              value={adapter}
+              disabled={adapters.length === 0}
+              onChange={(e) => onAdapterChange?.(e.target.value)}
+            >
+              {adapters.map((option) => (
+                <option key={option.id} value={option.id} disabled={!option.supported}>
+                  {option.supported
+                    ? option.label
+                    : `${option.label} (not available for ${
+                        dataset ? `${dataset.taskType} datasets` : "this dataset"
+                      })`}
+                </option>
+              ))}
+            </select>
+            {adaptersError && <p className="text-[13px] text-red-300">{adaptersError}</p>}
+          </div>
+
+          <div className="flex flex-col gap-1">
             <label htmlFor="train-base-model" className={fieldLabel}>
               Base model
             </label>
@@ -163,7 +216,7 @@ export function TrainConfigForm({
               aria-describedby={baseKey.startsWith("version:") ? "train-base-model-help" : undefined}
               onChange={(e) => setBaseKey(e.target.value)}
             >
-              <optgroup label="Pretrained (YOLO11)">
+              <optgroup label={pretrainedGroupLabel(baseModels)}>
                 {pretrainedOptions.map((option) => (
                   <option key={keyOf(option)} value={keyOf(option)}>
                     {optionText(option)}

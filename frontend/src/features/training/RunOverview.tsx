@@ -26,6 +26,9 @@ const DETECTION_CARDS: Array<[string, string]> = [
   ["mAP50", "metrics/mAP50(B)"],
   ["mAP50-95", "metrics/mAP50-95(B)"],
   ["Fitness", "fitness"],
+  ["macro-F1", "val/macro_f1"],
+  ["Balanced accuracy", "val/balanced_accuracy"],
+  ["Accuracy", "val/accuracy"],
 ];
 const CLASSIFICATION_CARDS: Array<[string, string]> = [
   ["Top-1", "metrics/accuracy_top1"],

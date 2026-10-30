@@ -190,6 +190,83 @@ describe("TrainConfigForm", () => {
       name: "big frames",
       note: "try 800 px",
       settings: { epochs: 25 },
+      adapter: "ultralytics_yolo",
+    });
+  });
+
+  describe("model family", () => {
+    const adapters = [
+      { id: "ultralytics_yolo", label: "YOLO11", supported: true },
+      { id: "dinov3_classifier", label: "DINOv3 crop classifier", supported: false },
+    ];
+    const dino = (size: string): BaseModelOption => ({
+      kind: "pretrained",
+      weights: `dinov3_vit${size}`,
+      label: `dinov3_vit${size}`,
+      family: "dinov3",
+      size,
+      note: null,
+      model_version_id: null,
+    });
+
+    it("lists the adapters and disables the unsupported ones with the reason", () => {
+      render(
+        <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+          baseModels={baseModels} settingsSchema={settingsSchemaFixture}
+          adapters={adapters} adapter="ultralytics_yolo" />,
+      );
+      const select = screen.getByLabelText("Model family");
+      expect(within(select).getByRole("option", { name: "YOLO11" })).toBeEnabled();
+      expect(
+        within(select).getByRole("option", {
+          name: "DINOv3 crop classifier (not available for detection datasets)",
+        }),
+      ).toBeDisabled();
+    });
+
+    it("reports a change of family through onAdapterChange", async () => {
+      const user = userEvent.setup();
+      const onAdapterChange = vi.fn();
+      render(
+        <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+          baseModels={baseModels} settingsSchema={settingsSchemaFixture}
+          adapters={[adapters[0], { ...adapters[1], supported: true }]}
+          adapter="ultralytics_yolo" onAdapterChange={onAdapterChange} />,
+      );
+      await user.selectOptions(screen.getByLabelText("Model family"), "dinov3_classifier");
+      expect(onAdapterChange).toHaveBeenCalledWith("dinov3_classifier");
+    });
+
+    it("labels the pretrained group by the family of its options", () => {
+      render(
+        <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+          baseModels={[dino("s"), dino("b")]} settingsSchema={settingsSchemaFixture}
+          adapters={adapters} adapter="dinov3_classifier" />,
+      );
+      expect(screen.getByRole("group", { name: "Pretrained (DINOv3)" })).toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: /yolo11/i })).not.toBeInTheDocument();
+    });
+
+    it("submits the selected adapter", async () => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      render(
+        <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={onSubmit}
+          baseModels={[dino("s")]} settingsSchema={settingsSchemaFixture}
+          adapters={adapters} adapter="dinov3_classifier" />,
+      );
+      await user.click(screen.getByRole("button", { name: /start training/i }));
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ adapter: "dinov3_classifier" }));
+    });
+
+    it("shows an adapters error without blocking the form", () => {
+      render(
+        <TrainConfigForm dataset={datasets[0]} disabled={false} onSubmit={vi.fn()}
+          baseModels={baseModels} settingsSchema={settingsSchemaFixture}
+          adaptersError="Could not load model families." />,
+      );
+      expect(screen.getByText("Could not load model families.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled();
     });
   });
 

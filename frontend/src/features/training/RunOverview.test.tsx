@@ -56,6 +56,17 @@ describe("RunOverview", () => {
     vi.mocked(apiClient.GET).mockReset().mockResolvedValue({ data: metricsBody } as never);
   });
 
+  it("shows macro-F1 and the other classifier scores for a run without mAP50", () => {
+    renderOverview({
+      adapter: "dinov3_classifier",
+      metrics: { "val/macro_f1": 0.7123, "val/balanced_accuracy": 0.8, "val/accuracy": 0.9, "val/loss": 0.3 },
+    });
+    expect(screen.getByText("macro-F1")).toBeInTheDocument();
+    expect(screen.getByText("0.712")).toBeInTheDocument();
+    expect(screen.getByText("Balanced accuracy")).toBeInTheDocument();
+    expect(screen.getByText("Accuracy")).toBeInTheDocument();
+  });
+
   it("shows result cards with 3 decimals and the full value in a title", () => {
     renderOverview();
     const results = screen.getByRole("region", { name: "Results" });

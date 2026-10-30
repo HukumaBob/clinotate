@@ -11,6 +11,8 @@ type TrainingRunRead = components["schemas"]["TrainingRunRead"];
  * neither, so we fall back to the first numeric entry in `metrics` and
  * label it with its own key -- never a hardcoded name next to a dash,
  * which would misattribute a metric the trainer never produced. */
+const MACRO_F1_KEY = "val/macro_f1";
+
 export function headlineScore(
   taskType: string,
   metrics: Record<string, unknown>,
@@ -21,6 +23,11 @@ export function headlineScore(
     : metrics["metrics/mAP50(B)"] ?? metrics["mAP50"];
   if (typeof raw === "number") {
     return { label: isClassification ? "top-1" : "mAP50", value: raw.toFixed(3) };
+  }
+  // Crop classifiers (DINOv3) report macro-F1, which is robust to class imbalance.
+  const macroF1 = metrics[MACRO_F1_KEY];
+  if (typeof macroF1 === "number") {
+    return { label: "macro-F1", value: macroF1.toFixed(3) };
   }
   const fallback = Object.entries(metrics).find(([, value]) => typeof value === "number");
   if (fallback) {
@@ -35,7 +42,9 @@ export function headlineValue(taskType: string, metrics: Record<string, unknown>
     taskType === "classification"
       ? (metrics["metrics/accuracy_top1"] ?? metrics["accuracy_top1"])
       : (metrics["metrics/mAP50(B)"] ?? metrics["mAP50"]);
-  return typeof raw === "number" ? raw : null;
+  if (typeof raw === "number") return raw;
+  const macroF1 = metrics[MACRO_F1_KEY];
+  return typeof macroF1 === "number" ? macroF1 : null;
 }
 
 export function formatDuration(

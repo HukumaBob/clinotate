@@ -15,7 +15,9 @@ import {
 import { RunsTable } from "./RunsTable";
 import type { SettingsSchema, SettingsValues } from "./settingsLogic";
 import {
+  DEFAULT_ADAPTER,
   TrainConfigForm,
+  type AdapterOption,
   type DatasetOption,
   type TrainConfigValues,
 } from "./TrainConfigForm";
@@ -34,6 +36,19 @@ interface Prefill {
   values: SettingsValues;
 }
 
+// A repeat request keeps the raw config: the values can only be derived once
+// the settings schema of the run's own adapter has loaded.
+interface RepeatRequest {
+  nonce: number;
+  adapter: string;
+  baseKey: string;
+  config: Record<string, unknown>;
+}
+
+const FALLBACK_ADAPTERS: AdapterOption[] = [
+  { id: DEFAULT_ADAPTER, label: "YOLO11", supported: true },
+];
+
 export function TrainPage() {
   const [url, update] = useTrainUrl();
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
@@ -49,7 +64,14 @@ export function TrainPage() {
   const [submitPending, setSubmitPending] = useState(false);
   const [stopPending, setStopPending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [prefill, setPrefill] = useState<Prefill | null>(null);
+  const [repeatRequest, setRepeatRequest] = useState<RepeatRequest | null>(null);
+  const [adapters, setAdapters] = useState<AdapterOption[]>([]);
+  const [adaptersError, setAdaptersError] = useState<string | null>(null);
+  const [adapter, setAdapter] = useState(DEFAULT_ADAPTER);
+  // The dataset whose adapters have been answered; the catalog and the schema
+  // wait for it, so they are never requested with an adapter the dataset
+  // does not support.
+  const [adaptersReadyFor, setAdaptersReadyFor] = useState<number | null>(null);
   const [clearSignal, setClearSignal] = useState(0);
   const nonceRef = useRef(0);
 
@@ -89,18 +111,20 @@ export function TrainPage() {
   // an earlier dataset would otherwise leave a wrong-task-type catalog selectable.
   const baseModelsRequestRef = useRef(0);
   const baseModelsDatasetRef = useRef<number | null>(null);
+  const baseModelsAdapterRef = useRef(DEFAULT_ADAPTER);
 
   const loadBaseModels = useCallback(
-    async (datasetId: number, reset = true) => {
+    async (datasetId: number, adapterId: string, reset = true) => {
       const requestId = ++baseModelsRequestRef.current;
       baseModelsDatasetRef.current = datasetId;
+      baseModelsAdapterRef.current = adapterId;
       if (reset) {
         setBaseModels([]);
       }
       setBaseModelsError(null);
       try {
         const { data, error } = await apiClient.GET("/training/base-models", {
-          params: { query: { dataset_id: datasetId } },
+          params: { query: { dataset_id: datasetId, adapter: adapterId } },
         });
         if (requestId !== baseModelsRequestRef.current) {
           return;
@@ -122,13 +146,13 @@ export function TrainPage() {
   // Same newest-request-wins rule as the catalog.
   const settingsSchemaRequestRef = useRef(0);
 
-  const loadSettingsSchema = useCallback(async (datasetId: number) => {
+  const loadSettingsSchema = useCallback(async (datasetId: number, adapterId: string) => {
     const requestId = ++settingsSchemaRequestRef.current;
     setSettingsSchema(null);
     setSettingsSchemaError(null);
     try {
       const { data, error } = await apiClient.GET("/training/settings-schema", {
-        params: { query: { dataset_id: datasetId } },
+        params: { query: { dataset_id: datasetId, adapter: adapterId } },
       });
       if (requestId !== settingsSchemaRequestRef.current) {
         return;
@@ -145,11 +169,50 @@ export function TrainPage() {
     }
   }, []);
 
+  // Same newest-request-wins rule for the model families of a dataset.
+  const adaptersRequestRef = useRef(0);
+
+  const loadAdapters = useCallback(async (datasetId: number) => {
+    const requestId = ++adaptersRequestRef.current;
+    // Drop what belongs to the previous dataset until its answer arrives.
+    baseModelsRequestRef.current++;
+    settingsSchemaRequestRef.current++;
+    setBaseModels([]);
+    setSettingsSchema(null);
+    setAdaptersError(null);
+    let list = FALLBACK_ADAPTERS;
+    try {
+      const { data, error } = await apiClient.GET("/training/adapters", {
+        params: { query: { dataset_id: datasetId } },
+      });
+      if (requestId !== adaptersRequestRef.current) {
+        return;
+      }
+      if (error || !data || data.length === 0) {
+        setAdaptersError("Could not load model families.");
+      } else {
+        list = data;
+      }
+    } catch {
+      if (requestId !== adaptersRequestRef.current) {
+        return;
+      }
+      setAdaptersError("Could not load model families.");
+    }
+    setAdapters(list);
+    setAdapter((current) =>
+      list.some((option) => option.id === current && option.supported)
+        ? current
+        : (list.find((option) => option.supported)?.id ?? current),
+    );
+    setAdaptersReadyFor(datasetId);
+  }, []);
+
   // The catalog's "Your models" group mirrors the models; reload without
   // clearing so a still-valid selection survives.
   const refreshCatalog = useCallback(() => {
     if (baseModelsDatasetRef.current !== null) {
-      void loadBaseModels(baseModelsDatasetRef.current, false);
+      void loadBaseModels(baseModelsDatasetRef.current, baseModelsAdapterRef.current, false);
     }
   }, [loadBaseModels]);
 
@@ -180,13 +243,20 @@ export function TrainPage() {
     }
   }, [datasets, selectedDatasetId, update]);
 
-  // The catalog and the settings schema depend on the dataset (task type).
+  // The model families depend on the dataset (task type).
   useEffect(() => {
     if (selectedDatasetId !== null) {
-      void loadBaseModels(selectedDatasetId);
-      void loadSettingsSchema(selectedDatasetId);
+      void loadAdapters(selectedDatasetId);
     }
-  }, [selectedDatasetId, loadBaseModels, loadSettingsSchema]);
+  }, [selectedDatasetId, loadAdapters]);
+
+  // The catalog and the settings schema depend on the dataset and the family.
+  useEffect(() => {
+    if (selectedDatasetId !== null && adaptersReadyFor === selectedDatasetId) {
+      void loadBaseModels(selectedDatasetId, adapter);
+      void loadSettingsSchema(selectedDatasetId, adapter);
+    }
+  }, [selectedDatasetId, adaptersReadyFor, adapter, loadBaseModels, loadSettingsSchema]);
 
   async function handleSubmit(values: TrainConfigValues) {
     setSubmitError(null);
@@ -201,6 +271,7 @@ export function TrainPage() {
           ...(values.name ? { name: values.name } : {}),
           ...(values.note ? { note: values.note } : {}),
           settings: values.settings,
+          adapter: values.adapter,
         },
       });
       if (error) {
@@ -271,18 +342,46 @@ export function TrainPage() {
 
   // "Repeat with changes" is only offered on rows of the selected dataset, so
   // the loaded catalog and schema already belong to it.
+  // A run of another model family switches the family first; the old
+  // family's catalog and schema are dropped so the form waits for the new ones.
   function handleRepeat(run: TrainingRunRead) {
-    setPrefill({
+    if (run.adapter !== adapter) {
+      baseModelsRequestRef.current++;
+      settingsSchemaRequestRef.current++;
+      setBaseModels([]);
+      setSettingsSchema(null);
+      setAdapter(run.adapter);
+    }
+    setRepeatRequest({
       nonce: ++nonceRef.current,
+      adapter: run.adapter,
       baseKey: baseKeyFromRun(run),
-      values: settingsSchema
-        ? valuesFromConfig(
-            settingsSchema,
-            run.config as Record<string, unknown>,
-          )
-        : {},
+      config: run.config as Record<string, unknown>,
     });
     update({ tab: "new" });
+  }
+
+  const prefill = useMemo<Prefill | null>(
+    () =>
+      repeatRequest
+        ? {
+            nonce: repeatRequest.nonce,
+            baseKey: repeatRequest.baseKey,
+            values: settingsSchema
+              ? valuesFromConfig(settingsSchema, repeatRequest.config)
+              : {},
+          }
+        : null,
+    [repeatRequest, settingsSchema],
+  );
+
+  function handleAdapterChange(id: string) {
+    if (id === adapter) return;
+    baseModelsRequestRef.current++;
+    settingsSchemaRequestRef.current++;
+    setBaseModels([]);
+    setSettingsSchema(null);
+    setAdapter(id);
   }
 
   // The runs list does not poll; the polled active run is fresher for its own
@@ -470,6 +569,10 @@ export function TrainPage() {
           onSubmit={handleSubmit}
           baseModels={baseModels}
           baseModelsError={baseModelsError}
+          adapters={adapters}
+          adapter={adapter}
+          adaptersError={adaptersError}
+          onAdapterChange={handleAdapterChange}
           settingsSchema={settingsSchema}
           settingsSchemaError={settingsSchemaError}
           prefill={prefill}

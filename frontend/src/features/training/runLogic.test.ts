@@ -35,6 +35,13 @@ describe("headline metric", () => {
     });
   });
 
+  it("falls back to val/macro_f1 (labelled macro-F1) when no mAP50 or top-1 exists", () => {
+    const metrics = { "train/loss": 0.4, "val/macro_f1": 0.71234 };
+    expect(headlineScore("detection", metrics)).toEqual({ label: "macro-F1", value: "0.712" });
+    expect(headlineValue("detection", metrics)).toBe(0.71234);
+    expect(headlineScore("detection", { "metrics/mAP50(B)": 0.5, "val/macro_f1": 0.9 }).label).toBe("mAP50");
+  });
+
   it("falls back to the first numeric entry with its own key, and to a dash", () => {
     expect(headlineScore("detection", { ap_50: 0.4 })).toEqual({ label: "ap_50", value: "0.400" });
     expect(headlineScore("detection", {})).toEqual({ label: "", value: "—" });

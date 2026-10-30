@@ -32,7 +32,7 @@ export interface Confusion {
 }
 
 const MISSING = "—";
-const HEADLINE_KEYS = ["metrics/mAP50(B)", "mAP50", "metrics/accuracy_top1", "accuracy_top1"];
+const HEADLINE_KEYS = ["metrics/mAP50(B)", "mAP50", "metrics/accuracy_top1", "accuracy_top1", "val/macro_f1"];
 
 function isNum(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);

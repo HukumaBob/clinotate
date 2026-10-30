@@ -22,6 +22,18 @@ describe("ConfusionMatrix", () => {
     expect(screen.getAllByText("background").length).toBeGreaterThan(0);
   });
 
+  it("renders a matrix that has no background label", () => {
+    render(
+      <ConfusionMatrix
+        confusion={{ labels: ["adenoma", "hyperplastic"], matrix: [[7, 1], [2, 9]] }}
+      />,
+    );
+
+    expect(document.querySelectorAll("[data-cell]")).toHaveLength(4);
+    expect(screen.getAllByText("adenoma").length).toBeGreaterThan(0);
+    expect(screen.queryByText("background")).not.toBeInTheDocument();
+  });
+
   it("renders nothing when there is no matrix", () => {
     const { container } = render(<ConfusionMatrix confusion={null} />);
 

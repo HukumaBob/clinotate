@@ -37,6 +37,15 @@ const catalog = [
   { kind: "pretrained", weights: "yolo11s.pt", label: "yolo11s.pt", family: "yolo11", size: "s", note: null, model_version_id: null },
 ];
 
+const adapterList = (dinoSupported = true) => [
+  { id: "ultralytics_yolo", label: "YOLO11", supported: true },
+  { id: "dinov3_classifier", label: "DINOv3 crop classifier", supported: dinoSupported },
+];
+
+const dinoCatalog = [
+  { kind: "pretrained", weights: "dinov3_vits16", label: "dinov3_vits16", family: "dinov3", size: "s", note: null, model_version_id: null },
+];
+
 interface World {
   datasets: unknown[];
   runs: Record<number, unknown[]>;
@@ -44,6 +53,7 @@ interface World {
   runDetail: (id: number) => unknown;
   catalog: unknown[];
   history: unknown[];
+  adapters: (datasetId: number) => unknown[];
 }
 
 let world: World;
@@ -66,8 +76,12 @@ function installMock() {
         return { data: { metrics: {}, history: world.history, per_class: [], confusion: null } };
       case "/training/runs/{run_id}/log":
         return { data: { text: "", offset: 0, status: "running" } };
-      case "/training/base-models":
-        return { data: world.catalog };
+      case "/training/adapters":
+        return { data: world.adapters(opts?.params?.query?.dataset_id as number) };
+      case "/training/base-models": {
+        const adapter = opts?.params?.query?.adapter;
+        return { data: adapter === "dinov3_classifier" ? dinoCatalog : world.catalog };
+      }
       case "/training/settings-schema":
         return { data: settingsSchemaFixture };
       case "/training/models":
@@ -122,6 +136,7 @@ describe("TrainPage", () => {
       runDetail: (id) => runRow({ id }),
       catalog,
       history: [],
+      adapters: () => adapterList(),
     };
     installMock();
   });
@@ -197,7 +212,7 @@ describe("TrainPage", () => {
     await waitFor(() => expect(getCalls("/training/base-models")).toHaveLength(2));
     expect(getCalls("/training/settings-schema")).toHaveLength(2);
     expect(vi.mocked(apiClient.GET)).toHaveBeenCalledWith("/training/base-models", {
-      params: { query: { dataset_id: 497 } },
+      params: { query: { dataset_id: 497, adapter: "ultralytics_yolo" } },
     });
   });
 
@@ -228,6 +243,7 @@ describe("TrainPage", () => {
         name: "big frames",
         note: "try 800 px",
         settings: { epochs: 25 },
+        adapter: "ultralytics_yolo",
       });
     });
 
@@ -245,6 +261,7 @@ describe("TrainPage", () => {
         dataset_id: 496,
         base_model_version_id: 7,
         settings: {},
+        adapter: "ultralytics_yolo",
       });
     });
 
@@ -662,6 +679,107 @@ describe("TrainPage", () => {
     });
   });
 
+  describe("model family", () => {
+    const queryOf = (call: unknown[]) =>
+      (call[1] as { params: { query: Record<string, unknown> } }).params.query;
+
+    async function openNew(entry = "/train?dataset=496&tab=new") {
+      renderPage(entry);
+      await screen.findByLabelText("Model family");
+      await waitFor(() => expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled());
+    }
+
+    it("loads the adapters of the selected dataset and starts on the default one", async () => {
+      await openNew();
+      expect(getCalls("/training/adapters")).toHaveLength(1);
+      expect(queryOf(getCalls("/training/adapters")[0])).toEqual({ dataset_id: 496 });
+      expect(screen.getByLabelText("Model family")).toHaveValue("ultralytics_yolo");
+      expect(queryOf(getCalls("/training/base-models")[0])).toEqual({ dataset_id: 496, adapter: "ultralytics_yolo" });
+    });
+
+    it("refetches the base models and the settings schema with the chosen adapter and submits it", async () => {
+      vi.mocked(apiClient.POST).mockResolvedValue({ data: { id: 9, status: "pending" }, error: undefined } as never);
+      await openNew();
+      fireEvent.change(screen.getByLabelText("Model family"), { target: { value: "dinov3_classifier" } });
+      await waitFor(() => expect(getCalls("/training/base-models")).toHaveLength(2));
+      expect(queryOf(getCalls("/training/base-models")[1])).toEqual({ dataset_id: 496, adapter: "dinov3_classifier" });
+      await waitFor(() => expect(getCalls("/training/settings-schema")).toHaveLength(2));
+      expect(queryOf(getCalls("/training/settings-schema")[1])).toEqual({ dataset_id: 496, adapter: "dinov3_classifier" });
+      expect(await screen.findByRole("group", { name: "Pretrained (DINOv3)" })).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled());
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /start training/i }));
+      });
+      expect(vi.mocked(apiClient.POST).mock.calls[0][1]!.body).toEqual({
+        dataset_id: 496,
+        base_model: "dinov3_vits16",
+        settings: {},
+        adapter: "dinov3_classifier",
+      });
+    });
+
+    it("resets to the first supported adapter when the new dataset does not support the chosen one", async () => {
+      world.adapters = (id) => adapterList(id === 496);
+      await openNew();
+      fireEvent.change(screen.getByLabelText("Model family"), { target: { value: "dinov3_classifier" } });
+      await waitFor(() => expect(getCalls("/training/base-models")).toHaveLength(2));
+      fireEvent.change(screen.getByLabelText("Dataset"), { target: { value: "497" } });
+      await waitFor(() => expect(screen.getByLabelText("Model family")).toHaveValue("ultralytics_yolo"));
+      await waitFor(() => expect(getCalls("/training/base-models")).toHaveLength(3));
+      expect(queryOf(getCalls("/training/base-models")[2])).toEqual({ dataset_id: 497, adapter: "ultralytics_yolo" });
+      expect(
+        screen.getByRole("option", { name: "DINOv3 crop classifier (not available for detection datasets)" }),
+      ).toBeDisabled();
+    });
+
+    it("keeps the latest dataset's adapters when responses arrive out of order", async () => {
+      const resolvers: Record<number, (v: unknown) => void> = {};
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: { params?: { query?: Record<string, unknown> } }) => {
+        if (path === "/training/adapters") {
+          const id = opts!.params!.query!.dataset_id as number;
+          return new Promise((resolve) => {
+            resolvers[id] = resolve;
+          });
+        }
+        return installMockResult(path, opts);
+      }) as never);
+      renderPage("/train?dataset=496&tab=new");
+      await waitFor(() => expect(resolvers[496]).toBeDefined());
+      fireEvent.change(screen.getByLabelText("Dataset"), { target: { value: "497" } });
+      await waitFor(() => expect(resolvers[497]).toBeDefined());
+      await act(async () => {
+        resolvers[497]({ data: [{ id: "ultralytics_yolo", label: "Family two", supported: true }] });
+      });
+      await act(async () => {
+        resolvers[496]({ data: [{ id: "ultralytics_yolo", label: "Family one", supported: true }] });
+      });
+      expect(screen.getByRole("option", { name: "Family two" })).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: "Family one" })).not.toBeInTheDocument();
+    });
+
+    it("falls back to a single YOLO option with an inline error when the adapters request fails", async () => {
+      vi.mocked(apiClient.GET).mockImplementation((async (path: string, opts?: unknown) => {
+        if (path === "/training/adapters") throw new Error("network down");
+        return installMockResult(path, opts);
+      }) as never);
+      renderPage("/train?dataset=496&tab=new");
+      expect(await screen.findByText("Could not load model families.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Model family").querySelectorAll("option")).toHaveLength(1);
+      await waitFor(() => expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled());
+    });
+
+    it("repeat with changes on a run of another family switches the family first", async () => {
+      world.runs[496] = [
+        runRow({ adapter: "dinov3_classifier", base_model: "dinov3_vits16", config: { epochs: 30 } }),
+      ];
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Repeat run 5 with changes" }));
+      await waitFor(() => expect(screen.getByLabelText("Model family")).toHaveValue("dinov3_classifier"));
+      await waitFor(() => expect(screen.getByLabelText("Epochs")).toHaveValue(30));
+      expect(screen.getByLabelText(/base model/i)).toHaveValue("pretrained:dinov3_vits16");
+    });
+  });
+
   describe("base models and settings schema", () => {
     it("keeps the latest dataset's catalog when responses arrive out of order", async () => {
       const resolvers: Record<number, (v: unknown) => void> = {};
@@ -783,6 +901,8 @@ function installMockResult(path: string, opts?: unknown) {
       if (query.dataset_id !== undefined) return { data: world.runs[query.dataset_id as number] ?? [] };
       return { data: world.running ? [world.running] : [] };
     }
+    case "/training/adapters":
+      return { data: world.adapters((opts as { params: { query: { dataset_id: number } } }).params.query.dataset_id) };
     case "/training/base-models":
       return { data: world.catalog };
     case "/training/settings-schema":
