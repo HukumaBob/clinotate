@@ -436,6 +436,13 @@ export function TrainPage() {
     .map((id) => liveRuns.find((run) => run.id === id))
     .filter((run): run is TrainingRunRead => run !== undefined);
   const showCompare = url.compareOpen && validCompareIds.length >= 2;
+  // The loaded schema belongs to the form's family; a run of another family
+  // would be labelled and diffed against the wrong defaults, so it gets the
+  // raw settings list instead.
+  const compareSchema = compareRuns.every((run) => run.adapter === adapter)
+    ? settingsSchema
+    : null;
+  const openRunSchema = openRun?.adapter === adapter ? settingsSchema : null;
 
   function handleToggleCompare(id: number) {
     // Ticking never opens the view; it also drops a latent cmp from the link.
@@ -510,7 +517,7 @@ export function TrainPage() {
           {showCompare ? (
             <CompareView
               runs={compareRuns}
-              schema={settingsSchema}
+              schema={compareSchema}
               onBack={() => update({ compareOpen: false })}
               onRemove={handleRemoveCompare}
             />
@@ -520,7 +527,7 @@ export function TrainPage() {
               view={url.view}
               onViewChange={(view) => update({ view })}
               onBack={() => update({ run: null, view: "overview" })}
-              schema={settingsSchema}
+              schema={openRunSchema}
               onRepeat={handleRepeat}
               onDeleteRun={handleDeleteRun}
               onChanged={() => {

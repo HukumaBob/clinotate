@@ -24,6 +24,7 @@ const datasetRow = (id: number, name: string, exported = true) => ({
 
 const runRow = (over: Record<string, unknown> = {}) => ({
   id: 5, dataset_id: 496, status: "succeeded", task_type: "detection", name: "first try", note: null,
+  adapter: "ultralytics_yolo",
   base_model: "yolo11n.pt", base_model_version_id: null, model_version_id: null,
   config: { imgsz: 640, batch: 4, epochs: 30 }, metrics: { "metrics/mAP50(B)": 0.5 },
   started_at: "2026-10-09T10:00:00Z", finished_at: "2026-10-09T10:01:05Z",
@@ -463,6 +464,45 @@ describe("TrainPage", () => {
     });
     expect(screen.queryByText("stale run")).not.toBeInTheDocument();
     expect(screen.getByText("other run")).toBeInTheDocument();
+  });
+
+  describe("settings schema of a run from another family", () => {
+    it("renders a same-family run against the form's schema", async () => {
+      renderPage();
+      await screen.findByRole("table");
+      fireEvent.click(openRow(5));
+      expect(await screen.findByText("Changed settings")).toBeInTheDocument();
+    });
+
+    it("falls back to the raw settings list for a run of a different family", async () => {
+      world.runs[496] = [runRow({ adapter: "dinov3_classifier", base_model: "dinov3_vits16" })];
+      renderPage();
+      await screen.findByRole("table");
+      fireEvent.click(openRow(5));
+      await screen.findByRole("button", { name: /← Runs/ });
+      expect(screen.queryByText("Changed settings")).not.toBeInTheDocument();
+    });
+
+    it("compares a mixed-family pair without the form's schema", async () => {
+      world.runs[496] = [
+        runRow({ id: 268, name: "alpha", config: { epochs: 30 } }),
+        runRow({ id: 199, name: "beta", adapter: "dinov3_classifier", config: { epochs: 20 } }),
+      ];
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      await screen.findByRole("heading", { name: "Comparing #268 alpha, #199 beta" });
+      expect(await screen.findByRole("rowheader", { name: "epochs" })).toBeInTheDocument();
+      expect(screen.queryByRole("rowheader", { name: "Epochs" })).not.toBeInTheDocument();
+    });
+
+    it("compares a same-family pair with the form's schema labels", async () => {
+      world.runs[496] = [
+        runRow({ id: 268, name: "alpha", config: { epochs: 30 } }),
+        runRow({ id: 199, name: "beta", config: { epochs: 20 } }),
+      ];
+      renderPage("/train?dataset=496&compare=268,199&cmp=1");
+      await screen.findByRole("heading", { name: "Comparing #268 alpha, #199 beta" });
+      expect(await screen.findByRole("rowheader", { name: "Epochs" })).toBeInTheDocument();
+    });
   });
 
   describe("run comparison", () => {
