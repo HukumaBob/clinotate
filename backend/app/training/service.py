@@ -22,8 +22,6 @@ from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
 
 logger = logging.getLogger(__name__)
 
-ADAPTER_NAME = catalog.YOLO_ADAPTER
-
 ACTIVE_STATUSES = (TrainingRunStatus.PENDING, TrainingRunStatus.RUNNING)
 
 

@@ -52,8 +52,10 @@ selected, not as an afterthought once code lands (see ROADMAP.md).
 - DINOv2 / DINOv3 — Meta AI
   https://github.com/facebookresearch/dinov2
   Licensed under the Apache License, Version 2.0 (DINOv2) /
-  DINOv3 License (Meta custom licence, last updated 2025-08-19: royalty-free,
-  commercial use permitted; redistribution must carry the licence text, use
-  must comply with trade controls, and publications must acknowledge use of
-  the DINO Materials; Meta may amend the terms) —
+  DINOv3 License (Meta custom licence). The following is only a summary of
+  the licence dated 2025-08-19: it describes royalty-free use, with
+  redistribution carrying the licence text, compliance with trade controls
+  and acknowledgement of the DINO Materials in publications. Meta may amend
+  these terms, and the linked licence text is authoritative. Read it and
+  verify the current terms before relying on this summary —
   https://ai.meta.com/resources/models-and-libraries/dinov3-license/
