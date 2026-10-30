@@ -58,7 +58,28 @@ def _yolo11(task_type: TaskType) -> list[PretrainedModel]:
     ]
 
 
-_TABLES = {YOLO_ADAPTER: _yolo11}
+_DINOV3_HUB = {
+    "b": "facebook/dinov3-vitb16-pretrain-lvd1689m",  # default, listed first
+    "s": "facebook/dinov3-vits16-pretrain-lvd1689m",
+    "l": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+}
+
+
+def _dinov3(task_type: TaskType) -> list[PretrainedModel]:
+    if task_type not in ADAPTER_TASKS[DINOV3_ADAPTER]:
+        return []
+    return [
+        PretrainedModel(
+            weights=hub_id,
+            family="dinov3",
+            size=size,
+            note=VRAM_NOTE if size == "l" else None,
+        )
+        for size, hub_id in _DINOV3_HUB.items()
+    ]
+
+
+_TABLES = {YOLO_ADAPTER: _yolo11, DINOV3_ADAPTER: _dinov3}
 
 
 def adapters_for(task_type: TaskType) -> list[dict]:

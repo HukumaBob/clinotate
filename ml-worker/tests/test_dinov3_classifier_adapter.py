@@ -355,3 +355,32 @@ def test_missing_config_keys_fall_back_to_defaults(backbone, dataset, tmp_path):
     assert used == {**DEFAULTS, "backbone": "stub", "epochs": 1, "workers": 0}
     ckpt = torch.load(result.weights_path, map_location="cpu", weights_only=True)
     assert ckpt["preprocess"]["imgsz"] == 224 and ckpt["preprocess"]["crop_margin"] == 0.15
+
+
+def test_defaults_match_backend_schema_literals():
+    # Mirror of backend/tests/test_training_params.py::_DINOV3_DEFAULTS
+    # (test_dinov3_defaults_match_worker_defaults) -- keep the two identical.
+    from app.dinov3_classifier_adapter import DEFAULTS
+
+    expected = {
+        "mode": "frozen",
+        "epochs": 30,
+        "batch": 32,
+        "imgsz": 224,
+        "crop_margin": 0.15,
+        "mask_mode": "none",
+        "unfreeze_blocks": 2,
+        "lr": 1e-3,
+        "backbone_lr": 1e-5,
+        "layer_decay": 0.75,
+        "weight_decay": 0.05,
+        "class_balance": "weighted_loss",
+        "label_smoothing": 0.0,
+        "patience": 10,
+        "seed": 0,
+        "workers": 4,
+        "amp": True,
+        "frozen_tta_flips": False,
+        "dropout": 0.0,
+    }
+    assert {k: v for k, v in DEFAULTS.items() if k != "backbone"} == expected

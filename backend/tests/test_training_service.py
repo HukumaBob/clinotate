@@ -582,3 +582,132 @@ def test_fine_tune_parent_must_share_adapter():
         session.commit()
         _cleanup(session, dataset.id, user_id)
         session.close()
+
+
+_B16 = "facebook/dinov3-vitb16-pretrain-lvd1689m"
+
+
+def test_dinov3_run_records_backbone_in_config(monkeypatch):
+    session = _session()
+    try:
+        monkeypatch.setattr("app.training.service.celery_app.send_task", lambda *a, **kw: None)
+        user_id = _make_user(session).id
+        dataset = _make_dataset(session, user_id)  # detection: supported now
+        _succeeded_export(session, dataset.id, user_id)
+
+        run = create_training_run(
+            session,
+            dataset_id=dataset.id,
+            base_model=_B16,
+            settings={"epochs": 2},
+            adapter="dinov3_classifier",
+            created_by=_User(user_id),
+        )
+
+        assert run.adapter == "dinov3_classifier"
+        assert run.config["backbone"] == _B16
+        assert run.total_epochs == 2
+    finally:
+        _cleanup(session, dataset.id, user_id)
+        session.close()
+
+
+def test_dinov3_rejects_client_backbone(monkeypatch):
+    session = _session()
+    try:
+        user_id = _make_user(session).id
+        dataset = _make_dataset(session, user_id)
+        _succeeded_export(session, dataset.id, user_id)
+        with pytest.raises(Exception, match="backbone"):
+            create_training_run(
+                session,
+                dataset_id=dataset.id,
+                base_model=_B16,
+                settings={"backbone": "evil/model"},
+                adapter="dinov3_classifier",
+                created_by=_User(user_id),
+            )
+    finally:
+        _cleanup(session, dataset.id, user_id)
+        session.close()
+
+
+def _dinov3_parent(session, dataset_id, user_id, config):
+    run = TrainingRun(
+        dataset_id=dataset_id,
+        adapter="dinov3_classifier",
+        base_model=_B16,
+        task_type=TaskType.DETECTION,
+        config=config,
+        status=TrainingRunStatus.SUCCEEDED,
+        total_epochs=1,
+        created_by_id=user_id,
+    )
+    session.add(run)
+    session.commit()
+    version = ModelVersion(
+        training_run_id=run.id,
+        name="dinov3-parent",
+        task_type=TaskType.DETECTION,
+        storage_key=f"models/{run.id}/best.pt",
+        metrics={},
+    )
+    session.add(version)
+    session.commit()
+    return version
+
+
+def _drop_parent(session):
+    session.rollback()
+    ids = [v.id for v in session.query(ModelVersion).filter(ModelVersion.name == "dinov3-parent")]
+    session.query(TrainingRun).filter(TrainingRun.base_model_version_id.in_(ids)).update(
+        {"base_model_version_id": None}, synchronize_session=False
+    )
+    session.query(ModelVersion).filter(ModelVersion.name == "dinov3-parent").delete()
+    session.commit()
+
+
+def test_dinov3_fine_tune_inherits_parent_backbone(monkeypatch):
+    session = _session()
+    try:
+        monkeypatch.setattr("app.training.service.celery_app.send_task", lambda *a, **kw: None)
+        user_id = _make_user(session).id
+        dataset = _make_dataset(session, user_id)
+        _succeeded_export(session, dataset.id, user_id)
+        parent = _dinov3_parent(session, dataset.id, user_id, {"backbone": "hub/parent-bb"})
+
+        run = create_training_run(
+            session,
+            dataset_id=dataset.id,
+            base_model_version_id=parent.id,
+            adapter="dinov3_classifier",
+            created_by=_User(user_id),
+        )
+
+        assert run.config["backbone"] == "hub/parent-bb"
+    finally:
+        _drop_parent(session)
+        _cleanup(session, dataset.id, user_id)
+        session.close()
+
+
+def test_dinov3_fine_tune_rejects_parent_without_backbone():
+    session = _session()
+    try:
+        user_id = _make_user(session).id
+        dataset = _make_dataset(session, user_id)
+        _succeeded_export(session, dataset.id, user_id)
+        parent = _dinov3_parent(session, dataset.id, user_id, {})
+
+        with pytest.raises(InvalidBaseModel, match="has no recorded backbone"):
+            create_training_run(
+                session,
+                dataset_id=dataset.id,
+                base_model_version_id=parent.id,
+                adapter="dinov3_classifier",
+                created_by=_User(user_id),
+            )
+    finally:
+        _drop_parent(session)
+        _cleanup(session, dataset.id, user_id)
+        session.close()

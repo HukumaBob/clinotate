@@ -219,14 +219,22 @@ def create_training_run(
             raise InvalidBaseModel(f"Model version {parent.id} was not trained by {adapter}")
         parent_id = parent.id
         resolved_base = parent.name
+        backbone = (parent_run.config or {}).get("backbone")
+        if adapter == catalog.DINOV3_ADAPTER and not backbone:
+            raise InvalidBaseModel(f"Model version {parent.id} has no recorded backbone")
     else:
         resolved_base = catalog.resolve_pretrained(adapter, dataset.task_type, base_model)
         if resolved_base is None:
             raise InvalidBaseModel(
                 f"{base_model!r} is not a {dataset.task_type.value} base model for {adapter}"
             )
+        backbone = resolved_base
 
     resolved_settings = params.resolve_settings(adapter, dataset.task_type, settings)
+    if adapter == catalog.DINOV3_ADAPTER:
+        # Set after validation: it is not a user setting, so a client-sent
+        # "backbone" was already rejected as unknown above.
+        resolved_settings["backbone"] = backbone
 
     run = TrainingRun(
         dataset_id=dataset_id,

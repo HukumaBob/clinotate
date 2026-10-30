@@ -18,12 +18,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.datasets.models import TaskType
-from app.training.catalog import ADAPTER_NAME
+from app.training.catalog import ADAPTER_NAME, DINOV3_ADAPTER
 
 FieldType = Literal["int", "float", "bool", "choice"]
 
 GROUPS = (
     ("basic", "Basic"),
+    ("crop", "Crop"),
     ("optimization", "Optimization"),
     ("augmentation", "Augmentation"),
     ("finetune", "Fine-tuning"),
@@ -178,7 +179,90 @@ def _yolo11_presets() -> list[Preset]:
     ]
 
 
-_TABLES = {ADAPTER_NAME: (_yolo11_fields, _yolo11_presets)}
+def _dinov3_fields() -> list[ParamField]:
+    f = ParamField
+    return [
+        # -- basic
+        f("mode", "Training mode", "basic", "choice", "frozen", choices=("frozen", "partial"),
+          help="'frozen' keeps the DINOv3 backbone unchanged and trains only a small classifier "
+               "on top (fast, hard to overfit). 'partial' also fine-tunes the last backbone "
+               "blocks. The best epoch is chosen by macro-F1 (the mean of per-class F1), not "
+               "accuracy, because with rare classes a model that always guesses the common "
+               "one still scores high accuracy."),
+        f("epochs", "Epochs", "basic", "int", 30, min=1, max=300,
+          help="Passes over the training crops. More epochs help until validation stops improving."),
+        f("batch", "Batch size", "basic", "int", 32, min=1, max=256,
+          help="Crops per step. Larger is steadier but needs more GPU memory; lower it first "
+               "when a run runs out of memory."),
+        f("imgsz", "Crop size", "basic", "int", 224, min=64, max=448, step=16,
+          help="Side in pixels each crop is resized to, a multiple of 16 (the ViT patch size). "
+               "Larger keeps more texture but costs much more memory and time."),
+        f("patience", "Early-stop patience", "basic", "int", 10, min=1, max=300,
+          help="Stop early after this many epochs without macro-F1 improvement."),
+        f("seed", "Random seed", "basic", "int", 0, min=0, max=2147483647,
+          help="Keep it fixed to repeat a run; change it to see how much results vary."),
+        # -- crop
+        f("crop_margin", "Crop margin", "crop", "float", 0.15, min=0, max=1,
+          help="Context kept around each annotated region, as a fraction of its size. "
+               "0 crops tightly; larger values include more surrounding mucosa."),
+        f("mask_mode", "Outside-mask handling", "crop", "choice", "none",
+          choices=("none", "zero", "blur"), tasks=(TaskType.SEGMENTATION,),
+          help="What to do with pixels inside the crop but outside the segmentation mask: "
+               "'none' keeps them, 'zero' blacks them out, 'blur' blurs them."),
+        # -- optimization
+        f("lr", "Head learning rate", "optimization", "float", 0.001, min=0.000001, max=1,
+          help="Learning rate of the classifier on top of the backbone."),
+        f("backbone_lr", "Backbone learning rate", "optimization", "float", 0.00001,
+          min=0.0000001, max=0.1,
+          help="Learning rate of the unfrozen backbone blocks; keep it much smaller than the "
+               "head rate. Only applies in partial mode."),
+        f("layer_decay", "Layer-wise decay", "optimization", "float", 0.75, min=0.1, max=1,
+          help="Each earlier backbone block gets its learning rate multiplied by this factor, "
+               "so early blocks change least. 1 disables the decay. Only applies in partial mode."),
+        f("weight_decay", "Weight decay", "optimization", "float", 0.05, min=0, max=1,
+          help="Regularisation strength; raise it a little if the model overfits."),
+        f("unfreeze_blocks", "Unfrozen blocks", "optimization", "int", 2, min=1, max=24,
+          help="How many of the last backbone blocks to fine-tune. Only applies in partial "
+               "mode. ViT-S and ViT-B have 12 blocks; larger values are clamped by the trainer."),
+        f("class_balance", "Class balance", "optimization", "choice", "weighted_loss",
+          choices=("none", "weighted_loss", "balanced_sampler"),
+          help="How to handle rare classes: 'weighted_loss' penalises mistakes on rare classes "
+               "more, 'balanced_sampler' shows them more often. Models are compared by "
+               "macro-F1, not accuracy, so a rare class counts as much as a common one."),
+        f("label_smoothing", "Label smoothing", "optimization", "float", 0.0, min=0, max=0.5,
+          help="Softens the training targets a little; can reduce over-confidence on noisy labels."),
+        f("dropout", "Classifier dropout", "optimization", "float", 0.0, min=0, max=0.9,
+          help="Fraction of the classifier head switched off during training; fights overfitting."),
+        # -- augmentation
+        f("frozen_tta_flips", "Flip augmentation (frozen)", "augmentation", "bool", False,
+          help="Also embed mirrored copies of each crop. Only applies in frozen mode, where "
+               "features are computed once and cached."),
+        # -- system
+        f("workers", "Data-loader workers", "system", "int", 4, min=0, max=16,
+          help="Parallel image-loading processes."),
+        f("amp", "Mixed precision", "system", "bool", True,
+          help="Faster and lighter on memory; switch off only to diagnose odd numerical results."),
+    ]
+
+
+def _dinov3_presets() -> list[Preset]:
+    return [
+        Preset("quick_check", "Quick check",
+               "Three short epochs to confirm the dataset and settings run at all.",
+               {"epochs": 3, "batch": 8}),
+        Preset("linear_probe", "Linear probe",
+               "Frozen backbone, small classifier only: the fastest and safest start.",
+               {"mode": "frozen"}),
+        Preset("fine_tune_last_blocks", "Fine-tune last blocks",
+               "Also fine-tune the last two backbone blocks, for when the frozen probe plateaus.",
+               {"mode": "partial", "batch": 16, "epochs": 20, "unfreeze_blocks": 2}),
+    ]
+
+
+_TABLES = {
+    ADAPTER_NAME: (_yolo11_fields, _yolo11_presets),
+    DINOV3_ADAPTER: (_dinov3_fields, _dinov3_presets),
+}
 
 
 def _fields_for(adapter: str, task_type: TaskType) -> list[ParamField]:

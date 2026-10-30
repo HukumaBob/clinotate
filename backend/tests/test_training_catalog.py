@@ -90,3 +90,23 @@ def test_adapters_for_classification_marks_dinov3_unsupported():
 
 def test_adapter_name_alias_is_the_yolo_adapter():
     assert catalog.ADAPTER_NAME == catalog.YOLO_ADAPTER == "ultralytics_yolo"
+
+
+def test_dinov3_catalog_lists_s_b_l_with_vram_note_on_l():
+    for task in (TaskType.DETECTION, TaskType.SEGMENTATION):
+        models = catalog.pretrained_models(catalog.DINOV3_ADAPTER, task)
+        assert [m.weights for m in models] == [
+            "facebook/dinov3-vitb16-pretrain-lvd1689m",
+            "facebook/dinov3-vits16-pretrain-lvd1689m",
+            "facebook/dinov3-vitl16-pretrain-lvd1689m",
+        ]
+        assert {m.family for m in models} == {"dinov3"}
+        assert {m.size: m.note for m in models} == {
+            "b": None,
+            "s": None,
+            "l": catalog.VRAM_NOTE,
+        }
+
+
+def test_dinov3_catalog_empty_for_classification():
+    assert catalog.pretrained_models(catalog.DINOV3_ADAPTER, TaskType.CLASSIFICATION) == []

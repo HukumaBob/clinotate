@@ -263,3 +263,94 @@ def test_the_fine_tune_preset_validates_for_every_task():
     preset = next(p for p in params._presets_for(ADAPTER) if p.id == "fine_tune")
     for task in (DET, SEG, CLS):
         assert params.resolve_settings(ADAPTER, task, preset.values)["freeze"] == 10
+
+
+DINOV3 = params.DINOV3_ADAPTER
+
+# Mirror of ml-worker/tests/test_dinov3_classifier_adapter.py
+# ::test_defaults_match_backend_schema_literals -- keep the two dicts identical.
+_DINOV3_DEFAULTS = {
+    "mode": "frozen",
+    "epochs": 30,
+    "batch": 32,
+    "imgsz": 224,
+    "crop_margin": 0.15,
+    "mask_mode": "none",
+    "unfreeze_blocks": 2,
+    "lr": 1e-3,
+    "backbone_lr": 1e-5,
+    "layer_decay": 0.75,
+    "weight_decay": 0.05,
+    "class_balance": "weighted_loss",
+    "label_smoothing": 0.0,
+    "patience": 10,
+    "seed": 0,
+    "workers": 4,
+    "amp": True,
+    "frozen_tta_flips": False,
+    "dropout": 0.0,
+}
+
+
+def test_dinov3_schema_hides_mask_mode_for_detection():
+    fields = _fields(params.settings_schema(DINOV3, DET))
+    assert "mask_mode" not in fields
+    assert "crop_margin" in fields
+    with pytest.raises(params.InvalidSettings):
+        params.resolve_settings(DINOV3, DET, {"mask_mode": "zero"})
+
+
+def test_dinov3_schema_shows_mask_mode_for_segmentation():
+    schema = params.settings_schema(DINOV3, SEG)
+    fields = _fields(schema)
+    assert fields["mask_mode"]["choices"] == ["none", "zero", "blur"]
+    assert [g["id"] for g in schema["groups"]] == [
+        "basic", "crop", "optimization", "augmentation", "system",
+    ]
+    assert fields["imgsz"]["step"] == 16
+    assert all(f["help"] for f in fields.values())
+    assert "macro" in fields["class_balance"]["help"].lower() + fields["mode"]["help"].lower()
+    assert "partial" in fields["unfreeze_blocks"]["help"]
+    assert "frozen" in fields["frozen_tta_flips"]["help"]
+
+
+def test_dinov3_settings_reject_unknown_and_out_of_range():
+    with pytest.raises(params.InvalidSettings) as exc:
+        params.resolve_settings(
+            DINOV3, SEG,
+            {"imgsz": 225, "epochs": 0, "crop_margin": 1.5, "mode": "x",
+             "class_balance": "x", "mask_mode": "x", "bogus": 1},
+        )
+    text = "; ".join(exc.value.errors)
+    assert "imgsz must be a multiple of 16" in text
+    for key in ("epochs", "crop_margin", "mode", "class_balance", "mask_mode", "bogus"):
+        assert key in text
+
+
+def test_dinov3_backbone_is_not_a_client_setting():
+    with pytest.raises(params.InvalidSettings, match="backbone"):
+        params.resolve_settings(DINOV3, SEG, {"backbone": "facebook/anything"})
+
+
+def test_dinov3_defaults_match_worker_defaults():
+    seg = params.resolve_settings(DINOV3, SEG, {})
+    assert seg == _DINOV3_DEFAULTS
+    det = params.resolve_settings(DINOV3, DET, {})
+    assert det == {k: v for k, v in _DINOV3_DEFAULTS.items() if k != "mask_mode"}
+
+
+@pytest.mark.parametrize("adapter", [ADAPTER, DINOV3])
+@pytest.mark.parametrize("task", [DET, SEG])
+def test_presets_only_reference_existing_keys(adapter, task):
+    for preset in params._presets_for(adapter):
+        keys = {f.key for f in params._fields_for(adapter, task)}
+        assert set(preset.values) <= keys, preset.id
+
+
+def test_dinov3_presets():
+    presets = {p["id"]: p["values"] for p in params.settings_schema(DINOV3, SEG)["presets"]}
+    assert presets["quick_check"] == {"epochs": 3, "batch": 8}
+    assert presets["linear_probe"] == {"mode": "frozen"}
+    assert presets["fine_tune_last_blocks"] == {
+        "mode": "partial", "batch": 16, "epochs": 20, "unfreeze_blocks": 2,
+    }
