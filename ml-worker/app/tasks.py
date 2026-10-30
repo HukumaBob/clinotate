@@ -779,6 +779,22 @@ class _LogBuffer:
             self._session.commit()
 
 
+def version_name_for(base_model: str, run_id: int, fine_tune: bool) -> str:
+    """Name of the ModelVersion a run produces.
+
+    For a fine-tune `base_model` is the parent's already-clean version name;
+    otherwise it is a weights file or a Hub id, so the extension and any Hub
+    organisation prefix ("facebook/") are dropped.
+    """
+    if fine_tune:
+        suffix = f"-ft-run{run_id}"
+        # ModelVersion.name is String(200); a fine-tune chain grows the
+        # parent name each generation, so trim it, never the suffix.
+        return f"{base_model[: 200 - len(suffix)]}{suffix}"
+    stem = base_model.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    return f"{stem}-run{run_id}"
+
+
 @celery_app.task(name="model_train")
 def model_train(job_id: int, adapter=None) -> None:
     """Train a model on an exported dataset.
@@ -788,6 +804,12 @@ def model_train(job_id: int, adapter=None) -> None:
     revoke(terminate=True) on a solo worker would SIGTERM the container,
     so the adapter polls TrainingRun.stop_requested at epoch boundaries.
     """
+    # Same cross-family VRAM rule as every other task here.
+    _evict_sam3_models()
+    _evict_sam2_models()
+    _evict_quality_models()
+    _evict_similarity_models()
+
     session = SessionLocal()
     job = session.get(Job, job_id)
     if job is None:
@@ -930,13 +952,9 @@ def model_train(job_id: int, adapter=None) -> None:
                 )
                 artifact_keys.append(classes_key)
 
-        if run.base_model_version_id is not None:
-            suffix = f"-ft-run{run.id}"
-            # ModelVersion.name is String(200); a fine-tune chain grows the
-            # parent name each generation, so trim it, never the suffix.
-            version_name = f"{run.base_model[: 200 - len(suffix)]}{suffix}"
-        else:
-            version_name = f"{run.base_model.rsplit('.', 1)[0]}-run{run.id}"
+        version_name = version_name_for(
+            run.base_model, run.id, fine_tune=run.base_model_version_id is not None
+        )
         version = ModelVersion(
             training_run_id=run.id,
             name=version_name,
