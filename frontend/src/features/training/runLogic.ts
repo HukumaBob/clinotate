@@ -37,14 +37,25 @@ export function headlineScore(
   return { label: "", value: "—" };
 }
 
-export function headlineValue(taskType: string, metrics: Record<string, unknown>): number | null {
-  const raw =
+/** The headline number and which metric produced it, so callers can tell
+ * whether two runs' headlines are comparable. */
+export function headlineEntry(
+  taskType: string,
+  metrics: Record<string, unknown>,
+): { key: string; value: number } | null {
+  const keys =
     taskType === "classification"
-      ? (metrics["metrics/accuracy_top1"] ?? metrics["accuracy_top1"])
-      : (metrics["metrics/mAP50(B)"] ?? metrics["mAP50"]);
-  if (typeof raw === "number") return raw;
-  const macroF1 = metrics[MACRO_F1_KEY];
-  return typeof macroF1 === "number" ? macroF1 : null;
+      ? ["metrics/accuracy_top1", "accuracy_top1", MACRO_F1_KEY]
+      : ["metrics/mAP50(B)", "mAP50", MACRO_F1_KEY];
+  for (const key of keys) {
+    const value = metrics[key];
+    if (typeof value === "number") return { key, value };
+  }
+  return null;
+}
+
+export function headlineValue(taskType: string, metrics: Record<string, unknown>): number | null {
+  return headlineEntry(taskType, metrics)?.value ?? null;
 }
 
 export function formatDuration(
@@ -83,9 +94,12 @@ export function settingsLine(config: Record<string, unknown>): string {
 export function bestRunId(runs: TrainingRunRead[]): number | null {
   const scored = runs
     .filter((run) => run.status === "succeeded" || run.status === "stopped")
-    .map((run) => ({ id: run.id, value: headlineValue(run.task_type, run.metrics as Record<string, unknown>) }))
-    .filter((entry): entry is { id: number; value: number } => entry.value !== null);
+    .map((run) => ({ id: run.id, ...headlineEntry(run.task_type, run.metrics as Record<string, unknown>) }))
+    .filter((entry): entry is { id: number; key: string; value: number } => entry.value !== undefined);
   if (scored.length < 2) return null;
+  // Different metrics (mAP50 vs macro-F1) are not comparable: no badge.
+  const canonical = (key: string) => key.replace(/^metrics\//, "").replace(/\(B\)$/, "");
+  if (new Set(scored.map((entry) => canonical(entry.key))).size > 1) return null;
   return scored.reduce((best, entry) => (entry.value > best.value ? entry : best)).id;
 }
 

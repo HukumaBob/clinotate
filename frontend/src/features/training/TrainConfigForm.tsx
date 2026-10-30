@@ -185,7 +185,6 @@ export function TrainConfigForm({
             </label>
             <select
               id="train-adapter"
-              aria-label="Model family"
               className={`h-8 ${control}`}
               value={adapter}
               disabled={adapters.length === 0}

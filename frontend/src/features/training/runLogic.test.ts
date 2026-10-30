@@ -106,6 +106,22 @@ describe("bestRunId", () => {
     expect(bestRunId(runs)).toBe(2);
   });
 
+  it("is null when the list mixes headline metrics (YOLO mAP50 and DINOv3 macro-F1)", () => {
+    const runs = [
+      run({ id: 1, metrics: { "metrics/mAP50(B)": 0.3 } }),
+      run({ id: 2, metrics: { "val/macro_f1": 0.9 } }),
+    ];
+    expect(bestRunId(runs)).toBeNull();
+  });
+
+  it("picks the highest macro-F1 when every scored run reports it", () => {
+    const runs = [
+      run({ id: 1, metrics: { "val/macro_f1": 0.5 } }),
+      run({ id: 2, metrics: { "val/macro_f1": 0.8 } }),
+    ];
+    expect(bestRunId(runs)).toBe(2);
+  });
+
   it("is null when no run has a comparable number or only one run exists", () => {
     expect(bestRunId([run({ id: 1, metrics: { ap_50: 0.4 } }), run({ id: 2 })])).toBeNull();
     expect(bestRunId([run({ id: 1, metrics: { "metrics/mAP50(B)": 0.3 } })])).toBeNull();
