@@ -13,4 +13,8 @@ def get_training_adapter(name: str) -> TrainingAdapter:
         from app.ultralytics_yolo_adapter import UltralyticsYoloAdapter
 
         return UltralyticsYoloAdapter()
+    if name == "dinov3_classifier":
+        from app.dinov3_classifier_adapter import Dinov3ClassifierAdapter
+
+        return Dinov3ClassifierAdapter()
     raise ValueError(f"Unknown training adapter {name!r}")
