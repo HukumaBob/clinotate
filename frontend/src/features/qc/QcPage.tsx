@@ -11,12 +11,10 @@ import { useVideos } from "../../entities/useVideos";
 import { VideoUploadFlow } from "../media/VideoUploadFlow";
 import { comparability } from "./compareLogic";
 import { errorMessage } from "./errorMessage";
+import { runnableModels } from "./runnableModels";
 import { RunForm } from "./RunForm";
 import { RunStatus } from "./RunStatus";
 import { RunsTable } from "./RunsTable";
-
-// Only the model types the worker can run; classification is a later slice.
-const RUNNABLE = new Set(["detection", "segmentation"]);
 
 export function QcPage() {
   const runsQuery = useInferenceRuns();
@@ -33,7 +31,7 @@ export function QcPage() {
 
   const runs = runsQuery.data ?? [];
   const videos = videosQuery.data ?? [];
-  const models = (modelsQuery.data ?? []).filter((m) => RUNNABLE.has(m.task_type));
+  const models = runnableModels(modelsQuery.data ?? []);
   const videoTitles = Object.fromEntries(videos.map((v) => [v.id, v.title]));
   const shownRun =
     runs.find((run) => run.id === selectedRunId) ??

@@ -135,6 +135,7 @@ class ModelVersionRead(BaseModel):
     id: int
     training_run_id: int
     name: str
+    adapter: str
     base_model: str
     base_model_version_id: int | None
     task_type: TaskType

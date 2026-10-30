@@ -447,6 +447,29 @@ def test_models_list_exposes_each_versions_class_names():
         cleanup_session.close()
 
 
+def test_models_list_exposes_the_adapter_that_trained_each_version():
+    session = _session()
+    yolo = _make_version(session, storage_key="models/adapter-yolo/best.pt")
+    dino = _make_version(session, storage_key="models/adapter-dino/best.pt")
+    dino_run = session.get(TrainingRun, dino.training_run_id)
+    dino_run.adapter = "dinov3_classifier"
+    session.commit()
+    ids = {"yolo": yolo.id, "dino": dino.id}
+    headers = yolo._test_headers  # noqa: SLF001
+    dataset_ids = [yolo._test_dataset_id, dino._test_dataset_id]  # noqa: SLF001
+    session.close()
+
+    try:
+        rows = {r["id"]: r for r in client.get("/training/models", headers=headers).json()}
+        assert rows[ids["yolo"]]["adapter"] == "ultralytics_yolo"
+        assert rows[ids["dino"]]["adapter"] == "dinov3_classifier"
+    finally:
+        cleanup_session = _session()
+        for dataset_id in dataset_ids:
+            _cleanup(cleanup_session, dataset_id)
+        cleanup_session.close()
+
+
 def test_deleting_a_model_version_removes_its_artifacts():
     session = _session()
     storage = _FakeStorage(objects={

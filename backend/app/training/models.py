@@ -128,6 +128,10 @@ class ModelVersion(Base):
     )
 
     @property
+    def adapter(self) -> str:
+        return self.training_run.adapter
+
+    @property
     def base_model(self) -> str:
         return self.training_run.base_model
 

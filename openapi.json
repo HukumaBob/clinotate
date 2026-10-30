@@ -6636,6 +6636,10 @@
             "type": "string",
             "title": "Name"
           },
+          "adapter": {
+            "type": "string",
+            "title": "Adapter"
+          },
           "base_model": {
             "type": "string",
             "title": "Base Model"
@@ -6681,6 +6685,7 @@
           "id",
           "training_run_id",
           "name",
+          "adapter",
           "base_model",
           "base_model_version_id",
           "task_type",
