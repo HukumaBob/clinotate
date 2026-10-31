@@ -26,6 +26,9 @@ interface SequenceGridToolbarProps {
   onClearClassification?: (categoryId: number, evaluationTypeId: number) => void;
   hasNoFindingsMarkedForAllSelected?: boolean;
   onToggleNoFindings?: () => void;
+  totalCount?: number;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
 }
 
 export function SequenceGridToolbar({
@@ -50,7 +53,11 @@ export function SequenceGridToolbar({
   onClearClassification = () => {},
   hasNoFindingsMarkedForAllSelected = false,
   onToggleNoFindings = () => {},
+  totalCount = 0,
+  onSelectAll = () => {},
+  onDeselectAll = () => {},
 }: SequenceGridToolbarProps) {
+  const allSelected = totalCount > 0 && selectedCount === totalCount;
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
@@ -235,6 +242,15 @@ export function SequenceGridToolbar({
                 Clear marks
               </button>
             )}
+            <button
+              type="button"
+              aria-label={allSelected ? "Deselect all" : "Select all"}
+              onClick={allSelected ? onDeselectAll : onSelectAll}
+              disabled={totalCount === 0}
+              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+            >
+              {allSelected ? "Deselect all" : "Select all"}
+            </button>
             <span className="text-sm text-gray-400">{selectedCount} selected</span>
             <button
               type="button"

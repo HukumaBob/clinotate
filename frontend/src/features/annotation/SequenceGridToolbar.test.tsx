@@ -719,4 +719,75 @@ describe("SequenceGridToolbar classification controls", () => {
     expect(await screen.findByRole("option", { name: "close_focus" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "quality_group" })).not.toBeInTheDocument();
   });
+
+  it('shows "Select all" and calls onSelectAll', async () => {
+    const onSelectAll = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={1}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        totalCount={3}
+        onSelectAll={onSelectAll}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+    expect(onSelectAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads "Deselect all" when every frame is selected and calls onDeselectAll', async () => {
+    const onDeselectAll = vi.fn();
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={3}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        totalCount={3}
+        onDeselectAll={onDeselectAll}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Select all" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Deselect all" }));
+    expect(onDeselectAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the select-all button with no frames", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        totalCount={0}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Select all" })).toBeDisabled();
+  });
+
+  it("does not show select-all outside Select mode", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode={false}
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        totalCount={3}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /select all/i })).not.toBeInTheDocument();
+  });
 });

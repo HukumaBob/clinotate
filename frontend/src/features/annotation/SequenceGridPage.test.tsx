@@ -621,4 +621,53 @@ describe("SequenceGridPage", () => {
 
     expect(screen.queryByText(/skipped \(already annotated\)/)).not.toBeInTheDocument();
   });
+
+  function mockTwoFrames() {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: { id: 9, name: "Seq", video_id: null, procedure_id: 7, start_time: 0, duration: 0, annotation_count: 0, crop_box: null },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined } as never;
+      }
+      if (path.includes("/frames")) {
+        return {
+          data: [
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
+          ],
+          error: undefined,
+        } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+  }
+
+  it("Select all ticks every frame and shows the count", async () => {
+    mockTwoFrames();
+    renderAtSequence("9");
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await screen.findAllByAltText(/Frame \d/);
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+
+    expect(await screen.findByText(/2 selected/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Deselect all" })).toBeInTheDocument();
+  });
+
+  it("Deselect all clears the selection and keeps Select mode", async () => {
+    mockTwoFrames();
+    renderAtSequence("9");
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await screen.findAllByAltText(/Frame \d/);
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Deselect all" }));
+
+    expect(await screen.findByText(/0 selected/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select all" })).toBeInTheDocument();
+  });
 });
