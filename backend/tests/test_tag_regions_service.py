@@ -8,6 +8,8 @@ from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
 from app.annotation.tag_regions import (
     descendant_label_ids,
     eligible_sources,
+    list_region_labels,
+    remove_copies,
     require_one_sequence,
     tag_regions,
 )
@@ -401,3 +403,136 @@ def test_copy_survives_source_deletion(db_session, world, storage):
     assert survivor.source_annotation_id is None
     assert survivor.storage_key == copy_key
     assert copy_key in storage.objects
+
+
+# --- list_region_labels / remove_copies ---
+
+
+def test_list_region_labels_counts_and_excludes_abstract_and_classification(
+    db_session, world, storage
+):
+    f0, f1, *_ = world.frames_a
+    add_region(db_session, storage, f0, world.adenoma, world.user)
+    add_region(db_session, storage, f1, world.adenoma, world.user, AnnotationType.BBOX)
+    add_region(db_session, storage, f0, world.ssl, world.user)
+    add_region(db_session, storage, f0, world.abstract, world.user)
+    add_region(db_session, storage, f0, world.frame_label, world.user, AnnotationType.CLASSIFICATION)
+    add_region(db_session, storage, f1, world.ssl, world.user, with_storage_key=False)  # no geometry
+
+    result = list_region_labels(db_session, _ids(world.frames_a))
+
+    assert [(r.name, r.count) for r in result] == [("adenoma", 2), ("ssl", 1)]
+    assert result[0].label_id == world.adenoma.id
+    assert result[0].category_name == world.category.name
+
+
+def test_list_includes_nonabstract_parent_with_descendant_counts(db_session, world, storage):
+    f0, f1, *_ = world.frames_a
+    add_region(db_session, storage, f0, world.polyp_ip, world.user)
+    add_region(db_session, storage, f1, world.polyp_ip, world.user, AnnotationType.BBOX)
+    add_region(db_session, storage, f1, world.polyp, world.user)
+
+    by_name = {r.name: r.count for r in list_region_labels(db_session, _ids(world.frames_a))}
+
+    assert by_name == {"polyp": 3, "polyp_ip": 2}
+
+
+def _copy_setup(db_session, world, storage):
+    f0, f1, *_ = world.frames_a
+    src0 = add_region(db_session, storage, f0, world.polyp, world.user)
+    src1 = add_region(db_session, storage, f1, world.polyp, world.user)
+    return f0, f1, src0, src1
+
+
+def test_remove_deletes_only_linked_copies_with_target_label(db_session, world, storage):
+    f0, f1, src0, src1 = _copy_setup(db_session, world, storage)
+    copy0 = add_region(db_session, storage, f0, world.adenoma, world.user, source_annotation_id=src0.id)
+    other_label = add_region(db_session, storage, f0, world.ssl, world.user, source_annotation_id=src0.id)
+    manual = add_region(db_session, storage, f1, world.adenoma, world.user)  # hand-drawn
+    other_frame = add_region(db_session, storage, world.frames_a[2], world.adenoma, world.user,
+                             source_annotation_id=src1.id)
+
+    result = remove_copies(db_session, storage, [f0.id, f1.id], world.adenoma.id)
+
+    assert (result.dry_run, result.removed, result.kept_reviewed) == (False, 1, 0)
+    remaining = {a.id for a in db_session.query(Annotation).all()}
+    assert copy0.id not in remaining
+    assert {src0.id, src1.id, other_label.id, manual.id, other_frame.id} <= remaining
+
+
+def test_remove_deletes_both_objects(db_session, world, storage):
+    f0, _, src0, _ = _copy_setup(db_session, world, storage)
+    copy0 = add_region(db_session, storage, f0, world.adenoma, world.user, source_annotation_id=src0.id)
+    keys = {copy0.storage_key, copy0.raw_mask_storage_key}
+    assert None not in keys
+
+    remove_copies(db_session, storage, [f0.id], world.adenoma.id)
+
+    assert set(storage.deleted) == keys
+    assert not keys & set(storage.objects)
+    assert src0.storage_key in storage.objects
+
+
+def test_remove_keeps_reviewed_and_counts_them(db_session, world, storage):
+    f0, f1, src0, src1 = _copy_setup(db_session, world, storage)
+    draft = add_region(db_session, storage, f0, world.adenoma, world.user, source_annotation_id=src0.id)
+    reviewed = add_region(db_session, storage, f1, world.adenoma, world.user,
+                          source_annotation_id=src1.id, status=AnnotationStatus.REVIEWED)
+
+    result = remove_copies(db_session, storage, [f0.id, f1.id], world.adenoma.id)
+
+    assert (result.removed, result.kept_reviewed) == (1, 1)
+    ids = {a.id for a in db_session.query(Annotation).all()}
+    assert draft.id not in ids and reviewed.id in ids
+    assert reviewed.storage_key in storage.objects
+
+
+def test_remove_deletes_rejected_copies(db_session, world, storage):
+    f0, _, src0, _ = _copy_setup(db_session, world, storage)
+    rejected = add_region(db_session, storage, f0, world.adenoma, world.user,
+                          source_annotation_id=src0.id, status=AnnotationStatus.REJECTED)
+    rid = rejected.id
+
+    result = remove_copies(db_session, storage, [f0.id], world.adenoma.id)
+
+    assert (result.removed, result.kept_reviewed) == (1, 0)
+    assert db_session.query(Annotation).filter(Annotation.id == rid).count() == 0
+
+
+def test_remove_dry_run_changes_nothing(db_session, world, storage):
+    f0, f1, src0, src1 = _copy_setup(db_session, world, storage)
+    add_region(db_session, storage, f0, world.adenoma, world.user, source_annotation_id=src0.id)
+    add_region(db_session, storage, f1, world.adenoma, world.user,
+               source_annotation_id=src1.id, status=AnnotationStatus.REVIEWED)
+    before_rows = _annotation_count(db_session)
+    before_objects = dict(storage.objects)
+
+    result = remove_copies(db_session, storage, [f0.id, f1.id], world.adenoma.id, dry_run=True)
+
+    assert (result.dry_run, result.removed, result.kept_reviewed) == (True, 1, 1)
+    assert _annotation_count(db_session) == before_rows
+    assert storage.objects == before_objects and storage.deleted == []
+
+
+def test_remove_then_create_again_works(db_session, world, storage):
+    f0, *_ = world.frames_a
+    add_region(db_session, storage, f0, world.polyp, world.user)
+    first = tag_regions(db_session, storage, [f0.id], world.polyp.id, world.adenoma.id, world.user)
+    assert first.regions == 1
+    removed = remove_copies(db_session, storage, [f0.id], world.adenoma.id)
+    assert removed.removed == 1
+
+    again = tag_regions(db_session, storage, [f0.id], world.polyp.id, world.adenoma.id, world.user)
+
+    assert again.regions == 1 and again.skipped_already_copied == 0
+
+
+def test_remove_validation_errors(db_session, world, storage):
+    with pytest.raises(HTTPException) as unknown:
+        remove_copies(db_session, storage, [world.frames_a[0].id], 999_999_999)
+    assert unknown.value.status_code == 404
+    with pytest.raises(HTTPException) as cross:
+        remove_copies(
+            db_session, storage, [world.frames_a[0].id, world.frames_b[0].id], world.adenoma.id
+        )
+    assert cross.value.status_code == 422

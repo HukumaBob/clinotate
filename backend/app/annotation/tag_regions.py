@@ -8,6 +8,7 @@ code path (``dry_run``), so the preview numbers cannot drift from the result.
 """
 
 import copy
+import logging
 import uuid
 from dataclasses import dataclass, field
 
@@ -18,7 +19,9 @@ from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
 from app.auth.models import User
 from app.media.models import Frame
 from app.storage import StorageService
-from app.taxonomy.models import AnnotationScope, EvaluationType, Label
+from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label
+
+logger = logging.getLogger(__name__)
 
 # Every copy is a download and an upload, done synchronously in the request.
 MAX_SOURCE_REGIONS = 1000
@@ -264,4 +267,113 @@ def tag_regions(
         session.rollback()
         raise
 
+    return result
+
+
+@dataclass
+class RegionLabelCount:
+    label_id: int
+    name: str
+    count: int
+    category_name: str
+
+
+@dataclass
+class RemoveCopiesResult:
+    dry_run: bool
+    removed: int = 0
+    kept_reviewed: int = 0
+
+
+def list_region_labels(session: Session, frame_ids: list[int]) -> list[RegionLabelCount]:
+    """Non-abstract labels with eligible region sources on ``frame_ids``, directly
+    or through descendants (a parent shows the summed count), sorted by name.
+    Counts use ``eligible_sources``, so they equal what ``tag_regions`` would copy.
+    """
+    frame_ids = require_one_sequence(session, frame_ids)
+    labels = {
+        row.id: row
+        for row in session.query(
+            Label.id, Label.name, Label.parent_label_id, Label.is_abstract, Category.name.label("cat")
+        )
+        .join(Category, Category.id == Label.category_id)
+        .all()
+    }
+    children: dict[int, list[int]] = {}
+    for row in labels.values():
+        if row.parent_label_id is not None:
+            children.setdefault(row.parent_label_id, []).append(row.id)
+
+    all_sources = eligible_sources(session, frame_ids, set(labels))
+    direct: dict[int, int] = {}
+    for annotation in all_sources:
+        direct[annotation.label_id] = direct.get(annotation.label_id, 0) + 1
+
+    result: list[RegionLabelCount] = []
+    for label in labels.values():
+        if label.is_abstract:
+            continue
+        seen = {label.id}
+        stack = [label.id]
+        while stack:
+            for child in children.get(stack.pop(), []):
+                if child not in seen:
+                    seen.add(child)
+                    stack.append(child)
+        count = sum(direct.get(label_id, 0) for label_id in seen)
+        if count:
+            result.append(RegionLabelCount(label.id, label.name, count, label.cat))
+    return sorted(result, key=lambda r: (r.name, r.label_id))
+
+
+def remove_copies(
+    session: Session,
+    storage: StorageService,
+    frame_ids: list[int],
+    target_label_id: int,
+    dry_run: bool = False,
+) -> RemoveCopiesResult:
+    """Delete tag-regions copies (``source_annotation_id`` set) labelled
+    ``target_label_id`` on ``frame_ids``. DRAFT and REJECTED copies go (the spec
+    said only DRAFT; REJECTED was approved as well); REVIEWED are kept and
+    counted. Hand-drawn annotations are never touched. Storage objects are
+    deleted after the commit, best effort.
+    """
+    frame_ids = require_one_sequence(session, frame_ids)
+    _get_label(session, target_label_id, "Target")
+    copies = (
+        session.query(Annotation)
+        .filter(
+            Annotation.frame_id.in_(frame_ids),
+            Annotation.label_id == target_label_id,
+            Annotation.source_annotation_id.isnot(None),
+        )
+        .all()
+    )
+    doomed = [a for a in copies if a.status != AnnotationStatus.REVIEWED]
+    result = RemoveCopiesResult(
+        dry_run=dry_run, removed=len(doomed), kept_reviewed=len(copies) - len(doomed)
+    )
+    if dry_run or not doomed:
+        return result
+
+    keys = [
+        key
+        for a in doomed
+        for key in (a.storage_key, a.raw_mask_storage_key)
+        if key is not None
+    ]
+    try:
+        for annotation in doomed:
+            session.delete(annotation)
+        session.flush()
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    for key in keys:
+        try:
+            storage.delete(key)
+        except Exception:
+            logger.warning("Could not delete storage object %s after removing copies", key)
     return result
