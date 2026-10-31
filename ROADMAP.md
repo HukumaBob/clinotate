@@ -2279,3 +2279,39 @@ out" while the code fills with the crop's mean colour (fixed in `3af57a2`).
 - Small deferred items: `transformers>=4.56.0` floor is untested below 5.15.1;
   `catalog.ADAPTER_NAME` alias is still used by `params.py`; the adapter is not in
   the Train URL.
+
+### Tag regions (2026-10-31)
+
+Design: `docs/superpowers/specs/2026-10-31-tag-regions-design.md`. Copies the
+detection or segmentation regions of selected frames into a second annotation
+carrying a different label (typically a histology class), so a second-stage
+classifier such as the DINOv3 adapter has labelled crops to train on.
+
+**Built:**
+
+- `Annotation.source_annotation_id`: links a copy to the region it was made from.
+- Endpoints: `tag-regions` (create copies, with a dry-run preview that shares the
+  code path of the real run), `region-labels` (which labels the selected frames
+  can be tagged with) and `remove-region-copies` (undo).
+- The sequence grid has a Tag regions panel (Create and Remove copies modes, preview
+  before applying) and Select all / Deselect all in Select mode for every bulk action.
+
+**Deviations and decisions:**
+
+- **Remove copies deletes DRAFT and REJECTED copies and keeps REVIEWED.** The spec said
+  DRAFT only; REJECTED was added because a rejected copy would otherwise block
+  re-tagging with no way out.
+- **1000-source-region cap per request.**
+- **A copy is a download plus an upload.** `StorageService` has no server-side copy.
+- **Copies get `job_id` NULL and status DRAFT.**
+- **An existing copy of the same evaluation type blocks a second one** (Remove first).
+- **Sources of the target's own evaluation type are not counted as hand-drawn.**
+- **`skipped_manual_frames` counts only manual frames that actually had a source
+  withheld.**
+
+**Not verified yet:** the real-browser check of the panel against the dev stack.
+
+**Deferred, pre-existing leak:** the single-annotation delete removes only
+`storage_key`, not `raw_mask_storage_key`. Remove copies deletes both; the old path is
+not fixed here.
+

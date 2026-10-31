@@ -1,7 +1,7 @@
 # Tag regions: copy region annotations to another label in bulk
 
 Date: 2026-10-31
-Status: draft, awaiting approval
+Status: approved, implemented (browser check pending)
 
 Extends the sequence grid's Select mode described in
 [2026-08-06-sequence-grid-frame-delete-toolbar-design.md](2026-08-06-sequence-grid-frame-delete-toolbar-design.md)
@@ -63,6 +63,7 @@ classifier (see
    made by this feature (the ones that have a source link) that carry the chosen
    target label on the ticked frames. Hand-drawn regions are never touched.
    This is the undo for a wrong histology.
+   Implementation deviation: it removes DRAFT and REJECTED copies (REVIEWED are kept), because a rejected copy would otherwise block re-tagging.
 6. **Select all** (and Deselect all) in Select mode, for every bulk action.
 
 ## Non-goals

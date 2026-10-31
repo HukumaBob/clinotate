@@ -9,6 +9,10 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 ## [Unreleased]
 
 ### Added
+- Tag regions: copy the boxes or masks of selected frames into a second annotation with
+  a different label (for second-stage classifier training), with a preview, an undo
+  (Remove copies) and Select all / Deselect all in the sequence grid. Not yet
+  browser-verified; see ROADMAP.md.
 - Model versions record the class names they were trained on (`class_names`,
   ordered by class id) and ship a `classes.json` next to the weights, served
   through the existing artifact download. Versions trained earlier have an
