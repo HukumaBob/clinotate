@@ -47,6 +47,47 @@ class BulkClearNoFindingsResult(BaseModel):
     frame_ids: list[int]
 
 
+class RegionLabelsRequest(BaseModel):
+    frame_ids: list[int] = Field(min_length=1)
+
+
+class RegionLabelCountRead(BaseModel):
+    label_id: int
+    name: str
+    count: int
+    category_name: str
+
+
+class TagRegionsRequest(BaseModel):
+    frame_ids: list[int] = Field(min_length=1)
+    source_label_id: int
+    target_label_id: int
+    skip_manual_frames: bool = True
+    dry_run: bool = False
+
+
+class TagRegionsResultRead(BaseModel):
+    dry_run: bool
+    regions: int
+    frames: int
+    skipped_already_copied: int
+    already_copied_label_names: list[str]
+    frames_with_manual_regions: int
+    skipped_manual_frames: int
+
+
+class RemoveCopiesRequest(BaseModel):
+    frame_ids: list[int] = Field(min_length=1)
+    target_label_id: int
+    dry_run: bool = False
+
+
+class RemoveCopiesResultRead(BaseModel):
+    dry_run: bool
+    removed: int
+    kept_reviewed: int
+
+
 class AnnotationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

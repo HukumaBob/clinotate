@@ -2652,6 +2652,148 @@
         ]
       }
     },
+    "/annotation/frames/region-labels": {
+      "post": {
+        "tags": [
+          "annotation"
+        ],
+        "summary": "Region Labels Endpoint",
+        "operationId": "region_labels_endpoint_annotation_frames_region_labels_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegionLabelsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RegionLabelCountRead"
+                  },
+                  "type": "array",
+                  "title": "Response Region Labels Endpoint Annotation Frames Region Labels Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/annotation/frames/tag-regions": {
+      "post": {
+        "tags": [
+          "annotation"
+        ],
+        "summary": "Tag Regions Endpoint",
+        "operationId": "tag_regions_endpoint_annotation_frames_tag_regions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagRegionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagRegionsResultRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/annotation/frames/remove-region-copies": {
+      "post": {
+        "tags": [
+          "annotation"
+        ],
+        "summary": "Remove Region Copies Endpoint",
+        "operationId": "remove_region_copies_endpoint_annotation_frames_remove_region_copies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveCopiesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoveCopiesResultRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/annotation/annotations/{annotation_id}/status": {
       "patch": {
         "tags": [
@@ -7129,6 +7271,101 @@
         ],
         "title": "RecommendationRead"
       },
+      "RegionLabelCountRead": {
+        "properties": {
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "category_name": {
+            "type": "string",
+            "title": "Category Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label_id",
+          "name",
+          "count",
+          "category_name"
+        ],
+        "title": "RegionLabelCountRead"
+      },
+      "RegionLabelsRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Frame Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids"
+        ],
+        "title": "RegionLabelsRequest"
+      },
+      "RemoveCopiesRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Frame Ids"
+          },
+          "target_label_id": {
+            "type": "integer",
+            "title": "Target Label Id"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids",
+          "target_label_id"
+        ],
+        "title": "RemoveCopiesRequest"
+      },
+      "RemoveCopiesResultRead": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          },
+          "kept_reviewed": {
+            "type": "integer",
+            "title": "Kept Reviewed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dry_run",
+          "removed",
+          "kept_reviewed"
+        ],
+        "title": "RemoveCopiesResultRead"
+      },
       "RunMetricsRead": {
         "properties": {
           "metrics": {
@@ -8028,6 +8265,89 @@
           "name"
         ],
         "title": "SuggestSequenceNameResponse"
+      },
+      "TagRegionsRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Frame Ids"
+          },
+          "source_label_id": {
+            "type": "integer",
+            "title": "Source Label Id"
+          },
+          "target_label_id": {
+            "type": "integer",
+            "title": "Target Label Id"
+          },
+          "skip_manual_frames": {
+            "type": "boolean",
+            "title": "Skip Manual Frames",
+            "default": true
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids",
+          "source_label_id",
+          "target_label_id"
+        ],
+        "title": "TagRegionsRequest"
+      },
+      "TagRegionsResultRead": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "regions": {
+            "type": "integer",
+            "title": "Regions"
+          },
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          },
+          "skipped_already_copied": {
+            "type": "integer",
+            "title": "Skipped Already Copied"
+          },
+          "already_copied_label_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Already Copied Label Names"
+          },
+          "frames_with_manual_regions": {
+            "type": "integer",
+            "title": "Frames With Manual Regions"
+          },
+          "skipped_manual_frames": {
+            "type": "integer",
+            "title": "Skipped Manual Frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dry_run",
+          "regions",
+          "frames",
+          "skipped_already_copied",
+          "already_copied_label_names",
+          "frames_with_manual_regions",
+          "skipped_manual_frames"
+        ],
+        "title": "TagRegionsResultRead"
       },
       "TaskType": {
         "type": "string",

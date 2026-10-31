@@ -42,6 +42,9 @@ class FakeStorage:
     def download(self, key: str) -> bytes:
         return self.objects[key]
 
+    def url_for(self, key: str) -> str:
+        return f"http://fake-storage/{key}"
+
     def delete(self, key: str) -> None:
         self.objects.pop(key, None)
         self.deleted.append(key)

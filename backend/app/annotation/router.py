@@ -14,7 +14,14 @@ from app.annotation.schemas import (
     BulkMarkNoFindingsRequest,
     BulkMarkNoFindingsResult,
     MaskPostprocessUpdate,
+    RegionLabelCountRead,
+    RegionLabelsRequest,
+    RemoveCopiesRequest,
+    RemoveCopiesResultRead,
+    TagRegionsRequest,
+    TagRegionsResultRead,
 )
+from app.annotation.tag_regions import list_region_labels, remove_copies, tag_regions
 from app.annotation.service import (
     bulk_classify_frames,
     bulk_clear_classification,
@@ -112,6 +119,48 @@ def bulk_clear_no_findings_endpoint(
 ) -> BulkClearNoFindingsResult:
     frame_ids = bulk_clear_no_findings(session, payload.frame_ids)
     return BulkClearNoFindingsResult(frame_ids=frame_ids)
+
+
+@router.post("/frames/region-labels", response_model=list[RegionLabelCountRead])
+def region_labels_endpoint(
+    payload: RegionLabelsRequest,
+    session: Session = Depends(get_session),
+) -> list[RegionLabelCountRead]:
+    return [
+        RegionLabelCountRead(**vars(row)) for row in list_region_labels(session, payload.frame_ids)
+    ]
+
+
+@router.post("/frames/tag-regions", response_model=TagRegionsResultRead)
+def tag_regions_endpoint(
+    payload: TagRegionsRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> TagRegionsResultRead:
+    result = tag_regions(
+        session,
+        storage,
+        payload.frame_ids,
+        payload.source_label_id,
+        payload.target_label_id,
+        current_user,
+        skip_manual_frames=payload.skip_manual_frames,
+        dry_run=payload.dry_run,
+    )
+    return TagRegionsResultRead(**vars(result))
+
+
+@router.post("/frames/remove-region-copies", response_model=RemoveCopiesResultRead)
+def remove_region_copies_endpoint(
+    payload: RemoveCopiesRequest,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> RemoveCopiesResultRead:
+    result = remove_copies(
+        session, storage, payload.frame_ids, payload.target_label_id, dry_run=payload.dry_run
+    )
+    return RemoveCopiesResultRead(**vars(result))
 
 
 @router.patch("/annotations/{annotation_id}/status", response_model=AnnotationRead)
