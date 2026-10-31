@@ -8,7 +8,8 @@
 - ``build_world(db_session)``: a user, two sequences' frames, region
   evaluation types ``geometric`` / ``morphological`` plus a frame-scoped one,
   and labels ``polyp`` (parent) -> ``polyp_ip`` (child), ``adenoma``, ``ssl``,
-  an abstract morphological label and a frame-scoped label. Committed (the
+  an abstract morphological label, an abstract geometric label and a
+  frame-scoped label. Committed (the
   ``db_session`` fixture turns commits into savepoints, so everything still
   disappears at teardown) so a ``session.rollback()`` under test cannot undo it.
 - ``add_region(...)``: one MASK (with objects in the FakeStorage) or BBOX
@@ -79,6 +80,7 @@ def build_world(db_session) -> SimpleNamespace:
     adenoma = label("adenoma", morphological)
     ssl = label("ssl", morphological)
     neoplasia = label("neoplasia", morphological, is_abstract=True)
+    lesion = label("lesion", geometric, is_abstract=True)
     blurry = label("blurry", frame_scope)
 
     video = Video(
@@ -113,7 +115,7 @@ def build_world(db_session) -> SimpleNamespace:
         user=user, procedure=procedure, category=category,
         geometric=geometric, morphological=morphological, frame_scope=frame_scope,
         polyp=polyp, polyp_ip=polyp_ip, adenoma=adenoma, ssl=ssl,
-        abstract=neoplasia, frame_label=blurry,
+        abstract=neoplasia, abstract_geometric=lesion, frame_label=blurry,
         sequence_a=sequence_a, frames_a=frames_a,
         sequence_b=sequence_b, frames_b=frames_b,
     )

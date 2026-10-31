@@ -162,6 +162,15 @@ def tag_regions(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Source and target labels must differ",
         )
+    if source.evaluation_type_id == target.evaluation_type_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Source and target labels must belong to different evaluation types: "
+                "copying within one evaluation type would stack a conflicting label "
+                "on the same region"
+            ),
+        )
 
     sources = eligible_sources(session, frame_ids, descendant_label_ids(session, source.id))
     if len(sources) > MAX_SOURCE_REGIONS:
@@ -191,8 +200,10 @@ def tag_regions(
             already_copied.setdefault(row.source_annotation_id, set()).add(row.name)
 
     # Hand-drawn regions of the target's evaluation type: no source link, and
-    # not themselves one of the regions being copied (an adenoma -> ssl
-    # relabel must not see its own sources as manual work).
+    # not themselves one of the regions being copied. The source label itself
+    # is never of the target's type (422 above), but the hierarchy enforces
+    # only a shared annotation scope, so a descendant of the source can still
+    # be; those sources must not count as manual work.
     manual_query = (
         session.query(Annotation.frame_id)
         .join(Label, Label.id == Annotation.label_id)

@@ -122,8 +122,17 @@ copied the same way when present. A BBOX source has no object, only `payload`:
 copy the object only when the key is non-null.
 
 **Validation (422):** source and target must both be region-scoped; the target
-must not be abstract; source and target must differ; frame ids must exist and
-belong to one sequence.
+must not be abstract; source and target must differ; source and target must
+belong to different evaluation types; frame ids must exist and belong to one
+sequence.
+
+**Different evaluation types (added after the final review):** a source label
+of the target's own evaluation type (for example adenoma -> ssl, both
+morphological) is rejected with 422, for the preview as well as the real run.
+Copying within one evaluation type would put two conflicting labels of that
+type on one geometry, which the skip rule above exists to prevent, and once the
+source is later removed the copies lose their link, so Remove copies can no
+longer reach them.
 
 **Atomicity:** one request is one transaction; either every copy is created or
 none. Object copies made before a failure are removed.

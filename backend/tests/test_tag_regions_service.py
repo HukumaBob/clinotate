@@ -207,11 +207,9 @@ def test_other_morphological_label_blocks_second_copy(db_session, world, storage
 def test_geometric_copy_does_not_block_morphological_copy(db_session, world, storage):
     frame = world.frames_a[0]
     source = add_region(db_session, storage, frame, world.polyp_ip, world.user)
-    # A geometric copy of the same source (polyp_ip -> polyp).
-    geometric = tag_regions(
-        db_session, storage, [frame.id], world.polyp_ip.id, world.polyp.id, world.user,
-    )
-    assert geometric.regions == 1
+    # A linked copy of the same source carrying a geometric label. tag_regions
+    # itself refuses a geometric -> geometric copy, so it is inserted directly.
+    add_region(db_session, storage, frame, world.polyp, world.user, source_annotation_id=source.id)
 
     result = tag_regions(
         db_session, storage, [frame.id], world.polyp_ip.id, world.adenoma.id, world.user,
@@ -284,18 +282,25 @@ def test_manual_target_type_frames_skipped_by_flag_and_not_when_off(db_session, 
     assert not_skipped.skipped_manual_frames == 0
 
 
-def test_sources_of_target_evaluation_type_do_not_count_as_manual(db_session, world, storage):
+def test_same_evaluation_type_source_and_target_is_422(db_session, world, storage):
     f0, f1 = world.frames_a[:2]
     add_region(db_session, storage, f0, world.adenoma, world.user)
     add_region(db_session, storage, f1, world.adenoma, world.user)
+    before_rows = _annotation_count(db_session)
+    before_objects = dict(storage.objects)
 
-    result = tag_regions(
-        db_session, storage, [f0.id, f1.id], world.adenoma.id, world.ssl.id, world.user,
-    )
+    for dry_run in (True, False):
+        with pytest.raises(HTTPException) as exc:
+            tag_regions(
+                db_session, storage, [f0.id, f1.id], world.adenoma.id, world.ssl.id,
+                world.user, dry_run=dry_run,
+            )
+        assert exc.value.status_code == 422
+        assert "evaluation type" in exc.value.detail
 
-    assert result.frames_with_manual_regions == 0
-    assert result.skipped_manual_frames == 0
-    assert result.regions == 2
+    assert _annotation_count(db_session) == before_rows
+    assert storage.objects == before_objects
+    assert storage.uploads == []
 
 
 def test_mask_without_storage_key_is_ineligible(db_session, world, storage):
@@ -357,7 +362,10 @@ def test_validation_errors(db_session, world, storage):
     assert _status_of(run(world.polyp.id, world.adenoma.id, [frame.id, 999_999_999])) == 404
 
     # An abstract SOURCE is fine (it stands for its descendants).
-    tag_regions(db_session, storage, ids, world.abstract.id, world.ssl.id, world.user, dry_run=True)
+    tag_regions(
+        db_session, storage, ids, world.abstract_geometric.id, world.ssl.id, world.user,
+        dry_run=True,
+    )
 
     assert require_one_sequence(db_session, [frame.id, frame.id, world.frames_a[1].id]) == [
         frame.id, world.frames_a[1].id,

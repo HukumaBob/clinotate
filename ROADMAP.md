@@ -2305,7 +2305,13 @@ classifier such as the DINOv3 adapter has labelled crops to train on.
 - **A copy is a download plus an upload.** `StorageService` has no server-side copy.
 - **Copies get `job_id` NULL and status DRAFT.**
 - **An existing copy of the same evaluation type blocks a second one** (Remove first).
-- **Sources of the target's own evaluation type are not counted as hand-drawn.**
+- **Source and target must belong to different evaluation types (422, preview included).**
+  Added after the final review: adenoma -> ssl would stack two conflicting morphological
+  labels on one geometry, and once the source is removed the copies lose their link and
+  Remove copies can no longer reach them.
+- **Sources of the target's own evaluation type are not counted as hand-drawn.** With the
+  rule above this only arises through a descendant of the source label that sits in
+  another evaluation type (the hierarchy enforces a shared scope, not a shared type).
 - **`skipped_manual_frames` counts only manual frames that actually had a source
   withheld.**
 
