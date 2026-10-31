@@ -208,7 +208,8 @@ def _dinov3_fields() -> list[ParamField]:
         f("mask_mode", "Outside-mask handling", "crop", "choice", "none",
           choices=("none", "zero", "blur"), tasks=(TaskType.SEGMENTATION,),
           help="What to do with pixels inside the crop but outside the segmentation mask: "
-               "'none' keeps them, 'zero' blacks them out, 'blur' blurs them."),
+               "'none' keeps them, 'zero' fills them with the crop's average colour, "
+               "'blur' blurs them."),
         # -- optimization
         f("lr", "Head learning rate", "optimization", "float", 0.001, min=0.000001, max=1,
           help="Learning rate of the classifier on top of the backbone."),

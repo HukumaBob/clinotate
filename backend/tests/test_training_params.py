@@ -354,3 +354,9 @@ def test_dinov3_presets():
     assert presets["fine_tune_last_blocks"] == {
         "mode": "partial", "batch": 16, "epochs": 20, "unfreeze_blocks": 2,
     }
+
+
+def test_mask_mode_help_describes_the_real_fill():
+    helptext = _fields(params.settings_schema(DINOV3, SEG))["mask_mode"]["help"]
+    assert "average colour" in helptext
+    assert "blacks" not in helptext
