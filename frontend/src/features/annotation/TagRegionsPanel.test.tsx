@@ -264,4 +264,35 @@ describe("TagRegionsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(2);
   });
+
+  it("a failed Create shows its error message", async () => {
+    const user = userEvent.setup();
+    setup();
+    tagMutate.mockImplementation((_params, options) =>
+      options?.onError?.(new Error("Target label belongs to another procedure")),
+    );
+    renderPanel();
+    await pickCreateInputs(user);
+
+    await user.click(screen.getByRole("button", { name: "Create 28 regions" }));
+
+    expect(screen.getByText("Target label belongs to another procedure")).toBeInTheDocument();
+    expect(screen.queryByText(/^Created /)).not.toBeInTheDocument();
+  });
+
+  it("a failed Remove shows its error message", async () => {
+    const user = userEvent.setup();
+    setup();
+    removeMutate.mockImplementation((_params, options) => options?.onError?.(new Error("Request failed")));
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Remove copies" }));
+    await user.selectOptions(screen.getByLabelText("Target category"), "1");
+    await user.selectOptions(screen.getByLabelText("Target label"), "302");
+    await user.click(screen.getByRole("button", { name: "Remove 5 copies" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(screen.getByText("Request failed")).toBeInTheDocument();
+    expect(screen.queryByText(/^Removed /)).not.toBeInTheDocument();
+  });
 });

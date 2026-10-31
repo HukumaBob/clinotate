@@ -38,6 +38,12 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
   const [skipManualFrames, setSkipManualFrames] = useState(true);
   const [removeArmed, setRemoveArmed] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  function clearOutcome() {
+    setResultMessage(null);
+    setActionError(null);
+  }
 
   const frameKey = frameIds.join(",");
 
@@ -107,19 +113,21 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
 
   function handleModeChange(nextMode: Mode) {
     setMode(nextMode);
-    setResultMessage(null);
+    clearOutcome();
   }
 
   function handleTargetCategoryChange(rawValue: string) {
     setTargetCategoryId(parseId(rawValue));
     setTargetLabelId(null);
-    setResultMessage(null);
+    clearOutcome();
   }
 
   function handleCreate() {
     if (tagParams === null) return;
+    clearOutcome();
     tagRegions.mutate(tagParams, {
       onSuccess: (data) => setResultMessage(`Created ${data.regions} regions on ${data.frames} frames.`),
+      onError: (error) => setActionError(error.message),
     });
   }
 
@@ -130,8 +138,10 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
       return;
     }
     setRemoveArmed(false);
+    clearOutcome();
     removeCopies.mutate(removeParams, {
       onSuccess: (data) => setResultMessage(`Removed ${data.removed} copies.`),
+      onError: (error) => setActionError(error.message),
     });
   }
 
@@ -167,7 +177,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
             value={sourceLabelId ?? ""}
             onChange={(event) => {
               setSourceLabelId(parseId(event.target.value));
-              setResultMessage(null);
+              clearOutcome();
             }}
             className={selectClassName}
           >
@@ -199,7 +209,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
           value={targetLabelId ?? ""}
           onChange={(event) => {
             setTargetLabelId(parseId(event.target.value));
-            setResultMessage(null);
+            clearOutcome();
           }}
           disabled={targetCategoryId === null}
           className={selectClassName}
@@ -220,7 +230,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
             checked={skipManualFrames}
             onChange={(event) => {
               setSkipManualFrames(event.target.checked);
-              setResultMessage(null);
+              clearOutcome();
             }}
           />
           Skip frames that already have hand-drawn regions of this type
@@ -256,7 +266,11 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
         </div>
       ) : null}
 
-      {resultMessage && <p className="text-emerald-400">{resultMessage}</p>}
+      {actionError ? (
+        <p className="text-red-400">{actionError}</p>
+      ) : (
+        resultMessage && <p className="text-emerald-400">{resultMessage}</p>
+      )}
 
       {mode === "create" ? (
         <button
