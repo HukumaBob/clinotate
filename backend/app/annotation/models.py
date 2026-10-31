@@ -43,6 +43,11 @@ class Annotation(Base):
     # docs/superpowers/specs/2026-08-11-mask-postprocessing-design.md.
     raw_mask_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    # Set when this annotation is a copy made by tag-regions; NULL for
+    # hand-drawn or model-produced ones. Deleting the source keeps the copy.
+    source_annotation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("annotations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
