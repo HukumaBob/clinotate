@@ -242,6 +242,8 @@ export function SequenceGridPage() {
           totalCount={framesQuery.data?.length ?? 0}
           onSelectAll={handleSelectAll}
           onDeselectAll={handleDeselectAll}
+          sequenceId={sequenceIdNumber}
+          selectedFrameIds={Array.from(selectedFrameIds)}
         />
         {skippedCount > 0 && (
           <div className="border-t border-gray-800 bg-gray-950 px-4 py-2 text-sm text-amber-400">

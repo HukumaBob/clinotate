@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
+import { TagRegionsPanel } from "./TagRegionsPanel";
 
 type TaxonomyTreeNode = components["schemas"]["TaxonomyTreeNode"];
 
@@ -29,6 +30,8 @@ interface SequenceGridToolbarProps {
   totalCount?: number;
   onSelectAll?: () => void;
   onDeselectAll?: () => void;
+  sequenceId?: number;
+  selectedFrameIds?: number[];
 }
 
 export function SequenceGridToolbar({
@@ -56,9 +59,13 @@ export function SequenceGridToolbar({
   totalCount = 0,
   onSelectAll = () => {},
   onDeselectAll = () => {},
+  sequenceId = 0,
+  selectedFrameIds = [],
 }: SequenceGridToolbarProps) {
   const allSelected = totalCount > 0 && selectedCount === totalCount;
   const [deleteArmed, setDeleteArmed] = useState(false);
+  const [isTagRegionsOpen, setIsTagRegionsOpen] = useState(false);
+  const closeTagRegions = useCallback(() => setIsTagRegionsOpen(false), []);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
 
@@ -121,6 +128,7 @@ export function SequenceGridToolbar({
 
   function handleCancelClick() {
     setDeleteArmed(false);
+    setIsTagRegionsOpen(false);
     onCancel();
   }
 
@@ -196,6 +204,28 @@ export function SequenceGridToolbar({
             >
               {hasNoFindingsMarkedForAllSelected ? "Unmark no findings" : "Mark no findings"}
             </button>
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Tag regions"
+                aria-expanded={isTagRegionsOpen && selectedCount > 0}
+                onClick={() => setIsTagRegionsOpen((current) => !current)}
+                disabled={selectedCount === 0}
+                className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+              >
+                Tag regions…
+              </button>
+              {isTagRegionsOpen && selectedCount > 0 && (
+                <div className="absolute right-0 top-full z-20 mt-2">
+                  <TagRegionsPanel
+                    sequenceId={sequenceId}
+                    frameIds={selectedFrameIds}
+                    taxonomyTree={taxonomyTree}
+                    onClose={closeTagRegions}
+                  />
+                </div>
+              )}
+            </div>
             <input
               type="number"
               aria-label="Quality percent"

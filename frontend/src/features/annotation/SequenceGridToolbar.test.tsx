@@ -4,6 +4,17 @@ import userEvent from "@testing-library/user-event";
 
 import { SequenceGridToolbar } from "./SequenceGridToolbar";
 
+vi.mock("./TagRegionsPanel", () => ({
+  TagRegionsPanel: ({ frameIds, onClose }: { frameIds: number[]; onClose: () => void }) => (
+    <div>
+      <span>Tag regions panel for {frameIds.join(",")}</span>
+      <button type="button" onClick={onClose}>
+        Close
+      </button>
+    </div>
+  ),
+}));
+
 describe("SequenceGridToolbar", () => {
   it("shows the sequence name, not a numeric id placeholder", () => {
     render(
@@ -789,5 +800,43 @@ describe("SequenceGridToolbar classification controls", () => {
     );
 
     expect(screen.queryByRole("button", { name: /select all/i })).not.toBeInTheDocument();
+  });
+
+  it("Tag regions button is disabled with nothing selected and opens the panel", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        sequenceId={7}
+        selectedFrameIds={[]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Tag regions" })).toBeDisabled();
+    expect(screen.queryByText(/Tag regions panel/)).not.toBeInTheDocument();
+
+    rerender(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={2}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        sequenceId={7}
+        selectedFrameIds={[4, 5]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Tag regions" }));
+    expect(screen.getByText("Tag regions panel for 4,5")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByText(/Tag regions panel/)).not.toBeInTheDocument();
   });
 });
