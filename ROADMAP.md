@@ -2216,10 +2216,26 @@ export (grouped by video) and are never re-split.
 ViT-S/16 on synthetic crops in the ml-worker container (frozen 164 MiB, partial
 157 MiB peak VRAM, gradient checkpointing and fp16 with GradScaler working).
 
-**Not verified (the live check is still open):** a full-stack run in a real browser
-on a real exported dataset; ViT-B on real data; `workers > 0` DataLoader workers
-(only `workers=0` ran); the real gated-weights failure message; the version name as
-rendered in the Models table. ViT-L is deliberately never run on the 8 GB card.
+**Live check (2026-10-31, real browser and API against the dev stack):** the adapter
+list, DINOv3 base models (B, S, then L with the VRAM note), the settings schema
+(`mask_mode` only on segmentation) and the Train form at 1920 and 900 px all behave;
+a client-sent `backbone` is a 422; the single-class guard fires from the UI with a
+readable message. **Real training could not be run: every exported detection or
+segmentation dataset in the dev database (574, 496, 497) has exactly one class,
+`polyp`.** Still unverified for that reason: a real DINOv3 run (ViT-S/B frozen, ViT-B
+partial with VRAM numbers), `workers > 0` DataLoader workers (only `workers=0`
+ran), the licence artifact and version name on a real run, fine-tune from a DINOv3
+version, the QC 422 with a real DINOv3 version, and the real gated-weights failure
+message. The next step is a dataset with at least two histology classes (each with
+training samples, and a validation split). ViT-L is deliberately never run on the
+8 GB card.
+
+Found by the live check: the adapter list reports `supported: true` for a single-class
+dataset, so the form launches runs that can only fail (the failure is readable);
+the active-run check runs before settings validation (a bad request gets 409
+instead of 422 while any run is active); a DINOv3 run page opened directly hides
+"Changed settings" (intentional, inconsistent); the `mask_mode` help said "zero blacks
+out" while the code fills with the crop's mean colour (fixed in `3af57a2`).
 
 **Deviation log:**
 
