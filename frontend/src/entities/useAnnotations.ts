@@ -219,6 +219,8 @@ function invalidateAfterRegionChange(
   queryClient.invalidateQueries({ queryKey: ["region-labels"] });
   queryClient.invalidateQueries({ queryKey: ["tag-regions-preview"] });
   queryClient.invalidateQueries({ queryKey: ["remove-copies-preview"] });
+  // The Tags screen's per-label region counts (useLabelMaskCounts).
+  queryClient.invalidateQueries({ queryKey: ["taxonomy", "labels", "mask-counts"] });
 }
 
 export function useTagRegions(sequenceId: number) {

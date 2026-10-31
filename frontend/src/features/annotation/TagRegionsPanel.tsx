@@ -55,13 +55,18 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  // Any change to what Remove would act on disarms the confirm step.
-  useEffect(() => {
-    setRemoveArmed(false);
-  }, [mode, targetLabelId, frameKey]);
-
   const regionLabelsQuery = useRegionLabels(frameIds, true);
   const sourceLabels = regionLabelsQuery.data ?? [];
+
+  // A chosen source that is no longer on the selected frames (frames
+  // unticked, regions deleted) must not keep driving the preview or Create.
+  const sourceListed = sourceLabelId !== null && sourceLabels.some((entry) => entry.label_id === sourceLabelId);
+  const activeSourceLabelId = sourceListed ? sourceLabelId : null;
+  useEffect(() => {
+    if (regionLabelsQuery.data !== undefined && sourceLabelId !== null && !sourceListed) {
+      setSourceLabelId(null);
+    }
+  }, [regionLabelsQuery.data, sourceLabelId, sourceListed]);
 
   // Same Category -> Label cascade as the toolbar's classification pickers,
   // but over region-scoped evaluation types.
@@ -82,12 +87,12 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
 
   const tagParams = useMemo<TagRegionsParams | null>(
     () =>
-      mode === "create" && sourceLabelId !== null && targetLabelId !== null
-        ? { frameIds, sourceLabelId, targetLabelId, skipManualFrames }
+      mode === "create" && activeSourceLabelId !== null && targetLabelId !== null
+        ? { frameIds, sourceLabelId: activeSourceLabelId, targetLabelId, skipManualFrames }
         : null,
     // frameKey stands in for frameIds' contents.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mode, frameKey, sourceLabelId, targetLabelId, skipManualFrames],
+    [mode, frameKey, activeSourceLabelId, targetLabelId, skipManualFrames],
   );
   const removeParams = useMemo<RemoveCopiesParams | null>(
     () => (mode === "remove" && targetLabelId !== null ? { frameIds, targetLabelId } : null),
@@ -102,6 +107,11 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
 
   const createCount = tagPreview.data?.regions ?? 0;
   const removeCount = removePreview.data?.removed ?? 0;
+
+  // Any change to what Remove would act on disarms the confirm step.
+  useEffect(() => {
+    setRemoveArmed(false);
+  }, [mode, targetLabelId, frameKey, removeCount]);
   const createDisabled =
     tagParams === null || createCount === 0 || tagPreview.isFetching || tagPreview.isError || tagRegions.isPending;
   const removeDisabled =
@@ -174,7 +184,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
         ) : (
           <select
             aria-label="Source label"
-            value={sourceLabelId ?? ""}
+            value={activeSourceLabelId ?? ""}
             onChange={(event) => {
               setSourceLabelId(parseId(event.target.value));
               clearOutcome();
@@ -286,11 +296,11 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
           type="button"
           onClick={handleRemove}
           disabled={removeDisabled}
-          className={`rounded px-3 py-1.5 text-sm ${
-            removeArmed ? "bg-red-700 text-white" : "bg-gray-800 text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+          className={`rounded px-3 py-1.5 text-sm disabled:opacity-40 ${
+            removeArmed ? "bg-red-700 text-white" : "bg-gray-800 text-gray-200 hover:bg-gray-700"
           }`}
         >
-          {removeArmed ? "Confirm" : `Remove ${removeCount} copies`}
+          {removeArmed ? `Confirm remove ${removeCount} copies` : `Remove ${removeCount} copies`}
         </button>
       )}
     </div>

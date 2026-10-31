@@ -149,6 +149,7 @@ describe("tag-regions hooks", () => {
     expect(keys).toContainEqual(["region-labels"]);
     expect(keys).toContainEqual(["tag-regions-preview"]);
     expect(keys).toContainEqual(["remove-copies-preview"]);
+    expect(keys).toContainEqual(["taxonomy", "labels", "mask-counts"]);
   });
 
   it("useRegionLabels posts frame_ids", async () => {
@@ -178,5 +179,6 @@ describe("tag-regions hooks", () => {
     const keys = spy.mock.calls.map((c) => c[0]?.queryKey);
     expect(keys).toContainEqual(["annotations", 1]);
     expect(keys).toContainEqual(["frames", 10]);
+    expect(keys).toContainEqual(["taxonomy", "labels", "mask-counts"]);
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
 import { TagRegionsPanel } from "./TagRegionsPanel";
@@ -66,6 +66,10 @@ export function SequenceGridToolbar({
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [isTagRegionsOpen, setIsTagRegionsOpen] = useState(false);
   const closeTagRegions = useCallback(() => setIsTagRegionsOpen(false), []);
+  // An emptied selection closes the panel, so a later selection does not reopen it.
+  useEffect(() => {
+    if (selectedCount === 0) setIsTagRegionsOpen(false);
+  }, [selectedCount]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
 

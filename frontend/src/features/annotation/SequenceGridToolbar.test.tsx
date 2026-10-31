@@ -839,4 +839,30 @@ describe("SequenceGridToolbar classification controls", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText(/Tag regions panel/)).not.toBeInTheDocument();
   });
+
+  it("closes the Tag regions panel when the selection empties", async () => {
+    const user = userEvent.setup();
+    const toolbar = (count: number, ids: number[]) => (
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={count}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        sequenceId={7}
+        selectedFrameIds={ids}
+      />
+    );
+    const { rerender } = render(toolbar(2, [4, 5]));
+    await user.click(screen.getByRole("button", { name: "Tag regions" }));
+    expect(screen.getByText("Tag regions panel for 4,5")).toBeInTheDocument();
+
+    rerender(toolbar(0, []));
+    expect(screen.queryByText(/Tag regions panel/)).not.toBeInTheDocument();
+
+    rerender(toolbar(2, [6, 7]));
+    expect(screen.queryByText(/Tag regions panel/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tag regions" })).toHaveAttribute("aria-expanded", "false");
+  });
 });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -108,6 +108,13 @@ function setup({
 function renderPanel(onClose = vi.fn()) {
   render(<TagRegionsPanel sequenceId={7} frameIds={[1, 2, 3]} taxonomyTree={taxonomyTree} onClose={onClose} />);
   return onClose;
+}
+
+async function armRemove(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Remove copies" }));
+  await user.selectOptions(screen.getByLabelText("Target category"), "1");
+  await user.selectOptions(screen.getByLabelText("Target label"), "302");
+  await user.click(screen.getByRole("button", { name: "Remove 5 copies" }));
 }
 
 async function pickCreateInputs(user: ReturnType<typeof userEvent.setup>) {
@@ -249,7 +256,7 @@ describe("TagRegionsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Remove 5 copies" }));
     expect(removeMutate).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(screen.getByRole("button", { name: "Confirm remove 5 copies" }));
     expect(removeMutate).toHaveBeenCalledWith({ frameIds: [1, 2, 3], targetLabelId: 302 }, expect.anything());
   });
 
@@ -290,9 +297,60 @@ describe("TagRegionsPanel", () => {
     await user.selectOptions(screen.getByLabelText("Target category"), "1");
     await user.selectOptions(screen.getByLabelText("Target label"), "302");
     await user.click(screen.getByRole("button", { name: "Remove 5 copies" }));
-    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(screen.getByRole("button", { name: "Confirm remove 5 copies" }));
 
     expect(screen.getByText("Request failed")).toBeInTheDocument();
     expect(screen.queryByText(/^Removed /)).not.toBeInTheDocument();
+  });
+
+  it("an armed Remove disarms when the number of copies changes", async () => {
+    const user = userEvent.setup();
+    let removed = 5;
+    setup();
+    vi.mocked(useRemoveCopiesPreview).mockImplementation(
+      (params) =>
+        ({
+          data: params ? { dry_run: true, removed, kept_reviewed: 0 } : undefined,
+          isFetching: false,
+          isError: false,
+          error: null,
+        }) as never,
+    );
+    const view = render(
+      <TagRegionsPanel sequenceId={7} frameIds={[1, 2, 3]} taxonomyTree={taxonomyTree} onClose={vi.fn()} />,
+    );
+    await armRemove(user);
+    const armed = screen.getByRole("button", { name: "Confirm remove 5 copies" });
+    expect(armed.className).toContain("disabled:opacity-40");
+
+    removed = 7;
+    view.rerender(
+      <TagRegionsPanel sequenceId={7} frameIds={[1, 2, 3]} taxonomyTree={taxonomyTree} onClose={vi.fn()} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Remove 7 copies" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Confirm/ })).not.toBeInTheDocument();
+    expect(removeMutate).not.toHaveBeenCalled();
+  });
+
+  it("drops the source label when it leaves the region-labels list", async () => {
+    const user = userEvent.setup();
+    setup();
+    const view = render(
+      <TagRegionsPanel sequenceId={7} frameIds={[1, 2, 3]} taxonomyTree={taxonomyTree} onClose={vi.fn()} />,
+    );
+    await pickCreateInputs(user);
+    expect(screen.getByRole("button", { name: "Create 28 regions" })).toBeEnabled();
+
+    vi.mocked(useRegionLabels).mockReturnValue({ data: [regionLabels[1]], isLoading: false } as never);
+    act(() => {
+      view.rerender(
+        <TagRegionsPanel sequenceId={7} frameIds={[1, 2, 3]} taxonomyTree={taxonomyTree} onClose={vi.fn()} />,
+      );
+    });
+
+    expect(useTagRegionsPreview).toHaveBeenLastCalledWith(null);
+    expect(screen.getByRole("button", { name: /^Create \d+ regions$/ })).toBeDisabled();
+    expect(screen.getByLabelText("Source label")).toHaveValue("");
   });
 });
