@@ -25,6 +25,10 @@ interface TagRegionsPanelProps {
 const selectClassName =
   "w-full rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-gray-200 disabled:opacity-40";
 
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 function parseId(rawValue: string): number | null {
   const parsed = Number(rawValue);
   return rawValue !== "" && Number.isFinite(parsed) ? parsed : null;
@@ -34,7 +38,6 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
   const [mode, setMode] = useState<Mode>("create");
   const [sourceLabelId, setSourceLabelId] = useState<number | null>(null);
   const [sourceTypeId, setSourceTypeId] = useState<number | null>(null);
-  const [targetCategoryId, setTargetCategoryId] = useState<number | null>(null);
   const [targetTypeId, setTargetTypeId] = useState<number | null>(null);
   const [targetLabelId, setTargetLabelId] = useState<number | null>(null);
   const [skipManualFrames, setSkipManualFrames] = useState(true);
@@ -89,28 +92,45 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
     }
   }, [regionLabelsQuery.data, sourceLabelId, sourceListed]);
 
-  // Same Category -> Label cascade as the toolbar's classification pickers,
-  // but over region-scoped evaluation types.
-  const targetCategories = useMemo(
+  // Region-scoped classifications (evaluation types), each shown as
+  // "Category / classification" so the category is not a separate step.
+  const targetTypes = useMemo(
     () =>
-      taxonomyTree
-        .map((node) => ({
-          category: node.category,
-          types: node.evaluation_types
-            .filter((entry) => entry.evaluation_type.annotation_scope === "region")
-            .map((entry) => ({
-              id: entry.evaluation_type.id,
-              name: entry.evaluation_type.name,
-              labels: entry.labels.filter((label) => !label.is_abstract),
-            }))
-            .filter((entry) => entry.labels.length > 0),
-        }))
-        .filter((entry) => entry.types.length > 0),
+      taxonomyTree.flatMap((node) =>
+        node.evaluation_types
+          .filter((entry) => entry.evaluation_type.annotation_scope === "region")
+          .map((entry) => ({
+            id: entry.evaluation_type.id,
+            name: `${node.category.name} / ${entry.evaluation_type.name}`,
+            labels: entry.labels.filter((label) => !label.is_abstract),
+          }))
+          .filter((entry) => entry.labels.length > 0),
+      ),
     [taxonomyTree],
   );
-  const targetTypes = targetCategories.find((entry) => entry.category.id === targetCategoryId)?.types ?? [];
   const activeTargetType = targetTypes.find((entry) => entry.id === targetTypeId);
-  const targetLabels = (activeTargetType ? [activeTargetType] : targetTypes).flatMap((entry) => entry.labels);
+  const targetLabels = activeTargetType?.labels ?? [];
+
+  // Copying within one classification would stack a conflicting label (the
+  // backend answers 422), so the source's classification is not offered.
+  const sourceOwnType = sourceTypes.find(
+    (entry) => activeSourceLabelId !== null && entry.labelIds.has(activeSourceLabelId),
+  );
+  const blockedTypeId = mode === "create" ? sourceOwnType?.id : undefined;
+  const offeredTypeIds = targetTypes.filter((entry) => entry.id !== blockedTypeId).map((entry) => entry.id);
+  const offeredKey = offeredTypeIds.join(",");
+
+  useEffect(() => {
+    if (blockedTypeId !== undefined && targetTypeId === blockedTypeId) {
+      setTargetTypeId(null);
+      setTargetLabelId(null);
+    } else if (mode === "create" && activeSourceLabelId !== null && targetTypeId === null && offeredTypeIds.length === 1) {
+      // Only one classification is left to copy into: pick it.
+      setTargetTypeId(offeredTypeIds[0]);
+    }
+    // targetTypeId is left out so clearing the pick is not undone at once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, activeSourceLabelId, blockedTypeId, offeredKey]);
 
   const tagParams = useMemo<TagRegionsParams | null>(
     () =>
@@ -132,6 +152,8 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
   const tagRegions = useTagRegions(sequenceId);
   const removeCopies = useRemoveRegionCopies(sequenceId);
 
+  const sourceName = allSourceLabels.find((entry) => entry.label_id === activeSourceLabelId)?.name ?? "the source";
+  const targetName = targetLabels.find((label) => label.id === targetLabelId)?.name ?? "the target";
   const createCount = tagPreview.data?.regions ?? 0;
   const removeCount = removePreview.data?.removed ?? 0;
 
@@ -153,18 +175,11 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
     clearOutcome();
   }
 
-  function handleTargetCategoryChange(rawValue: string) {
-    setTargetCategoryId(parseId(rawValue));
-    setTargetTypeId(null);
-    setTargetLabelId(null);
-    clearOutcome();
-  }
-
   function handleCreate() {
     if (tagParams === null) return;
     clearOutcome();
     tagRegions.mutate(tagParams, {
-      onSuccess: (data) => setResultMessage(`Created ${data.regions} regions on ${data.frames} frames.`),
+      onSuccess: (data) => setResultMessage(`Created ${plural(data.regions, "region")} on ${plural(data.frames, "frame")}.`),
       onError: (error) => setActionError(error.message),
     });
   }
@@ -189,7 +204,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
   const previewError = mode === "create" ? tagPreview.error : removePreview.error;
 
   return (
-    <div className="w-96 space-y-3 rounded border border-gray-700 bg-gray-900 p-4 text-sm text-gray-200 shadow-xl">
+    <div className="w-[28rem] space-y-3 rounded border border-gray-700 bg-gray-900 p-4 text-sm text-gray-200 shadow-xl">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Tag regions on {frameIds.length} selected frames</h2>
         <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-200">
@@ -210,7 +225,8 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
         (sourceLabels.length === 0 && !regionLabelsQuery.isLoading ? (
           <p className="text-gray-400">No regions on the selected frames</p>
         ) : (
-          <div className="space-y-2">
+          <section className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Copy from</p>
             {sourceTypes.length > 1 && (
               <select
                 aria-label="Source classification"
@@ -246,42 +262,33 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
                 </option>
               ))}
             </select>
-          </div>
+          </section>
         ))}
 
-      <div className="space-y-2">
+      {mode === "create" && <p className="text-center text-gray-500">↓</p>}
+
+      <section className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          {mode === "create" ? "Copy to" : "Remove copies tagged as"}
+        </p>
         <select
-          aria-label="Target category"
-          value={targetCategoryId ?? ""}
-          onChange={(event) => handleTargetCategoryChange(event.target.value)}
+          aria-label="Target classification"
+          value={activeTargetType?.id ?? ""}
+          onChange={(event) => {
+            setTargetTypeId(parseId(event.target.value));
+            setTargetLabelId(null);
+            clearOutcome();
+          }}
           className={selectClassName}
         >
-          <option value="">Category…</option>
-          {targetCategories.map((entry) => (
-            <option key={entry.category.id} value={entry.category.id}>
-              {entry.category.name}
+          <option value="">Classification…</option>
+          {targetTypes.map((entry) => (
+            <option key={entry.id} value={entry.id} disabled={entry.id === blockedTypeId}>
+              {entry.name}
+              {entry.id === blockedTypeId ? " (same as source)" : ""}
             </option>
           ))}
         </select>
-        {targetTypes.length > 1 && (
-          <select
-            aria-label="Target classification"
-            value={activeTargetType?.id ?? ""}
-            onChange={(event) => {
-              setTargetTypeId(parseId(event.target.value));
-              setTargetLabelId(null);
-              clearOutcome();
-            }}
-            className={selectClassName}
-          >
-            <option value="">All classifications</option>
-            {targetTypes.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name}
-              </option>
-            ))}
-          </select>
-        )}
         <select
           aria-label="Target label"
           value={targetLabelId ?? ""}
@@ -289,7 +296,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
             setTargetLabelId(parseId(event.target.value));
             clearOutcome();
           }}
-          disabled={targetCategoryId === null}
+          disabled={activeTargetType === undefined}
           className={selectClassName}
         >
           <option value="">Label…</option>
@@ -299,7 +306,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
             </option>
           ))}
         </select>
-      </div>
+      </section>
 
       {mode === "create" && (
         <label className="flex items-center gap-2 text-gray-300">
@@ -319,18 +326,34 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
         <p className="text-red-400">{previewError.message}</p>
       ) : mode === "create" && tagPreview.data ? (
         <div className="space-y-1 rounded border border-gray-800 bg-gray-950 p-2 text-gray-300">
-          <p>
-            Will create {tagPreview.data.regions} regions on {tagPreview.data.frames} frames.
-          </p>
-          {tagPreview.data.skipped_already_copied > 0 && (
+          {tagPreview.data.regions > 0 ? (
+            <p>
+              Will tag {plural(tagPreview.data.regions, "region")} of {sourceName} as {targetName} on{" "}
+              {plural(tagPreview.data.frames, "frame")}.
+            </p>
+          ) : (
+            <p>
+              Nothing to copy
+              {tagPreview.data.skipped_already_copied > 0
+                ? `: ${plural(tagPreview.data.skipped_already_copied, "region")} already tagged as ${tagPreview.data.already_copied_label_names.join(", ")}.`
+                : "."}
+            </p>
+          )}
+          {tagPreview.data.regions > 0 && tagPreview.data.skipped_already_copied > 0 && (
             <p>
               Skipped: {tagPreview.data.skipped_already_copied} already tagged as{" "}
               {tagPreview.data.already_copied_label_names.join(", ")}.
             </p>
           )}
+          {tagPreview.data.skipped_already_copied > 0 && (
+            <button type="button" onClick={() => handleModeChange("remove")} className="text-blue-400 hover:underline">
+              Remove copies…
+            </button>
+          )}
           {tagPreview.data.frames_with_manual_regions > 0 && (
             <p>
-              {tagPreview.data.frames_with_manual_regions} frames have hand-drawn regions of this type
+              {plural(tagPreview.data.frames_with_manual_regions, "frame")}{" "}
+              {tagPreview.data.frames_with_manual_regions === 1 ? "has" : "have"} hand-drawn regions of this type
               {skipManualFrames ? " — skipped" : ""}
             </p>
           )}
@@ -357,7 +380,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
           disabled={createDisabled}
           className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
         >
-          Create {createCount} regions
+          Create {plural(createCount, "region")}
         </button>
       ) : (
         <button

@@ -112,14 +112,14 @@ function renderPanel(onClose = vi.fn()) {
 
 async function armRemove(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Remove copies" }));
-  await user.selectOptions(screen.getByLabelText("Target category"), "1");
+  await user.selectOptions(screen.getByLabelText("Target classification"), "20");
   await user.selectOptions(screen.getByLabelText("Target label"), "302");
   await user.click(screen.getByRole("button", { name: "Remove 5 copies" }));
 }
 
 async function pickCreateInputs(user: ReturnType<typeof userEvent.setup>) {
   await user.selectOptions(screen.getByLabelText("Source label"), "11");
-  await user.selectOptions(screen.getByLabelText("Target category"), "1");
+  await user.selectOptions(screen.getByLabelText("Target classification"), "20");
   await user.selectOptions(screen.getByLabelText("Target label"), "302");
 }
 
@@ -188,12 +188,54 @@ describe("TagRegionsPanel", () => {
     ] as never;
     render(<TagRegionsPanel sequenceId={7} frameIds={[1, 2, 3]} taxonomyTree={tree} onClose={vi.fn()} />);
 
-    await user.selectOptions(screen.getByLabelText("Target category"), "3");
+    await user.selectOptions(screen.getByLabelText("Target classification"), "30");
     expect(screen.getByRole("option", { name: "sessile_polyp" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "adenoma" })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Target classification"), "31");
 
     expect(screen.queryByRole("option", { name: "sessile_polyp" })).not.toBeInTheDocument();
     expect(screen.getByRole("option", { name: "adenoma" })).toBeInTheDocument();
+  });
+
+  const twoTypeTree = [
+    {
+      category: { id: 3, name: "Findings", procedure_id: 1 },
+      evaluation_types: [
+        {
+          evaluation_type: { id: 30, name: "geometric", annotation_scope: "region" },
+          labels: [label(401, "sessile_polyp", 3, 30)],
+        },
+        {
+          evaluation_type: { id: 31, name: "morphological", annotation_scope: "region" },
+          labels: [label(402, "adenoma", 3, 31)],
+        },
+      ],
+    },
+  ] as never;
+
+  it("offers no target in the source's own classification and picks the only other one", async () => {
+    const user = userEvent.setup();
+    setup({ labels: [{ label_id: 401, name: "sessile_polyp", count: 4, category_name: "Findings" }] });
+    render(<TagRegionsPanel sequenceId={7} frameIds={[1, 2, 3]} taxonomyTree={twoTypeTree} onClose={vi.fn()} />);
+
+    await user.selectOptions(screen.getByLabelText("Source label"), "401");
+
+    expect(screen.getByRole("option", { name: "Findings / geometric (same as source)" })).toBeDisabled();
+    expect(screen.getByLabelText("Target classification")).toHaveValue("31");
+    expect(screen.getByRole("option", { name: "adenoma" })).toBeInTheDocument();
+  });
+
+  it("explains an empty copy and links to Remove copies", async () => {
+    const user = userEvent.setup();
+    setup({
+      preview: tagPreview({ regions: 0, frames: 0, skipped_already_copied: 17, already_copied_label_names: ["adenoma"] }),
+    });
+    renderPanel();
+    await pickCreateInputs(user);
+
+    expect(screen.getByText("Nothing to copy: 17 regions already tagged as adenoma.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove copies…" }));
+    expect(screen.getByText("Remove copies tagged as")).toBeInTheDocument();
   });
 
   it("shows the empty state", () => {
@@ -216,7 +258,7 @@ describe("TagRegionsPanel", () => {
     renderPanel();
     await pickCreateInputs(user);
 
-    expect(screen.getByText("Will create 28 regions on 9 frames.")).toBeInTheDocument();
+    expect(screen.getByText("Will tag 28 regions of polyp as 0-Is on 9 frames.")).toBeInTheDocument();
     expect(screen.getByText("Skipped: 4 already tagged as 0-Ip, 0-IIa.")).toBeInTheDocument();
     expect(screen.getByText("2 frames have hand-drawn regions of this type — skipped")).toBeInTheDocument();
   });
@@ -284,13 +326,13 @@ describe("TagRegionsPanel", () => {
     setup();
     renderPanel();
 
-    const categoryOptions = Array.from(
-      screen.getByLabelText("Target category").querySelectorAll("option"),
-    ).map((option) => option.textContent);
-    expect(categoryOptions).toContain("Morphology");
-    expect(categoryOptions).not.toContain("Landmark");
+    const typeOptions = Array.from(screen.getByLabelText("Target classification").querySelectorAll("option")).map(
+      (option) => option.textContent,
+    );
+    expect(typeOptions).toContain("Morphology / paris");
+    expect(typeOptions).not.toContain("Landmark / frame_cls");
 
-    await user.selectOptions(screen.getByLabelText("Target category"), "1");
+    await user.selectOptions(screen.getByLabelText("Target classification"), "20");
     const labelOptions = Array.from(screen.getByLabelText("Target label").querySelectorAll("option")).map(
       (option) => option.textContent,
     );
@@ -306,7 +348,7 @@ describe("TagRegionsPanel", () => {
     renderPanel();
 
     await user.click(screen.getByRole("button", { name: "Remove copies" }));
-    await user.selectOptions(screen.getByLabelText("Target category"), "1");
+    await user.selectOptions(screen.getByLabelText("Target classification"), "20");
     await user.selectOptions(screen.getByLabelText("Target label"), "302");
 
     expect(useRemoveCopiesPreview).toHaveBeenLastCalledWith({ frameIds: [1, 2, 3], targetLabelId: 302 });
@@ -353,7 +395,7 @@ describe("TagRegionsPanel", () => {
     renderPanel();
 
     await user.click(screen.getByRole("button", { name: "Remove copies" }));
-    await user.selectOptions(screen.getByLabelText("Target category"), "1");
+    await user.selectOptions(screen.getByLabelText("Target classification"), "20");
     await user.selectOptions(screen.getByLabelText("Target label"), "302");
     await user.click(screen.getByRole("button", { name: "Remove 5 copies" }));
     await user.click(screen.getByRole("button", { name: "Confirm remove 5 copies" }));
