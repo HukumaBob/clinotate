@@ -279,7 +279,8 @@ describe("SequenceGridPage", () => {
     renderAtSequence("9");
 
     fireEvent.click(screen.getByRole("button", { name: /select/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /rank quality/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Rank Quality" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run Rank Quality" }));
 
     expect(await screen.findByText(/low quality/i)).toBeInTheDocument();
   });
@@ -342,7 +343,8 @@ describe("SequenceGridPage", () => {
     renderAtSequence("9");
 
     fireEvent.click(screen.getByRole("button", { name: /select/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /find similar/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Find Similar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run Find Similar" }));
 
     expect(await screen.findByText(/dup 96%/i)).toBeInTheDocument();
   });
@@ -711,7 +713,7 @@ describe("SequenceGridPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     fireEvent.click(await screen.findByRole("button", { name: "Deselect all" }));
 
-    expect(await screen.findByText(/0 selected/)).toBeInTheDocument();
+    expect(await screen.findByText(/0 of 2 selected/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select all" })).toBeInTheDocument();
   });
 });

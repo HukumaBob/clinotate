@@ -155,8 +155,9 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Rank Quality" }));
     expect(screen.getByRole("spinbutton", { name: /quality/i })).toHaveValue(20);
-    expect(screen.getByRole("button", { name: /rank quality/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rank Quality" })).toBeInTheDocument();
   });
 
   it("calls onRankQuality with no arguments when the Rank Quality button is clicked", async () => {
@@ -179,7 +180,8 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /rank quality/i }));
+    await user.click(screen.getByRole("button", { name: "Rank Quality" }));
+    await user.click(screen.getByRole("button", { name: "Run Rank Quality" }));
     expect(onRankQuality).toHaveBeenCalledTimes(1);
   });
 
@@ -261,6 +263,7 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Rank Quality" }));
     fireEvent.change(screen.getByRole("spinbutton", { name: /quality/i }), {
       target: { value: "500" },
     });
@@ -287,6 +290,7 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Rank Quality" }));
     fireEvent.change(screen.getByRole("spinbutton", { name: /quality/i }), {
       target: { value: "0" },
     });
@@ -313,6 +317,7 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Rank Quality" }));
     fireEvent.change(screen.getByRole("spinbutton", { name: /quality/i }), {
       target: { value: "" },
     });
@@ -336,8 +341,9 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Find Similar" }));
     expect(screen.getByRole("spinbutton", { name: /similarity/i })).toHaveValue(85);
-    expect(screen.getByRole("button", { name: /find similar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Find Similar" })).toBeInTheDocument();
   });
 
   it("calls onFindSimilar with no arguments when the Find Similar button is clicked", async () => {
@@ -358,7 +364,8 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /find similar/i }));
+    await user.click(screen.getByRole("button", { name: "Find Similar" }));
+    await user.click(screen.getByRole("button", { name: "Run Find Similar" }));
     expect(onFindSimilar).toHaveBeenCalledTimes(1);
   });
 
@@ -398,6 +405,7 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Find Similar" }));
     fireEvent.change(screen.getByRole("spinbutton", { name: /similarity/i }), {
       target: { value: "500" },
     });
@@ -422,6 +430,7 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Find Similar" }));
     fireEvent.change(screen.getByRole("spinbutton", { name: /similarity/i }), {
       target: { value: "0" },
     });
@@ -446,6 +455,7 @@ describe("SequenceGridToolbar", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Find Similar" }));
     fireEvent.change(screen.getByRole("spinbutton", { name: /similarity/i }), {
       target: { value: "" },
     });
@@ -864,5 +874,56 @@ describe("SequenceGridToolbar classification controls", () => {
     rerender(toolbar(2, [6, 7]));
     expect(screen.queryByText(/Tag regions panel/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tag regions" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows the selection as 'n of total' with a hint while nothing is ticked", () => {
+    const { rerender } = render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        totalCount={142}
+      />,
+    );
+    expect(screen.getByText("0 of 142 selected")).toBeInTheDocument();
+    expect(screen.getByText(/Tick frames to classify/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete selected" })).toHaveAttribute("title", "Select frames first");
+
+    rerender(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={17}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+        totalCount={142}
+      />,
+    );
+    expect(screen.getByText("17 of 142 selected")).toBeInTheDocument();
+    expect(screen.queryByText(/Tick frames to classify/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete selected" })).toHaveTextContent("Delete 17");
+  });
+
+  it("explains the Rank Quality and Find Similar parameters in their popovers", () => {
+    render(
+      <SequenceGridToolbar
+        sequenceName="Seq"
+        isSelectMode
+        onToggleSelectMode={() => {}}
+        selectedCount={0}
+        onDeleteSelected={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rank Quality" }));
+    expect(screen.getByText("Tick the worst … % of frames")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Find Similar" }));
+    expect(screen.getByText("Duplicate when at least … % similar")).toBeInTheDocument();
   });
 });

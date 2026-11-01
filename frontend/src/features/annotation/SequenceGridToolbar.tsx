@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
+import { ParamPopover } from "./ParamPopover";
 import { TagRegionsPanel } from "./TagRegionsPanel";
 
 type TaxonomyTreeNode = components["schemas"]["TaxonomyTreeNode"];
@@ -148,17 +149,70 @@ export function SequenceGridToolbar({
     onSimilarityPercentChange(clamped);
   }
 
+  const noSelectionHint = selectedCount === 0 ? "Select frames first" : undefined;
+  const selectedLabelName = labelsForSelectedCategory.find((label) => label.id === selectedLabelId)?.name;
+  const selectedCategoryName = classificationCategories.find((entry) => entry.category.id === selectedCategoryId)
+    ?.category.name;
+
+  const buttonClass =
+    "rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40";
+  const quietButtonClass = "rounded px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-40";
+  const selectClass =
+    "rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200 disabled:opacity-40";
+  const inputClass = "w-20 rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-gray-200";
+  const groupLabelClass = "text-xs font-semibold uppercase tracking-wide text-gray-500";
+
   return (
-    <div className="flex items-center gap-4 border-b border-gray-800 px-8 py-4">
-      <h1 className="text-xl font-semibold">{sequenceName}</h1>
-      <div className="ml-auto flex items-center gap-3">
-        {isSelectMode && (
+    <div className="space-y-3 border-b border-gray-800 px-8 py-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h1 className="text-xl font-semibold">{sequenceName}</h1>
+        {isSelectMode ? (
           <>
+            <span className="text-sm text-gray-300">
+              {totalCount > 0 ? `${selectedCount} of ${totalCount} selected` : `${selectedCount} selected`}
+            </span>
+            <button
+              type="button"
+              aria-label={allSelected ? "Deselect all" : "Select all"}
+              onClick={allSelected ? onDeselectAll : onSelectAll}
+              disabled={totalCount === 0}
+              className={buttonClass}
+            >
+              {allSelected ? "Deselect all" : "Select all"}
+            </button>
+            {hasAutoMarks && (
+              <button type="button" aria-label="Clear marks" onClick={onClearMarks} className={quietButtonClass}>
+                Clear marks
+              </button>
+            )}
+            {selectedCount === 0 && (
+              <span className="text-sm text-gray-500">Tick frames to classify, tag regions or delete them.</span>
+            )}
+            <button
+              type="button"
+              aria-label="Cancel"
+              onClick={handleCancelClick}
+              className={`ml-auto ${quietButtonClass}`}
+            >
+              ✕ Cancel
+            </button>
+          </>
+        ) : (
+          <button type="button" aria-label="Select" onClick={onToggleSelectMode} className={`ml-auto ${buttonClass}`}>
+            Select
+          </button>
+        )}
+      </div>
+
+      {isSelectMode && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={groupLabelClass}>Classify</span>
             <select
               aria-label="Classification category"
               value={selectedCategoryId ?? ""}
               onChange={(event) => handleCategoryChange(event.target.value)}
-              className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200"
+              className={selectClass}
             >
               <option value="">Category…</option>
               {classificationCategories.map((entry) => (
@@ -172,7 +226,7 @@ export function SequenceGridToolbar({
               value={selectedLabelId ?? ""}
               onChange={(event) => handleLabelChange(event.target.value)}
               disabled={selectedCategoryId === null}
-              className="rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200 disabled:opacity-40"
+              className={selectClass}
             >
               <option value="">Label…</option>
               {labelsForSelectedCategory.map((label) => (
@@ -186,16 +240,23 @@ export function SequenceGridToolbar({
               aria-label="Assign"
               onClick={handleAssignClick}
               disabled={selectedLabelId === null || selectedCount === 0}
-              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+              title={noSelectionHint ?? (selectedLabelId === null ? "Pick a category and a label first" : undefined)}
+              className={buttonClass}
             >
-              Assign
+              {selectedLabelName && selectedCount > 0 ? `Assign ${selectedLabelName} to ${selectedCount}` : "Assign"}
             </button>
             <button
               type="button"
               aria-label="Clear"
               onClick={handleClearClassificationClick}
               disabled={selectedCategoryId === null || selectedCount === 0}
-              className="rounded px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-40"
+              title={
+                noSelectionHint ??
+                (selectedCategoryId === null
+                  ? "Pick a category first"
+                  : `Remove the ${selectedCategoryName} classification from the selected frames`)
+              }
+              className={quietButtonClass}
             >
               Clear
             </button>
@@ -204,10 +265,15 @@ export function SequenceGridToolbar({
               aria-label={hasNoFindingsMarkedForAllSelected ? "Unmark no findings" : "Mark no findings"}
               onClick={onToggleNoFindings}
               disabled={selectedCount === 0}
-              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+              title={noSelectionHint}
+              className={buttonClass}
             >
               {hasNoFindingsMarkedForAllSelected ? "Unmark no findings" : "Mark no findings"}
             </button>
+          </div>
+
+          <div className="flex items-center gap-2 border-l border-gray-800 pl-6">
+            <span className={groupLabelClass}>Regions</span>
             <div className="relative">
               <button
                 type="button"
@@ -215,12 +281,13 @@ export function SequenceGridToolbar({
                 aria-expanded={isTagRegionsOpen && selectedCount > 0}
                 onClick={() => setIsTagRegionsOpen((current) => !current)}
                 disabled={selectedCount === 0}
-                className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+                title={noSelectionHint}
+                className={buttonClass}
               >
                 Tag regions…
               </button>
               {isTagRegionsOpen && selectedCount > 0 && (
-                <div className="absolute right-0 top-full z-20 mt-2">
+                <div className="absolute left-0 top-full z-20 mt-2">
                   <TagRegionsPanel
                     sequenceId={sequenceId}
                     frameIds={selectedFrameIds}
@@ -230,96 +297,68 @@ export function SequenceGridToolbar({
                 </div>
               )}
             </div>
-            <input
-              type="number"
-              aria-label="Quality percent"
-              min={1}
-              max={99}
-              value={qualityPercent}
-              onChange={(event) => handleQualityPercentChange(event.target.value)}
-              className="w-16 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200"
-            />
-            <button
-              type="button"
-              aria-label="Rank Quality"
-              onClick={onRankQuality}
-              disabled={isRankQualityRunning}
-              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+          </div>
+
+          <div className="flex items-center gap-2 border-l border-gray-800 pl-6">
+            <span className={groupLabelClass}>Analyze sequence</span>
+            <ParamPopover
+              label="Rank Quality"
+              runningLabel="Ranking…"
+              isRunning={isRankQualityRunning}
+              description="Scores every frame of the sequence and ticks the worst ones."
+              onRun={onRankQuality}
             >
-              {isRankQualityRunning ? "Ranking…" : "Rank Quality"}
-            </button>
-            <input
-              type="number"
-              aria-label="Similarity percent"
-              min={1}
-              max={99}
-              value={similarityPercent}
-              onChange={(event) => handleSimilarityPercentChange(event.target.value)}
-              className="w-16 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200"
-            />
-            <button
-              type="button"
-              aria-label="Find Similar"
-              onClick={onFindSimilar}
-              disabled={isFindSimilarRunning}
-              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+              <label className="block space-y-1">
+                <span className="text-gray-300">Tick the worst … % of frames</span>
+                <input
+                  type="number"
+                  aria-label="Quality percent"
+                  min={1}
+                  max={99}
+                  value={qualityPercent}
+                  onChange={(event) => handleQualityPercentChange(event.target.value)}
+                  className={inputClass}
+                />
+              </label>
+            </ParamPopover>
+            <ParamPopover
+              label="Find Similar"
+              runningLabel="Finding…"
+              isRunning={isFindSimilarRunning}
+              description="Ticks near-duplicate frames, so you can delete the repeats."
+              onRun={onFindSimilar}
             >
-              {isFindSimilarRunning ? "Finding…" : "Find Similar"}
-            </button>
-            {hasAutoMarks && (
-              <button
-                type="button"
-                aria-label="Clear marks"
-                onClick={onClearMarks}
-                className="rounded px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200"
-              >
-                Clear marks
-              </button>
-            )}
-            <button
-              type="button"
-              aria-label={allSelected ? "Deselect all" : "Select all"}
-              onClick={allSelected ? onDeselectAll : onSelectAll}
-              disabled={totalCount === 0}
-              className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40"
-            >
-              {allSelected ? "Deselect all" : "Select all"}
-            </button>
-            <span className="text-sm text-gray-400">{selectedCount} selected</span>
-            <button
-              type="button"
-              aria-label={deleteArmed ? "Confirm delete" : "Delete selected"}
-              onClick={handleDeleteClick}
-              disabled={selectedCount === 0}
-              className={`rounded px-3 py-1.5 text-sm ${
-                deleteArmed
-                  ? "bg-red-700 text-white"
-                  : "bg-gray-800 text-gray-200 hover:bg-gray-700 disabled:opacity-40"
-              }`}
-            >
-              {deleteArmed ? "Confirm" : "🗑 Delete"}
-            </button>
-            <button
-              type="button"
-              aria-label="Cancel"
-              onClick={handleCancelClick}
-              className="rounded px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200"
-            >
-              ✕ Cancel
-            </button>
-          </>
-        )}
-        {!isSelectMode && (
+              <label className="block space-y-1">
+                <span className="text-gray-300">Duplicate when at least … % similar</span>
+                <input
+                  type="number"
+                  aria-label="Similarity percent"
+                  min={1}
+                  max={99}
+                  value={similarityPercent}
+                  onChange={(event) => handleSimilarityPercentChange(event.target.value)}
+                  className={inputClass}
+                />
+              </label>
+            </ParamPopover>
+          </div>
+
           <button
             type="button"
-            aria-label="Select"
-            onClick={onToggleSelectMode}
-            className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+            aria-label={deleteArmed ? "Confirm delete" : "Delete selected"}
+            onClick={handleDeleteClick}
+            disabled={selectedCount === 0}
+            title={noSelectionHint}
+            className={`ml-auto rounded px-3 py-1.5 text-sm disabled:opacity-40 ${
+              deleteArmed
+                ? "bg-red-700 text-white"
+                : "border border-red-900 text-red-400 hover:bg-red-950"
+            }`}
           >
-            Select
+            {deleteArmed ? `Confirm delete ${selectedCount}` : selectedCount > 0 ? `🗑 Delete ${selectedCount}` : "🗑 Delete"}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
