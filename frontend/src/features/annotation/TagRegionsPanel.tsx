@@ -33,6 +33,7 @@ function parseId(rawValue: string): number | null {
 export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }: TagRegionsPanelProps) {
   const [mode, setMode] = useState<Mode>("create");
   const [sourceLabelId, setSourceLabelId] = useState<number | null>(null);
+  const [sourceTypeId, setSourceTypeId] = useState<number | null>(null);
   const [targetCategoryId, setTargetCategoryId] = useState<number | null>(null);
   const [targetLabelId, setTargetLabelId] = useState<number | null>(null);
   const [skipManualFrames, setSkipManualFrames] = useState(true);
@@ -56,7 +57,26 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
   }, [onClose]);
 
   const regionLabelsQuery = useRegionLabels(frameIds, true);
-  const sourceLabels = regionLabelsQuery.data ?? [];
+  const allSourceLabels = regionLabelsQuery.data ?? [];
+
+  // Classification (evaluation type) of each source label, so the list can be
+  // narrowed to e.g. geometry or morphology, which share one category.
+  const sourceTypes = useMemo(() => {
+    const present = new Set(allSourceLabels.map((entry) => entry.label_id));
+    return taxonomyTree.flatMap((node) =>
+      node.evaluation_types
+        .filter((entry) => entry.labels.some((label) => present.has(label.id)))
+        .map((entry) => ({
+          id: entry.evaluation_type.id,
+          name: `${node.category.name} / ${entry.evaluation_type.name}`,
+          labelIds: new Set(entry.labels.map((label) => label.id)),
+        })),
+    );
+  }, [taxonomyTree, allSourceLabels]);
+  const activeSourceType = sourceTypes.find((entry) => entry.id === sourceTypeId);
+  const sourceLabels = activeSourceType
+    ? allSourceLabels.filter((entry) => activeSourceType.labelIds.has(entry.label_id))
+    : allSourceLabels;
 
   // A chosen source that is no longer on the selected frames (frames
   // unticked, regions deleted) must not keep driving the preview or Create.
@@ -182,22 +202,43 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
         (sourceLabels.length === 0 && !regionLabelsQuery.isLoading ? (
           <p className="text-gray-400">No regions on the selected frames</p>
         ) : (
-          <select
-            aria-label="Source label"
-            value={activeSourceLabelId ?? ""}
-            onChange={(event) => {
-              setSourceLabelId(parseId(event.target.value));
-              clearOutcome();
-            }}
-            className={selectClassName}
-          >
-            <option value="">Source label…</option>
-            {sourceLabels.map((entry) => (
-              <option key={entry.label_id} value={entry.label_id}>
-                {entry.name} ({entry.count})
-              </option>
-            ))}
-          </select>
+          <div className="space-y-2">
+            {sourceTypes.length > 1 && (
+              <select
+                aria-label="Source classification"
+                value={activeSourceType?.id ?? ""}
+                onChange={(event) => {
+                  setSourceTypeId(parseId(event.target.value));
+                  setSourceLabelId(null);
+                  clearOutcome();
+                }}
+                className={selectClassName}
+              >
+                <option value="">All classifications</option>
+                {sourceTypes.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select
+              aria-label="Source label"
+              value={activeSourceLabelId ?? ""}
+              onChange={(event) => {
+                setSourceLabelId(parseId(event.target.value));
+                clearOutcome();
+              }}
+              className={selectClassName}
+            >
+              <option value="">Source label…</option>
+              {sourceLabels.map((entry) => (
+                <option key={entry.label_id} value={entry.label_id}>
+                  {entry.name} ({entry.count})
+                </option>
+              ))}
+            </select>
+          </div>
         ))}
 
       <div className="flex gap-2">
