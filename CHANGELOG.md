@@ -8,6 +8,14 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 
 ## [Unreleased]
 
+### Changed
+- Tag regions panel reads as copy-from / copy-to: classification pickers for source and
+  target, same-classification targets disabled, plain-language outcomes.
+- Sequence grid Select toolbar regrouped (selection summary, Classify / Regions /
+  Analyze sequence / Delete); Rank Quality and Find Similar take labelled parameters in
+  popovers; disabled actions explain why.
+- Dataset screen: table headers stay in view while scrolling.
+
 ## [0.3.0] - 2026-11-01
 
 ### Added
