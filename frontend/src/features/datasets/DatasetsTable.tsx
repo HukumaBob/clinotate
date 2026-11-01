@@ -31,13 +31,13 @@ export function DatasetsTable({
   return (
     <table className="w-full text-left text-sm text-gray-200">
       <thead>
-        <tr className="border-b border-gray-800 text-gray-400">
-          <th className="px-4 py-2 font-normal">Name</th>
-          <th className="px-4 py-2 font-normal">Type</th>
-          <th className="px-4 py-2 font-normal">Frames</th>
-          <th className="px-4 py-2 font-normal">Severity</th>
-          <th className="px-4 py-2 font-normal">Created</th>
-          <th className="px-4 py-2 text-right font-normal">Actions</th>
+        <tr className="text-gray-400">
+          <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-4 py-2 font-normal">Name</th>
+          <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-4 py-2 font-normal">Type</th>
+          <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-4 py-2 font-normal">Frames</th>
+          <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-4 py-2 font-normal">Severity</th>
+          <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-4 py-2 font-normal">Created</th>
+          <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-4 py-2 text-right font-normal">Actions</th>
         </tr>
       </thead>
       <tbody>

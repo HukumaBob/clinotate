@@ -354,14 +354,14 @@ export function DatasetsPage() {
             <div className="max-h-64 overflow-y-auto">
               <table className="w-full text-left text-sm text-gray-200">
                 <thead>
-                  <tr className="border-b border-gray-800 text-gray-400">
-                    <th className="px-2 py-1 font-normal" />
-                    <th className="px-2 py-1 font-normal">Name</th>
-                    <th className="px-2 py-1 font-normal">Frames</th>
-                    <th className="px-2 py-1 font-normal">Labeled</th>
-                    <th className="px-2 py-1 font-normal">Region</th>
-                    <th className="px-2 py-1 font-normal">Frame</th>
-                    <th className="px-2 py-1 font-normal">Video</th>
+                  <tr className="text-gray-400">
+                    <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-2 py-1 font-normal" />
+                    <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-2 py-1 font-normal">Name</th>
+                    <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-2 py-1 font-normal">Frames</th>
+                    <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-2 py-1 font-normal">Labeled</th>
+                    <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-2 py-1 font-normal">Region</th>
+                    <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-2 py-1 font-normal">Frame</th>
+                    <th className="sticky top-0 border-b border-gray-800 bg-gray-900 px-2 py-1 font-normal">Video</th>
                   </tr>
                 </thead>
                 <tbody>
