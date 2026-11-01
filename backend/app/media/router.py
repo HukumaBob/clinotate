@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.datasets.models import Dataset, DatasetItem
 from app.db import get_session
 from app.inference.models import InferenceRun
 from app.jobs.models import Job, JobStatus, JobType
@@ -816,6 +817,33 @@ def delete_video(video_id: int, session: Session = Depends(get_session)) -> None
     session.commit()
 
 
+def _dataset_names_using_frames(session: Session, frame_ids: list[int]) -> list[str]:
+    """Names of the datasets that hold any of these frames, sorted, without repeats."""
+    if not frame_ids:
+        return []
+    rows = (
+        session.query(Dataset.name)
+        .join(DatasetItem, DatasetItem.dataset_id == Dataset.id)
+        .filter(DatasetItem.frame_id.in_(frame_ids))
+        .distinct()
+        .all()
+    )
+    return sorted(name for (name,) in rows)
+
+
+def _raise_if_frames_in_datasets(session: Session, frame_ids: list[int]) -> None:
+    names = _dataset_names_using_frames(session, frame_ids)
+    if names:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "These frames are used by dataset(s) "
+                + ", ".join(names)
+                + ": remove them from the dataset(s) first"
+            ),
+        )
+
+
 @router.delete("/sequences/{sequence_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_sequence(sequence_id: int, session: Session = Depends(get_session)) -> None:
     sequence = session.get(Sequence, sequence_id)
@@ -835,6 +863,9 @@ def delete_sequence(sequence_id: int, session: Session = Depends(get_session)) -
             detail="This sequence has annotated frames — remove annotations before deleting it",
         )
 
+    frame_ids = [row[0] for row in session.query(Frame.id).filter(Frame.sequence_id == sequence_id)]
+    _raise_if_frames_in_datasets(session, frame_ids)
+
     session.query(Frame).filter(Frame.sequence_id == sequence_id).delete()
     session.delete(sequence)
     session.commit()
@@ -852,17 +883,23 @@ def bulk_delete_frames(
         .filter(Frame.id.in_(payload.frame_ids), Frame.sequence_id == sequence_id)
         .all()
     )
+    _raise_if_frames_in_datasets(session, [frame.id for frame in frames])
+
     deleted_ids: list[int] = []
+    storage_keys: list[str] = []
     for frame in frames:
         annotations = session.query(Annotation).filter(Annotation.frame_id == frame.id).all()
         for annotation in annotations:
             if annotation.storage_key:
-                storage.delete(annotation.storage_key)
+                storage_keys.append(annotation.storage_key)
             session.delete(annotation)
-        storage.delete(frame.storage_key)
+        storage_keys.append(frame.storage_key)
         session.delete(frame)
         deleted_ids.append(frame.id)
     session.commit()
+    # Only after the commit: a failed commit must not leave rows whose image is gone.
+    for key in storage_keys:
+        storage.delete(key)
     return FrameBulkDeleteResult(deleted_ids=deleted_ids)
 
 

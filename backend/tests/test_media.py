@@ -1959,6 +1959,123 @@ def test_bulk_delete_frame_with_no_annotations_succeeds():
     assert response.json() == {"deleted_ids": [frame_id]}
 
 
+def _sequence_with_frame_in_dataset(headers: dict[str, str], tag: str) -> tuple[int, int, str]:
+    """A cut sequence whose first frame belongs to a dataset: (sequence_id, frame_id, dataset name)."""
+    import app.db as db_module
+    from app.auth.models import User
+    from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
+
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": f"{tag}-procedure"}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": (f"{tag}.mp4", f, "video/mp4")},
+            data={"title": f"{tag} source", "procedure_id": procedure_id},
+            headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": f"{tag} seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frame_id = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()[0]["id"]
+
+    dataset_name = f"{tag}-dataset"
+    session = db_module.SessionLocal()
+    try:
+        user = session.query(User).filter(User.email == "media1@example.com").one()
+        dataset = Dataset(
+            name=dataset_name,
+            task_type=TaskType.CLASSIFICATION,
+            taxonomy_version=1,
+            created_by_id=user.id,
+        )
+        session.add(dataset)
+        session.commit()
+        session.add(DatasetItem(dataset_id=dataset.id, frame_id=frame_id, split=SplitName.TRAIN))
+        session.commit()
+    finally:
+        session.close()
+    return sequence_id, frame_id, dataset_name
+
+
+def test_bulk_delete_frame_in_a_dataset_is_refused_and_keeps_the_image():
+    from app.storage import get_storage_service
+
+    headers = _auth_headers()
+    sequence_id, frame_id, dataset_name = _sequence_with_frame_in_dataset(headers, "frame-in-dataset")
+    frame = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()[0]
+    storage = get_storage_service()
+
+    response = client.request(
+        "DELETE",
+        f"/media/sequences/{sequence_id}/frames",
+        json={"frame_ids": [frame_id]},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert dataset_name in response.json()["detail"]
+    # The refused delete must not have touched the frame or its stored image.
+    remaining = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+    assert frame_id in [f["id"] for f in remaining]
+    assert storage.download(frame["storage_key"])
+
+
+def test_bulk_delete_keeps_the_image_when_the_database_delete_fails(monkeypatch):
+    """Storage objects go only after the commit: a failed commit must not orphan the rows."""
+    from sqlalchemy.orm import Session
+
+    from app.storage import get_storage_service
+
+    headers = _auth_headers()
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": "commit-order-procedure"}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO, "rb") as f:
+        video_id = client.post(
+            "/media/videos",
+            files={"file": ("commit_order.mp4", f, "video/mp4")},
+            data={"title": "Commit order source", "procedure_id": procedure_id},
+            headers=headers,
+        ).json()["id"]
+    sequence_id = client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Commit order seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    ).json()["id"]
+    frame = client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()[0]
+
+    def failing_commit(self):
+        raise RuntimeError("commit failed")
+
+    monkeypatch.setattr(Session, "commit", failing_commit)
+    failing_client = TestClient(app, raise_server_exceptions=False)
+    response = failing_client.request(
+        "DELETE",
+        f"/media/sequences/{sequence_id}/frames",
+        json={"frame_ids": [frame["id"]]},
+        headers=headers,
+    )
+    monkeypatch.undo()
+
+    assert response.status_code == 500
+    assert get_storage_service().download(frame["storage_key"])
+
+
+def test_delete_sequence_with_frames_in_a_dataset_is_refused():
+    headers = _auth_headers()
+    sequence_id, _frame_id, dataset_name = _sequence_with_frame_in_dataset(headers, "seq-in-dataset")
+
+    response = client.delete(f"/media/sequences/{sequence_id}", headers=headers)
+
+    assert response.status_code == 409
+    assert dataset_name in response.json()["detail"]
+    assert client.get(f"/media/sequences/{sequence_id}/frames", headers=headers).json()
+
+
 def test_rank_quality_creates_job():
     headers = _auth_headers()
     procedure_id = client.post(

@@ -35,6 +35,7 @@ export function SequenceGridPage() {
   const taxonomyTreeQuery = useTaxonomyTree(sequenceQuery.data?.procedure_id ?? null);
   const taxonomyTree = taxonomyTreeQuery.data ?? [];
   const deleteFrames = useDeleteFrames(sequenceIdNumber);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const rankQuality = useRankQuality(sequenceIdNumber);
   const findSimilar = useFindSimilar(sequenceIdNumber);
   const bulkClassifyFrames = useBulkClassifyFrames(sequenceIdNumber);
@@ -123,11 +124,16 @@ export function SequenceGridPage() {
   }
 
   function handleDeleteSelected() {
+    setDeleteError(null);
     deleteFrames.mutate(Array.from(selectedFrameIds), {
       onSuccess: () => {
         setSelectedFrameIds(new Set());
         setAutoCheckedFrameIds(new Set());
         setFrameMarkReasons(new Map());
+      },
+      onError: (error: unknown) => {
+        const detail = (error as { detail?: string } | undefined)?.detail ?? "Delete failed";
+        setDeleteError(detail);
       },
     });
   }
@@ -245,6 +251,9 @@ export function SequenceGridPage() {
           sequenceId={sequenceIdNumber}
           selectedFrameIds={Array.from(selectedFrameIds)}
         />
+        {deleteError && (
+          <div className="border-t border-gray-800 bg-gray-950 px-4 py-2 text-sm text-red-400">{deleteError}</div>
+        )}
         {skippedCount > 0 && (
           <div className="border-t border-gray-800 bg-gray-950 px-4 py-2 text-sm text-amber-400">
             {markNoFindingsResult?.marked_frame_ids.length} marked, {skippedCount} skipped (already annotated)

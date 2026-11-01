@@ -157,6 +157,50 @@ describe("SequenceGridPage", () => {
     );
   });
 
+  it("shows the backend's reason and keeps the selection when deleting frames is refused", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: {
+            id: 9,
+            name: "Seq",
+            video_id: null,
+            procedure_id: 7,
+            start_time: 0,
+            duration: 0,
+            annotation_count: 0,
+            crop_box: null,
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path.includes("/frames")) {
+        return {
+          data: [
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+          ],
+          error: undefined,
+        } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+    vi.mocked(apiClient.DELETE).mockResolvedValue({
+      data: undefined,
+      error: { detail: "These frames are used by dataset(s) example_001: remove them from the dataset(s) first" },
+    } as never);
+
+    renderAtSequence("9");
+
+    fireEvent.click(screen.getByRole("button", { name: /select/i }));
+    const images = await screen.findAllByAltText(/Frame \d/);
+    images.forEach((img) => fireEvent.click(img.closest("button")!));
+    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm/i }));
+
+    expect(await screen.findByText(/used by dataset\(s\) example_001/)).toBeInTheDocument();
+    expect(screen.getByText(/1 selected/i)).toBeInTheDocument();
+  });
+
   it("shows the sequence name in the toolbar instead of a numeric id placeholder", async () => {
     vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
       if (path === "/media/sequences/{sequence_id}") {

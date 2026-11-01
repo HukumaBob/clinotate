@@ -36,6 +36,7 @@ export function useDeleteFrames(sequenceId: number) {
         params: { path: { sequence_id: sequenceId } },
         body: { frame_ids: frameIds },
       });
+      if (result.error) throw result.error;
       return result.data;
     },
     onSuccess: () => {
