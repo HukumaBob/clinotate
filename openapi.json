@@ -6650,6 +6650,11 @@
           "linked_sequence_count": {
             "type": "integer",
             "title": "Linked Sequence Count"
+          },
+          "qc_run_count": {
+            "type": "integer",
+            "title": "Qc Run Count",
+            "default": 0
           }
         },
         "type": "object",

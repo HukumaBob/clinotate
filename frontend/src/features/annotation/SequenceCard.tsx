@@ -1,3 +1,6 @@
+import { useState } from "react";
+
+import { useDeleteSequence } from "../../entities/useMediaLibrary";
 import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
 import { resolveLabelFromTree } from "./resolveLabel";
 import type { components } from "../../shared/api/generated/schema";
@@ -14,8 +17,22 @@ interface SequenceCardProps {
 export function SequenceCard({ sequence, onAnnotate }: SequenceCardProps) {
   const taxonomyTreeQuery = useTaxonomyTree(sequence.procedure_id ?? null);
   const taxonomyTree = taxonomyTreeQuery.data ?? [];
+  const deleteSequence = useDeleteSequence();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const progress =
     sequence.frame_count > 0 ? Math.round((sequence.labeled_frame_count / sequence.frame_count) * 100) : 0;
+
+  function handleDeleteConfirm() {
+    setDeleteError(null);
+    deleteSequence.mutate(sequence.id, {
+      onError: (error: unknown) => {
+        const detail = (error as { detail?: string } | undefined)?.detail ?? "Delete failed";
+        setDeleteError(detail);
+        setConfirmingDelete(false);
+      },
+    });
+  }
 
   return (
     <div className="flex flex-col overflow-hidden rounded border border-gray-800 bg-gray-900">
@@ -87,6 +104,35 @@ export function SequenceCard({ sequence, onAnnotate }: SequenceCardProps) {
         >
           Annotate
         </button>
+
+        {confirmingDelete ? (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleDeleteConfirm}
+              disabled={deleteSequence.isPending}
+              className="flex-1 rounded bg-red-700 px-3 py-1.5 text-sm text-white hover:bg-red-600 disabled:opacity-50"
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="rounded border border-gray-700 px-3 py-1.5 text-sm text-gray-100 hover:bg-gray-800"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            className="rounded border border-gray-700 px-3 py-1.5 text-sm text-gray-100 hover:bg-gray-800"
+          >
+            Delete
+          </button>
+        )}
+        {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
       </div>
     </div>
   );

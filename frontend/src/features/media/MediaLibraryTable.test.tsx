@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
@@ -55,6 +55,38 @@ describe("MediaLibraryTable", () => {
     await waitFor(() =>
       expect(screen.getByText(/reassign this video's sequences/i)).toBeInTheDocument()
     );
+  });
+
+  it("shows how many QC runs each video has, so a QC block is not invisible", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 1,
+            kind: "video",
+            filename: "qc.mp4",
+            title: "QC video",
+            procedure_id: null,
+            uploaded_at: "2026-07-28T00:00:00Z",
+            last_edited_at: "2026-07-29T00:00:00Z",
+            size_bytes: 1_000_000,
+            linked_sequence_count: 0,
+            qc_run_count: 3,
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 25,
+      },
+      error: undefined,
+    } as never);
+
+    render(<MediaLibraryTable />, { wrapper });
+
+    await screen.findByText("qc.mp4");
+    expect(screen.getByRole("columnheader", { name: /qc runs/i })).toBeInTheDocument();
+    const row = screen.getByText("qc.mp4").closest("tr")!;
+    expect(within(row).getByTestId("qc-run-count")).toHaveTextContent("3");
   });
 
   it("keeps confirm state independent for a video and a photo sequence that share the same numeric id", async () => {

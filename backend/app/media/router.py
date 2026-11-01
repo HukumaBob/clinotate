@@ -171,6 +171,11 @@ def get_media_library(
     items: list[MediaLibraryItem] = []
 
     videos = session.query(Video).all()
+    qc_run_counts = dict(
+        session.query(InferenceRun.video_id, func.count(InferenceRun.id))
+        .group_by(InferenceRun.video_id)
+        .all()
+    )
     for video in videos:
         sequences = session.query(Sequence).filter(Sequence.video_id == video.id).all()
         linked_count = len(sequences)
@@ -198,6 +203,7 @@ def get_media_library(
                 last_edited_at=last_edited_at,
                 size_bytes=video.size_bytes,
                 linked_sequence_count=linked_count,
+                qc_run_count=qc_run_counts.get(video.id, 0),
             )
         )
 
@@ -789,14 +795,21 @@ def delete_video(video_id: int, session: Session = Depends(get_session)) -> None
     if linked_count > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Delete or reassign this video's sequences before deleting it",
+            detail=(
+                f"This video still has {linked_count} "
+                f"{'sequence' if linked_count == 1 else 'sequences'}: delete them first "
+                "(open the video and click a sequence on the timeline)"
+            ),
         )
 
-    has_runs = session.query(InferenceRun.id).filter(InferenceRun.video_id == video_id).first()
-    if has_runs is not None:
+    run_count = session.query(InferenceRun).filter(InferenceRun.video_id == video_id).count()
+    if run_count > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Delete this video's QC runs before deleting it",
+            detail=(
+                f"This video still has {run_count} QC {'run' if run_count == 1 else 'runs'}: "
+                "delete them first on the QC tab"
+            ),
         )
 
     session.delete(video)

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
 import { apiClient } from "../../shared/api/client";
@@ -11,7 +12,7 @@ type TaxonomyTreeNode = components["schemas"]["TaxonomyTreeNode"];
 type SequenceListItem = components["schemas"]["SequenceListItem"];
 
 vi.mock("../../shared/api/client", () => ({
-  apiClient: { GET: vi.fn() },
+  apiClient: { GET: vi.fn(), DELETE: vi.fn() },
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -117,5 +118,46 @@ describe("SequenceCard", () => {
     screen.getByRole("button", { name: "Annotate" }).click();
 
     expect(onAnnotate).toHaveBeenCalledWith(42);
+  });
+
+  it("deletes the sequence after an inline confirm", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+    vi.mocked(apiClient.DELETE).mockResolvedValue({ data: undefined, error: undefined } as never);
+    render(<SequenceCard sequence={buildSequence({ id: 7 })} onAnnotate={() => {}} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(apiClient.DELETE).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(apiClient.DELETE).toHaveBeenCalledWith("/media/sequences/{sequence_id}", {
+        params: { path: { sequence_id: 7 } },
+      }),
+    );
+  });
+
+  it("shows the backend's message when the delete is refused", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+    vi.mocked(apiClient.DELETE).mockResolvedValue({
+      data: undefined,
+      error: { detail: "This sequence has annotated frames — remove annotations before deleting it" },
+    } as never);
+    render(<SequenceCard sequence={buildSequence()} onAnnotate={() => {}} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(await screen.findByText(/remove annotations before deleting it/)).toBeInTheDocument();
+  });
+
+  it("lets the user back out of the confirm", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: [], error: undefined } as never);
+    render(<SequenceCard sequence={buildSequence()} onAnnotate={() => {}} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(apiClient.DELETE).not.toHaveBeenCalled();
   });
 });

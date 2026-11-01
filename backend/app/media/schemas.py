@@ -160,6 +160,7 @@ class MediaLibraryItem(BaseModel):
     last_edited_at: datetime
     size_bytes: int
     linked_sequence_count: int
+    qc_run_count: int = 0
 
 
 class MediaLibraryPage(BaseModel):

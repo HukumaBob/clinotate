@@ -185,25 +185,26 @@ export function MediaLibraryTable({
                 </button>
               </th>
             ))}
+            <th className="py-1.5 px-3">QC runs</th>
             <th className="py-1.5 px-3" />
           </tr>
         </thead>
         <tbody>
           {libraryQuery.isPending ? (
             <tr>
-              <td colSpan={8} className="py-4 px-3 text-center text-gray-500">
+              <td colSpan={9} className="py-4 px-3 text-center text-gray-500">
                 Loading…
               </td>
             </tr>
           ) : libraryQuery.isError ? (
             <tr>
-              <td colSpan={8} className="py-4 px-3 text-center text-red-400">
+              <td colSpan={9} className="py-4 px-3 text-center text-red-400">
                 Failed to load media library
               </td>
             </tr>
           ) : items.length === 0 ? (
             <tr>
-              <td colSpan={8} className="py-4 px-3 text-center text-gray-500">
+              <td colSpan={9} className="py-4 px-3 text-center text-gray-500">
                 No media matches your filters
               </td>
             </tr>
@@ -243,6 +244,9 @@ export function MediaLibraryTable({
                   <td className="py-1.5 px-3 text-gray-100">{new Date(item.last_edited_at).toLocaleDateString()}</td>
                   <td className="py-1.5 px-3 text-gray-100">{formatSize(item.size_bytes)}</td>
                   <td className="py-1.5 px-3 text-gray-100">{item.linked_sequence_count}</td>
+                  <td data-testid="qc-run-count" className="py-1.5 px-3 text-gray-100">
+                    {item.qc_run_count ?? 0}
+                  </td>
                   <td className="py-1.5 px-3 text-right">
                     {confirmingKey === key ? (
                       <button

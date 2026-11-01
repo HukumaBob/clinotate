@@ -885,6 +885,94 @@ def test_delete_video_with_linked_sequence_returns_409():
     assert response.status_code == 409
 
 
+def _upload_video_for_qc_tests(headers: dict[str, str], procedure_name: str) -> int:
+    procedure_id = client.post(
+        "/taxonomy/procedures", json={"name": procedure_name}, headers=headers
+    ).json()["id"]
+    with open(FIXTURE_VIDEO, "rb") as f:
+        return client.post(
+            "/media/videos",
+            files={"file": ("qc_blocked.mp4", f, "video/mp4")},
+            data={"title": "QC blocked video", "procedure_id": procedure_id},
+            headers=headers,
+        ).json()["id"]
+
+
+def _add_qc_run(video_id: int) -> None:
+    import app.db as db_module
+    from app.auth.models import User
+    from app.inference.models import InferenceRun, InferenceRunStatus
+
+    session = db_module.SessionLocal()
+    try:
+        user = session.query(User).filter(User.email == "media1@example.com").one()
+        session.add(
+            InferenceRun(
+                video_id=video_id,
+                model_name="qc-block-test",
+                status=InferenceRunStatus.SUCCEEDED,
+                created_by_id=user.id,
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+
+def test_delete_video_with_qc_runs_names_the_count_and_where_to_delete_them():
+    headers = _auth_headers()
+    video_id = _upload_video_for_qc_tests(headers, "qc-blocked-delete-procedure")
+    _add_qc_run(video_id)
+    _add_qc_run(video_id)
+
+    response = client.delete(f"/media/videos/{video_id}", headers=headers)
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert "2 QC runs" in detail
+    assert "QC tab" in detail
+
+
+def test_delete_video_with_sequences_names_the_count_and_where_to_delete_them():
+    headers = _auth_headers()
+    video_id = _upload_video_for_qc_tests(headers, "seq-blocked-delete-procedure")
+    client.post(
+        f"/media/videos/{video_id}/sequences",
+        json={"name": "Blocking seq", "start_time": 0, "duration": 2},
+        headers=headers,
+    )
+
+    response = client.delete(f"/media/videos/{video_id}", headers=headers)
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert "1 sequence" in detail
+    assert "timeline" in detail
+
+
+def test_media_library_reports_qc_run_count_for_videos_only():
+    headers = _auth_headers()
+    video_id = _upload_video_for_qc_tests(headers, "qc-count-library-procedure")
+    _add_qc_run(video_id)
+    photo_sequence_id = client.post(
+        "/media/sequences",
+        json={
+            "procedure_id": client.post(
+                "/taxonomy/procedures", json={"name": "qc-count-photo-procedure"}, headers=headers
+            ).json()["id"],
+            "name": "qc count photo seq",
+        },
+        headers=headers,
+    ).json()["id"]
+
+    items = client.get("/media/library", params={"page_size": 200}, headers=headers).json()["items"]
+
+    video_item = next(i for i in items if i["kind"] == "video" and i["id"] == video_id)
+    photo_item = next(i for i in items if i["kind"] == "photo" and i["id"] == photo_sequence_id)
+    assert video_item["qc_run_count"] == 1
+    assert photo_item["qc_run_count"] == 0
+
+
 def test_delete_photo_sequence_without_annotations_succeeds():
     headers = _auth_headers()
     procedure_id = client.post(
