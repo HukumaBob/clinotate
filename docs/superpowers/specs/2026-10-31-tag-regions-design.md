@@ -1,7 +1,7 @@
 # Tag regions: copy region annotations to another label in bulk
 
 Date: 2026-10-31
-Status: approved, implemented (browser check pending)
+Status: approved, implemented, browser-checked 2026-11-01
 
 Extends the sequence grid's Select mode described in
 [2026-08-06-sequence-grid-frame-delete-toolbar-design.md](2026-08-06-sequence-grid-frame-delete-toolbar-design.md)

@@ -2315,7 +2315,7 @@ classifier such as the DINOv3 adapter has labelled crops to train on.
 - **`skipped_manual_frames` counts only manual frames that actually had a source
   withheld.**
 
-**Not verified yet:** the real-browser check of the panel against the dev stack.
+**Real-browser check (2026-11-01):** done against the dev stack with a throwaway sequence (egds, geometric `ulceratio_ventriculi` -> morphological `gastric_adenoma_lgd`; 2 masks + 1 box, one frame with a hand-drawn morphological mask). Select all, the panel, the preview (2 regions on 1 frame, 1 manual frame skipped), Create (thumbnail labels refreshed), a repeat preview (0, "already tagged as gastric_adenoma_lgd"), Remove copies (two-step confirm, hand-drawn and source rows untouched, both copy objects gone from MinIO) and the same-evaluation-type 422 all behaved as designed; the panel is not clipped at 1920 px. Needed `alembic upgrade head` on the dev DB (`a1b2c3d4e5f6`). All throwaway rows and objects were removed. Not checked: narrow widths, a REVIEWED copy being kept, a failed request. Cosmetic: the preview says "1 frames" (no pluralisation).
 
 **Deferred, pre-existing leak:** the single-annotation delete removes only
 `storage_key`, not `raw_mask_storage_key`. Remove copies deletes both; the old path is
