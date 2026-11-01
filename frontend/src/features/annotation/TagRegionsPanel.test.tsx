@@ -168,6 +168,34 @@ describe("TagRegionsPanel", () => {
     expect(screen.getByRole("option", { name: "adenoma (6)" })).toBeInTheDocument();
   });
 
+  it("narrows target labels by classification", async () => {
+    const user = userEvent.setup();
+    setup();
+    const tree = [
+      {
+        category: { id: 3, name: "Findings", procedure_id: 1 },
+        evaluation_types: [
+          {
+            evaluation_type: { id: 30, name: "geometry", annotation_scope: "region" },
+            labels: [label(401, "sessile_polyp", 3, 30)],
+          },
+          {
+            evaluation_type: { id: 31, name: "morphology", annotation_scope: "region" },
+            labels: [label(402, "adenoma", 3, 31)],
+          },
+        ],
+      },
+    ] as never;
+    render(<TagRegionsPanel sequenceId={7} frameIds={[1, 2, 3]} taxonomyTree={tree} onClose={vi.fn()} />);
+
+    await user.selectOptions(screen.getByLabelText("Target category"), "3");
+    expect(screen.getByRole("option", { name: "sessile_polyp" })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Target classification"), "31");
+
+    expect(screen.queryByRole("option", { name: "sessile_polyp" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "adenoma" })).toBeInTheDocument();
+  });
+
   it("shows the empty state", () => {
     setup({ labels: [] });
     renderPanel();

@@ -35,6 +35,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
   const [sourceLabelId, setSourceLabelId] = useState<number | null>(null);
   const [sourceTypeId, setSourceTypeId] = useState<number | null>(null);
   const [targetCategoryId, setTargetCategoryId] = useState<number | null>(null);
+  const [targetTypeId, setTargetTypeId] = useState<number | null>(null);
   const [targetLabelId, setTargetLabelId] = useState<number | null>(null);
   const [skipManualFrames, setSkipManualFrames] = useState(true);
   const [removeArmed, setRemoveArmed] = useState(false);
@@ -95,15 +96,21 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
       taxonomyTree
         .map((node) => ({
           category: node.category,
-          labels: node.evaluation_types
+          types: node.evaluation_types
             .filter((entry) => entry.evaluation_type.annotation_scope === "region")
-            .flatMap((entry) => entry.labels)
-            .filter((label) => !label.is_abstract),
+            .map((entry) => ({
+              id: entry.evaluation_type.id,
+              name: entry.evaluation_type.name,
+              labels: entry.labels.filter((label) => !label.is_abstract),
+            }))
+            .filter((entry) => entry.labels.length > 0),
         }))
-        .filter((entry) => entry.labels.length > 0),
+        .filter((entry) => entry.types.length > 0),
     [taxonomyTree],
   );
-  const targetLabels = targetCategories.find((entry) => entry.category.id === targetCategoryId)?.labels ?? [];
+  const targetTypes = targetCategories.find((entry) => entry.category.id === targetCategoryId)?.types ?? [];
+  const activeTargetType = targetTypes.find((entry) => entry.id === targetTypeId);
+  const targetLabels = (activeTargetType ? [activeTargetType] : targetTypes).flatMap((entry) => entry.labels);
 
   const tagParams = useMemo<TagRegionsParams | null>(
     () =>
@@ -148,6 +155,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
 
   function handleTargetCategoryChange(rawValue: string) {
     setTargetCategoryId(parseId(rawValue));
+    setTargetTypeId(null);
     setTargetLabelId(null);
     clearOutcome();
   }
@@ -241,7 +249,7 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
           </div>
         ))}
 
-      <div className="flex gap-2">
+      <div className="space-y-2">
         <select
           aria-label="Target category"
           value={targetCategoryId ?? ""}
@@ -255,6 +263,25 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
             </option>
           ))}
         </select>
+        {targetTypes.length > 1 && (
+          <select
+            aria-label="Target classification"
+            value={activeTargetType?.id ?? ""}
+            onChange={(event) => {
+              setTargetTypeId(parseId(event.target.value));
+              setTargetLabelId(null);
+              clearOutcome();
+            }}
+            className={selectClassName}
+          >
+            <option value="">All classifications</option>
+            {targetTypes.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           aria-label="Target label"
           value={targetLabelId ?? ""}
