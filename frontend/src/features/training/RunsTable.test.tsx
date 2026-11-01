@@ -168,6 +168,30 @@ describe("RunsTable", () => {
     expect(screen.getByRole("menuitem", { name: "Delete run 7" })).toBeInTheDocument();
   });
 
+  it("prints the block reason in the menu so it is readable without hovering", () => {
+    setup([run({ id: 1, model_version_id: 9 }), run({ id: 2, status: "running", finished_at: null })]);
+
+    openMenu(1);
+    expect(within(screen.getByRole("menu")).getByText("Delete the model first")).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Delete run 1" })).toHaveAccessibleDescription(
+      "Delete the model first",
+    );
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+
+    openMenu(2);
+    expect(within(screen.getByRole("menu")).getByText("Stop the run first")).toBeVisible();
+  });
+
+  it("shows no reason line for a run that can be deleted", () => {
+    setup([run({ id: 1 })]);
+
+    openMenu(1);
+
+    expect(screen.getByRole("menuitem", { name: "Delete run 1" })).toBeEnabled();
+    expect(screen.queryByText("Delete the model first")).not.toBeInTheDocument();
+    expect(screen.queryByText("Stop the run first")).not.toBeInTheDocument();
+  });
+
   it("disables Delete for a run that owns a model and for an active run, with the reason", () => {
     setup([
       run({ id: 1, model_version_id: 9 }),

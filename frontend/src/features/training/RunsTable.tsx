@@ -130,10 +130,16 @@ function RowMenu({ run, blockReason, rowsKey, onDelete }: RowMenuProps) {
               disabled={blockReason !== undefined}
               title={blockReason}
               aria-label={`Delete run ${run.id}`}
+              aria-describedby={blockReason ? `delete-block-${run.id}` : undefined}
               onClick={() => setArmed(true)}
             >
               Delete
             </button>
+          )}
+          {blockReason && (
+            <p id={`delete-block-${run.id}`} className="max-w-[12rem] px-3 pb-1 text-xs text-gray-400">
+              {blockReason}
+            </p>
           )}
         </div>
       )}
