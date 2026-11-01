@@ -8,11 +8,14 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-01
+
 ### Added
 - Tag regions: copy the boxes or masks of selected frames into a second annotation with
   a different label (for second-stage classifier training), with a preview, an undo
-  (Remove copies) and Select all / Deselect all in the sequence grid. Not yet
-  browser-verified; see ROADMAP.md.
+  (Remove copies) and Select all / Deselect all in the sequence grid. Sources and
+  targets can be narrowed by classification; same-classification copies are refused.
+  Browser-checked; see ROADMAP.md.
 - Model versions record the class names they were trained on (`class_names`,
   ordered by class id) and ship a `classes.json` next to the weights, served
   through the existing artifact download. Versions trained earlier have an
@@ -52,4 +55,5 @@ First public release.
 - YOLO11 `l`/`x` models have not been run end-to-end.
 - No CI yet.
 
+[0.3.0]: https://github.com/HukumaBob/clinotate/releases/tag/v0.3.0
 [0.2.0]: https://github.com/HukumaBob/clinotate/releases/tag/v0.2.0
