@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 
@@ -16,9 +16,9 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
-function renderAtSequence(sequenceId: string) {
+function renderAtSequence(sequenceId: string, search = "") {
   return render(
-    <MemoryRouter initialEntries={[`/sequences/${sequenceId}`]}>
+    <MemoryRouter initialEntries={[`/sequences/${sequenceId}${search}`]}>
       <Routes>
         <Route path="/sequences/:sequenceId" element={<SequenceGridPage />} />
       </Routes>
@@ -702,6 +702,19 @@ describe("SequenceGridPage", () => {
 
     expect(await screen.findByText(/2 selected/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Deselect all" })).toBeInTheDocument();
+  });
+
+  it("opens the frame named by ?frame= in the editor instead of the grid", async () => {
+    mockTwoFrames();
+    renderAtSequence("9", "?frame=1");
+
+    await waitFor(() =>
+      expect(apiClient.GET).toHaveBeenCalledWith(
+        "/annotation/frames/{frame_id}/annotations",
+        expect.objectContaining({ params: { path: { frame_id: 1 } } }),
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "Select" })).not.toBeInTheDocument();
   });
 
   it("Deselect all clears the selection and keeps Select mode", async () => {

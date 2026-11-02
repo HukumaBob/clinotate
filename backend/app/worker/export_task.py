@@ -23,6 +23,7 @@ from app.datasets.export import (
 )
 from app.datasets.models import Dataset, TaskType
 from app.jobs.models import Job, JobStatus
+from app.media.models import Frame, Sequence
 from app.storage import get_storage_service
 from app.worker.celery_app import celery_app
 
@@ -52,11 +53,30 @@ _KIND_TEXT = {
 }
 
 
-def _abort_message(error_findings) -> str:
+def _frame_places(session, frame_ids) -> dict[int, tuple[int, int, str]]:
+    """frame id -> (sequence id, frame index, sequence name): what a person needs
+    to find a frame, which an id alone does not tell them."""
+    rows = (
+        session.query(Frame.id, Frame.sequence_id, Frame.frame_index, Sequence.name)
+        .join(Sequence, Sequence.id == Frame.sequence_id)
+        .filter(Frame.id.in_(set(frame_ids)))
+        .all()
+    )
+    return {row[0]: (row[1], row[2], row[3]) for row in rows}
+
+
+def _abort_message(error_findings, places) -> str:
     """Why the export was refused, in a line the dataset table can show: the
-    first findings spelled out (what, which frame and annotation), then a count."""
+    first findings spelled out (what, where, which annotation), then a count."""
+
+    def where(finding) -> str:
+        place = places.get(finding.frame_id)
+        if place is None:
+            return f"frame {finding.frame_id}"
+        return f'frame {place[1]} of "{place[2]}"'
+
     shown = [
-        f"{_KIND_TEXT.get(f.kind, f.kind)} on frame {f.frame_id}"
+        f"{_KIND_TEXT.get(f.kind, f.kind)} on {where(f)}"
         + (f" (annotation {f.annotation_id})" if f.annotation_id is not None else "")
         + (f": {f.detail}" if f.detail else "")
         for f in error_findings[:2]
@@ -98,6 +118,7 @@ def dataset_export(job_id: int) -> None:
 
         error_findings = [f for f in findings if f.kind in _ERROR_FINDING_KINDS]
         if error_findings:
+            places = _frame_places(session, [f.frame_id for f in findings])
             job.status = JobStatus.FAILED
             job.payload = {
                 **job.payload,
@@ -107,11 +128,12 @@ def dataset_export(job_id: int) -> None:
                         "frame_id": f.frame_id,
                         "annotation_id": f.annotation_id,
                         "detail": f.detail,
+                        "sequence_id": places[f.frame_id][0] if f.frame_id in places else None,
                     }
                     for f in findings
                 ],
             }
-            job.error = _abort_message(error_findings)
+            job.error = _abort_message(error_findings, places)
             job.finished_at = datetime.now(timezone.utc)
             session.commit()
             return

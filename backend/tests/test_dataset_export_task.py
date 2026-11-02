@@ -274,6 +274,8 @@ def test_findings_abort_the_export_and_are_recorded_on_the_job(monkeypatch):
             findings = done.payload["findings"]
             assert any(f["kind"] == "missing_mask" for f in findings)
             assert done.error and done.error.startswith("Export aborted: mask file missing on frame ")
+            assert " of \"" in done.error  # names the sequence, not just an id
+            assert all(f["sequence_id"] is not None for f in findings)
             assert f"annotation {annotation.id}" in done.error
         finally:
             refreshed.close()

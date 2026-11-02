@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../shared/api/generated/schema";
@@ -32,14 +33,16 @@ function renderTable(overrides: {
   downloadUrls?: Record<number, string>;
 } = {}) {
   render(
-    <DatasetsTable
-      datasets={DATASETS}
-      onDelete={vi.fn()}
-      onShowMetrics={vi.fn()}
-      onExport={overrides.onExport ?? vi.fn()}
-      exportJobs={overrides.exportJobs}
-      downloadUrls={overrides.downloadUrls}
-    />,
+    <MemoryRouter>
+      <DatasetsTable
+        datasets={DATASETS}
+        onDelete={vi.fn()}
+        onShowMetrics={vi.fn()}
+        onExport={overrides.onExport ?? vi.fn()}
+        exportJobs={overrides.exportJobs}
+        downloadUrls={overrides.downloadUrls}
+      />
+    </MemoryRouter>,
   );
 }
 
@@ -78,5 +81,27 @@ describe("DatasetsTable export action", () => {
       exportJobs: { 1: { status: "failed", progress: 0, result_ref: null, error: "3 findings; export aborted" } },
     });
     expect(screen.getByTestId("export-error-1")).toHaveTextContent(/findings/i);
+  });
+
+  it("links a failed export to the frame that broke it", () => {
+    renderTable({
+      exportJobs: {
+        1: {
+          status: "failed",
+          progress: 0,
+          result_ref: null,
+          error: "Export aborted: unusable mask",
+          payload: { findings: [{ frame_id: 15702, sequence_id: 2322, annotation_id: 10788 }] },
+        },
+      },
+    });
+    expect(screen.getByTestId("export-frame-link-1")).toHaveAttribute("href", "/sequences/2322?frame=15702");
+  });
+
+  it("shows no frame link when the failure names no frame", () => {
+    renderTable({
+      exportJobs: { 1: { status: "failed", progress: 0, result_ref: null, error: "boom", payload: {} } },
+    });
+    expect(screen.queryByTestId("export-frame-link-1")).not.toBeInTheDocument();
   });
 });

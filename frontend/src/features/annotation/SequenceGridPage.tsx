@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import {
   useBulkClassifyFrames,
@@ -20,7 +20,12 @@ type MarkReason = { kind: "quality" | "similarity"; label: string };
 export function SequenceGridPage() {
   const { sequenceId } = useParams<{ sequenceId: string }>();
   const sequenceIdNumber = Number(sequenceId);
-  const [selectedFrameId, setSelectedFrameId] = useState<number | null>(null);
+  // ?frame=<id> opens that frame's editor straight away (links from dataset export errors).
+  const [searchParams] = useSearchParams();
+  const linkedFrameId = Number(searchParams.get("frame"));
+  const [selectedFrameId, setSelectedFrameId] = useState<number | null>(
+    Number.isInteger(linkedFrameId) && linkedFrameId > 0 ? linkedFrameId : null,
+  );
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedFrameIds, setSelectedFrameIds] = useState<Set<number>>(new Set());
   const [autoCheckedFrameIds, setAutoCheckedFrameIds] = useState<Set<number>>(new Set());

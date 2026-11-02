@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import type { components } from "../../shared/api/generated/schema";
 
@@ -91,6 +92,20 @@ export function DatasetsTable({
                       <span data-testid={`export-error-${dataset.id}`} className="max-w-xs text-right text-xs text-red-400">
                         {job.error ?? "Export failed"}
                       </span>
+                      {(() => {
+                        const findings = (job.payload as { findings?: { frame_id: number; sequence_id: number | null }[] } | undefined)
+                          ?.findings;
+                        const first = findings?.find((finding) => finding.sequence_id != null);
+                        return first ? (
+                          <Link
+                            data-testid={`export-frame-link-${dataset.id}`}
+                            className="text-xs text-blue-400 hover:underline"
+                            to={`/sequences/${first.sequence_id}?frame=${first.frame_id}`}
+                          >
+                            Open frame
+                          </Link>
+                        ) : null;
+                      })()}
                       <button
                         type="button"
                         className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100"
