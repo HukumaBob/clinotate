@@ -179,7 +179,13 @@ export function TagRegionsPanel({ sequenceId, frameIds, taxonomyTree, onClose }:
     if (tagParams === null) return;
     clearOutcome();
     tagRegions.mutate(tagParams, {
-      onSuccess: (data) => setResultMessage(`Created ${plural(data.regions, "region")} on ${plural(data.frames, "frame")}.`),
+      onSuccess: (data) =>
+        setResultMessage(
+          `Created ${plural(data.regions, "region")} on ${plural(data.frames, "frame")}.` +
+            (data.skipped_empty_masks > 0
+              ? ` Skipped ${plural(data.skipped_empty_masks, "region")} with an empty mask.`
+              : ""),
+        ),
       onError: (error) => setActionError(error.message),
     });
   }

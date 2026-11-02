@@ -74,6 +74,7 @@ class TagRegionsResultRead(BaseModel):
     already_copied_label_names: list[str]
     frames_with_manual_regions: int
     skipped_manual_frames: int
+    skipped_empty_masks: int = 0
 
 
 class RemoveCopiesRequest(BaseModel):

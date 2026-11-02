@@ -42,6 +42,21 @@ from app.training_adapter import TrainingRequest
 from app.union_find import cluster_by_threshold
 
 
+def _mask_is_empty(mask_png: bytes) -> bool:
+    """True when the PNG decodes to a mask with no foreground pixel.
+
+    A mask nobody can see is worse than none: it exports as an invalid-mask
+    finding that aborts the whole dataset export. Bytes that do not decode are
+    left for downstream code to judge, so this never raises.
+    """
+    try:
+        with Image.open(io.BytesIO(mask_png)) as image:
+            return not np.asarray(image).any()
+    except Exception:  # noqa: BLE001 -- undecodable is "unknown", not "empty"
+        return False
+
+
+
 def _load_label(session, label_id: int) -> Label:
     """Look up the real Label row so `taxonomy_version` can be copied off
     it at annotation-creation time, per CLAUDE.md's binding provenance
@@ -225,6 +240,8 @@ def run_sam3_predict(job_id: int, adapter: Sam3Adapter | None = None) -> None:
 
         frame_bytes = storage.download(frame.storage_key)
         result = resolved_adapter.predict(frame_bytes, prompts)
+        if _mask_is_empty(result.mask_png):
+            raise ValueError("The model returned an empty mask for these prompts; nothing was saved.")
 
         mask_key = f"masks/{frame_id}/{job_id}.png"
         storage.upload(mask_key, result.mask_png, content_type="image/png")
@@ -288,7 +305,13 @@ def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
         frame_bytes_list = [storage.download(f.storage_key) for f in frames]
         results = resolved_adapter.track(frame_bytes_list, prompts)
 
+        empty_frames = 0
         for index, (frame, result) in enumerate(zip(frames, results)):
+            if _mask_is_empty(result.mask_png):
+                # The object left the view on this frame: no mask to keep.
+                empty_frames += 1
+                job.progress = int(((index + 1) / len(frames)) * 100)
+                continue
             mask_key = f"masks/{frame.id}/{job_id}.png"
             storage.upload(mask_key, result.mask_png, content_type="image/png")
             annotation = Annotation(
@@ -313,6 +336,8 @@ def run_sam3_track(job_id: int, adapter: Sam3Adapter | None = None) -> None:
             _record_vram_usage(job)
             session.commit()
 
+        if empty_frames:
+            job.payload = {**job.payload, "empty_frames": empty_frames}
         job.status = JobStatus.SUCCEEDED
         job.finished_at = datetime.now(timezone.utc)
         session.commit()
@@ -353,6 +378,8 @@ def run_sam2_predict(job_id: int, adapter: Sam2Adapter | None = None) -> None:
 
         frame_bytes = storage.download(frame.storage_key)
         result = resolved_adapter.predict(frame_bytes, prompts)
+        if _mask_is_empty(result.mask_png):
+            raise ValueError("The model returned an empty mask for these prompts; nothing was saved.")
 
         mask_key = f"masks/{frame_id}/{job_id}.png"
         # raw_mask_key stores the untouched SAM2 output under its own,
@@ -470,7 +497,13 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
             frame_bytes_list, prompts, anchor_index_in_window, backward, forward
         )
 
+        empty_frames = 0
         for index, (frame, result) in enumerate(zip(tracked_frames, results)):
+            if _mask_is_empty(result.mask_png):
+                # The object left the view on this frame: no mask to keep.
+                empty_frames += 1
+                job.progress = int(((index + 1) / len(tracked_frames)) * 100)
+                continue
             mask_key = f"masks/{frame.id}/{job_id}.png"
             # See run_sam2_predict's comment above -- storage_key and
             # raw_mask_storage_key must be distinct keys, or the first
@@ -501,6 +534,8 @@ def run_sam2_track(job_id: int, adapter: Sam2Adapter | None = None) -> None:
             _record_vram_usage(job)
             session.commit()
 
+        if empty_frames:
+            job.payload = {**job.payload, "empty_frames": empty_frames}
         job.status = JobStatus.SUCCEEDED
         job.finished_at = datetime.now(timezone.utc)
         session.commit()

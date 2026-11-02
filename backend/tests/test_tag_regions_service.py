@@ -143,6 +143,35 @@ def test_mask_objects_are_copied_not_shared(db_session, world, storage):
     assert {content_type for _, content_type in storage.uploads} == {"image/png"}
 
 
+def _png(foreground: bool) -> bytes:
+    import cv2
+    import numpy as np
+
+    mask = np.zeros((8, 8), dtype=np.uint8)
+    if foreground:
+        mask[2:6, 2:6] = 255
+    return cv2.imencode(".png", mask)[1].tobytes()
+
+
+def test_empty_masks_are_skipped_and_counted_on_a_real_run(db_session, world, storage):
+    empty_frame, full_frame = world.frames_a[0], world.frames_a[1]
+    empty = add_region(db_session, storage, empty_frame, world.polyp, world.user)
+    full = add_region(db_session, storage, full_frame, world.polyp, world.user)
+    storage.objects[empty.storage_key] = _png(False)
+    storage.objects[full.storage_key] = _png(True)
+    frame_ids = [empty_frame.id, full_frame.id]
+
+    preview = tag_regions(
+        db_session, storage, frame_ids, world.polyp.id, world.adenoma.id, world.user, dry_run=True
+    )
+    result = tag_regions(db_session, storage, frame_ids, world.polyp.id, world.adenoma.id, world.user)
+
+    assert preview.regions == 2  # a dry run never reads masks
+    assert (result.regions, result.frames, result.skipped_empty_masks) == (1, 1, 1)
+    assert _copies_of(db_session, empty.id) == []
+    assert len(_copies_of(db_session, full.id)) == 1
+
+
 def test_mask_without_raw_copies_only_storage_key(db_session, world, storage):
     frame = world.frames_a[0]
     source = add_region(db_session, storage, frame, world.polyp, world.user, with_raw=False)

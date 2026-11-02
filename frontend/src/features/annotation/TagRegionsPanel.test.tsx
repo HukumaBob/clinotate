@@ -238,6 +238,20 @@ describe("TagRegionsPanel", () => {
     expect(screen.getByText("Remove copies tagged as")).toBeInTheDocument();
   });
 
+  it("reports regions skipped for an empty mask after Create", async () => {
+    const user = userEvent.setup();
+    setup();
+    tagMutate.mockImplementation((_params, options) =>
+      options?.onSuccess?.(tagPreview({ dry_run: false, regions: 27, frames: 9, skipped_empty_masks: 1 })),
+    );
+    renderPanel();
+    await pickCreateInputs(user);
+
+    await user.click(screen.getByRole("button", { name: "Create 28 regions" }));
+
+    expect(screen.getByText("Created 27 regions on 9 frames. Skipped 1 region with an empty mask.")).toBeInTheDocument();
+  });
+
   it("shows the empty state", () => {
     setup({ labels: [] });
     renderPanel();

@@ -88,7 +88,7 @@ export function DatasetsTable({
                 if (job?.status === "failed") {
                   return (
                     <span className="mr-2 inline-flex items-center gap-2">
-                      <span data-testid={`export-error-${dataset.id}`} className="text-xs text-red-400">
+                      <span data-testid={`export-error-${dataset.id}`} className="max-w-xs text-right text-xs text-red-400">
                         {job.error ?? "Export failed"}
                       </span>
                       <button

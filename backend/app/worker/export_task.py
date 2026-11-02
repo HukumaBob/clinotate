@@ -45,6 +45,27 @@ def _data_yaml(class_names_by_id: dict[int, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+_KIND_TEXT = {
+    "invalid_mask": "unusable mask",
+    "missing_mask": "mask file missing",
+    "multi_label_classification": "several labels on one frame",
+}
+
+
+def _abort_message(error_findings) -> str:
+    """Why the export was refused, in a line the dataset table can show: the
+    first findings spelled out (what, which frame and annotation), then a count."""
+    shown = [
+        f"{_KIND_TEXT.get(f.kind, f.kind)} on frame {f.frame_id}"
+        + (f" (annotation {f.annotation_id})" if f.annotation_id is not None else "")
+        + (f": {f.detail}" if f.detail else "")
+        for f in error_findings[:2]
+    ]
+    more = len(error_findings) - len(shown)
+    message = "Export aborted: " + "; ".join(shown) + (f"; and {more} more" if more > 0 else "")
+    return message[:2000]
+
+
 @celery_app.task(name="dataset_export")
 def dataset_export(job_id: int) -> None:
     # Resolved dynamically off the module (not `from app.db import
@@ -90,7 +111,7 @@ def dataset_export(job_id: int) -> None:
                     for f in findings
                 ],
             }
-            job.error = f"{len(error_findings)} findings; export aborted"
+            job.error = _abort_message(error_findings)
             job.finished_at = datetime.now(timezone.utc)
             session.commit()
             return

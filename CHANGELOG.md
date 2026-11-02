@@ -8,6 +8,14 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 
 ## [Unreleased]
 
+### Fixed
+- A failed dataset export now says why in the Datasets table (what is wrong, on which frame
+  and annotation) instead of only "N findings; export aborted".
+- SAM2/SAM3 no longer save empty masks: tracking skips frames where the object is gone
+  (counted in the job's `empty_frames`) and a single prediction that comes back empty fails
+  with a message. Empty masks made dataset exports abort as invalid.
+- Tag regions skips mask sources whose mask is empty and reports how many.
+
 ### Changed
 - DINOv3 crop classifier: with fewer than 50 validation regions the best epoch and early
   stopping follow val loss instead of macro-F1 (one flipped prediction moved F1 by

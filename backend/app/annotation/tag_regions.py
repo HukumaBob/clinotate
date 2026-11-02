@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.annotation.models import Annotation, AnnotationStatus, AnnotationType
 from app.auth.models import User
+from app.datasets.geometry import decode_mask
 from app.media.models import Frame
 from app.storage import StorageService
 from app.taxonomy.models import AnnotationScope, Category, EvaluationType, Label
@@ -43,6 +44,10 @@ class TagRegionsResult:
     frames_with_manual_regions: int = 0
     # Frames (not regions) left out because of skip_manual_frames.
     skipped_manual_frames: int = 0
+    # Mask sources left out because their mask has no foreground pixel. Only
+    # known on a real run: finding out means downloading every mask, which a
+    # dry run deliberately never does, so a preview can over-count by this much.
+    skipped_empty_masks: int = 0
 
 
 def descendant_label_ids(session: Session, label_id: int) -> set[int]:
@@ -135,6 +140,15 @@ def _copy_object(storage: StorageService, key: str, new_key: str, uploaded: list
     data = storage.download(key)
     storage.upload(new_key, data, content_type="image/png")
     uploaded.append(new_key)
+
+
+def _mask_is_empty(data: bytes) -> bool:
+    """True when the PNG decodes to a mask with no foreground pixel. Bytes that
+    do not decode are not called empty: they are copied as they are."""
+    try:
+        return not (decode_mask(data) > 0).any()
+    except ValueError:
+        return False
 
 
 def tag_regions(
@@ -240,14 +254,20 @@ def tag_regions(
         return result
 
     uploaded: list[str] = []
+    created_frames: set[int] = set()
     try:
         for annotation in to_copy:
             storage_key = None
             raw_key = None
             is_mask = annotation.annotation_type == AnnotationType.MASK
             if is_mask:  # eligible_sources guarantees a storage_key here
+                data = storage.download(annotation.storage_key)
+                if _mask_is_empty(data):
+                    result.skipped_empty_masks += 1
+                    continue
                 storage_key = f"masks/{annotation.frame_id}/copy-{uuid.uuid4().hex}.png"
-                _copy_object(storage, annotation.storage_key, storage_key, uploaded)
+                storage.upload(storage_key, data, content_type="image/png")
+                uploaded.append(storage_key)
             if is_mask and annotation.raw_mask_storage_key is not None:
                 raw_key = f"masks/{annotation.frame_id}/copy-{uuid.uuid4().hex}-raw.png"
                 _copy_object(storage, annotation.raw_mask_storage_key, raw_key, uploaded)
@@ -267,6 +287,9 @@ def tag_regions(
                     source_annotation_id=annotation.id,
                 )
             )
+            created_frames.add(annotation.frame_id)
+        result.regions = len(to_copy) - result.skipped_empty_masks
+        result.frames = len(created_frames)
         session.flush()
         session.commit()
     except Exception:

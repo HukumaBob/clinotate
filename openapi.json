@@ -8340,6 +8340,11 @@
           "skipped_manual_frames": {
             "type": "integer",
             "title": "Skipped Manual Frames"
+          },
+          "skipped_empty_masks": {
+            "type": "integer",
+            "title": "Skipped Empty Masks",
+            "default": 0
           }
         },
         "type": "object",
