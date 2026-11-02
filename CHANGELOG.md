@@ -9,6 +9,10 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 ## [Unreleased]
 
 ### Changed
+- DINOv3 crop classifier: with fewer than 50 validation regions the best epoch and early
+  stopping follow val loss instead of macro-F1 (one flipped prediction moved F1 by
+  several points and froze a barely trained epoch as "best"); the held-out test split,
+  when the dataset has one, is now scored with the selected epoch (`test/*` metrics).
 - Tag regions panel reads as copy-from / copy-to: classification pickers for source and
   target, same-classification targets disabled, plain-language outcomes.
 - Sequence grid Select toolbar regrouped (selection summary, Classify / Regions /

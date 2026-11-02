@@ -53,6 +53,7 @@ DEFAULTS: dict = {
 }
 
 EMBED_BATCH = 32  # bounds VRAM while caching frozen features
+SMALL_VAL_REGIONS = 50  # below this, select and early-stop on val loss, not macro-F1
 
 
 def _load_backbone(hub_id: str) -> nn.Module:
@@ -215,6 +216,7 @@ class Dinov3ClassifierAdapter:
             raise RuntimeError(f"No usable regions in the dataset: {why}")
         train = [s for s in samples if s.split == "train"]
         val = [s for s in samples if s.split == "val"]
+        test = [s for s in samples if s.split == "test"]
         if not train:
             raise RuntimeError("The dataset has no training split: no region landed in 'train'.")
         if not val:
@@ -286,6 +288,8 @@ class Dinov3ClassifierAdapter:
                                       sampler=sampler, num_workers=workers,
                                       generator=_generator(seed))
             val_loader = DataLoader(_Crops(val, cfg), batch_size=batch, num_workers=workers)
+            test_loader = (DataLoader(_Crops(test, cfg), batch_size=batch, num_workers=workers)
+                           if test else None)
             forward = model
             groups = _param_groups(model, cfg)
         else:
@@ -313,6 +317,11 @@ class Dinov3ClassifierAdapter:
                                       shuffle=sampler is None, sampler=sampler,
                                       generator=_generator(seed))
             val_loader = DataLoader(TensorDataset(vx, vy), batch_size=batch)
+            if test:
+                sx, sy = embed(test)
+                test_loader = DataLoader(TensorDataset(sx, sy), batch_size=batch)
+            else:
+                test_loader = None
             train_ds = None
             forward = model.head
             groups = [{"params": list(model.head.parameters()), "lr": cfg["lr"]}]
@@ -327,6 +336,16 @@ class Dinov3ClassifierAdapter:
         out_dir = Path(request.output_dir)
         best_path = out_dir / "best.pt"
         best = None  # (epoch, summary, cm)
+        best_loss = math.inf
+        best_state: dict[str, torch.Tensor] = {}
+        # With a handful of validation regions one flipped prediction moves
+        # macro-F1 by several points, so a lucky early epoch would win and stop
+        # the run; the loss is smooth enough to select on.
+        by_loss = len(val) < SMALL_VAL_REGIONS
+        criterion = "val loss" if by_loss else "val macro-F1"
+        if by_loss:
+            on_log(f"Only {len(val)} validation regions: selecting the best epoch by val loss "
+                   f"instead of macro-F1 (fewer than {SMALL_VAL_REGIONS})")
         history: list[dict] = []
         since_best = 0
         patience = int(cfg["patience"])
@@ -335,6 +354,9 @@ class Dinov3ClassifierAdapter:
             save_checkpoint(best_path, model, backbone_id=cfg["backbone"],
                             class_names=class_names, preprocess=preprocess,
                             extra_keys=inherited)
+            best_state.clear()
+            best_state.update({name: p.detach().cpu().clone()
+                               for name, p in model.named_parameters() if p.requires_grad})
 
         for epoch in range(1, epochs + 1):
             if partial:
@@ -380,8 +402,13 @@ class Dinov3ClassifierAdapter:
             history.append({"epoch": epoch, **metrics})
             on_log(f"Epoch {epoch}/{epochs}: train loss {metrics['train/loss']:.4f}, "
                    f"val loss {metrics['val/loss']:.4f}, val macro-F1 {metrics['val/macro_f1']:.4f}")
-            if best is None or summary.macro_f1 > best[1].macro_f1:
+            improved = (
+                best is None
+                or (metrics["val/loss"] < best_loss if by_loss else summary.macro_f1 > best[1].macro_f1)
+            )
+            if improved:
                 best = (epoch, summary, cm)
+                best_loss = metrics["val/loss"]
                 since_best = 0
                 save()
             else:
@@ -391,7 +418,7 @@ class Dinov3ClassifierAdapter:
                 on_log(f"Stop requested: ending after epoch {epoch}")
                 break
             if patience > 0 and since_best >= patience:
-                on_log(f"No val macro-F1 improvement for {patience} epochs: stopping early")
+                on_log(f"No {criterion} improvement for {patience} epochs: stopping early")
                 break
 
         if best is None or not best_path.is_file():  # defensive: epochs == 0
@@ -403,10 +430,34 @@ class Dinov3ClassifierAdapter:
             "val/accuracy": float(summary.accuracy),
             "best_epoch": int(best_epoch),
         }
+        test_per_class = None
+        if test_loader is not None and best_state:
+            # Score the selected epoch, not the last one, on the held-out split.
+            model.load_state_dict(best_state, strict=False)
+            model.eval()
+            preds, targets = [], []
+            with torch.no_grad():
+                for x, y in test_loader:
+                    with _autocast(device, use_amp):
+                        logits = forward(x.to(device)).float()
+                    preds.append(logits.argmax(1).cpu())
+                    targets.append(y)
+            test_cm = confusion_matrix(torch.cat(targets).numpy(), torch.cat(preds).numpy(), n)
+            test_summary = summarize(test_cm, class_names)
+            result_metrics.update({
+                "test/macro_f1": float(test_summary.macro_f1),
+                "test/balanced_accuracy": float(test_summary.balanced_accuracy),
+                "test/accuracy": float(test_summary.accuracy),
+                "test/regions": len(test),
+            })
+            test_per_class = test_summary.per_class
+            on_log(f"Test ({len(test)} regions) at epoch {best_epoch}: macro-F1 "
+                   f"{test_summary.macro_f1:.4f}, accuracy {test_summary.accuracy:.4f}")
         safe_cfg = {k: v for k, v in cfg.items() if "token" not in k.lower()}
         metrics_path = out_dir / "metrics.json"
         metrics_path.write_text(json.dumps({
             "metrics": result_metrics, "per_class": summary.per_class,
+            "test_per_class": test_per_class,
             "class_names": class_names, "config": safe_cfg, "history": history,
         }, indent=2))
         licence_path = _write_licence_file(out_dir, str(cfg["backbone"]), on_log)

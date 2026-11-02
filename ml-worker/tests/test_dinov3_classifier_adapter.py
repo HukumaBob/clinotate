@@ -137,7 +137,8 @@ def test_on_epoch_called_with_trainer_keys_each_epoch(backbone, dataset, tmp_pat
     assert any("trainable parameters" in line for line in logs)
 
 
-def test_best_checkpoint_is_the_best_val_macro_f1_epoch(backbone, dataset, tmp_path):
+def test_best_checkpoint_is_the_best_val_macro_f1_epoch(backbone, dataset, tmp_path, monkeypatch):
+    monkeypatch.setattr(adapter_module, "SMALL_VAL_REGIONS", 0)  # enough val regions for F1
     result, _, epochs = _run(dataset, tmp_path, {"epochs": 8, "lr": 0.01, "patience": 100})
     f1s = [m["val/macro_f1"] for _, _, m in epochs]
     best = int(np.argmax(f1s)) + 1  # argmax = earliest on ties
@@ -145,6 +146,30 @@ def test_best_checkpoint_is_the_best_val_macro_f1_epoch(backbone, dataset, tmp_p
     assert result.metrics["val/macro_f1"] == f1s[best - 1]
     assert result.weights_path == tmp_path / "out" / "best.pt"
     assert _val_macro_f1(backbone, result.weights_path, dataset) == pytest.approx(f1s[best - 1])
+
+
+def test_small_validation_split_selects_the_best_val_loss_epoch(backbone, dataset, tmp_path):
+    result, logs, epochs = _run(dataset, tmp_path, {"epochs": 8, "lr": 0.01, "patience": 100})
+    losses = [m["val/loss"] for _, _, m in epochs]
+    best = int(np.argmin(losses)) + 1
+    assert result.metrics["best_epoch"] == best
+    assert any("selecting the best epoch by val loss" in line for line in logs)
+    assert _reevaluate(backbone, result.weights_path, dataset)[1] == pytest.approx(losses[best - 1], rel=1e-4)
+
+
+def test_early_stopping_message_names_val_loss_for_a_small_split(backbone, dataset, tmp_path):
+    _, logs, _ = _run(dataset, tmp_path, {"epochs": 30, "lr": 0.0, "patience": 2})
+    assert any("No val loss improvement for 2 epochs" in line for line in logs)
+
+
+def test_test_split_is_scored_with_the_selected_epoch(backbone, tmp_path):
+    ds = _write_dataset(tmp_path / "ds", {"train": [4, 4, 4], "val": [3, 3, 3], "test": [2, 2, 2]})
+    result, logs, _ = _run(ds, tmp_path, {"epochs": 10, "patience": 100})
+    assert result.metrics["test/regions"] == 6
+    assert 0.0 <= result.metrics["test/macro_f1"] <= 1.0
+    assert result.metrics["test/macro_f1"] >= 0.9  # separable colours
+    assert any(line.startswith("Test (6 regions)") for line in logs)
+    json.dumps(result.metrics)
 
 
 def test_should_stop_ends_run_at_epoch_boundary_with_weights(backbone, dataset, tmp_path):
