@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Detection, FrameIndex } from "../predictions";
-import { COARSE_WINDOW_MS, findFlickers } from "./flicker";
+import { COARSE_WINDOW_MS, findFlickers, isCoarseWindow } from "./flicker";
 
 const d = (class_id: number): Detection => ({ class_id, confidence: 0.9, bbox: [0, 0, 0.1, 0.1] });
 
@@ -88,5 +88,13 @@ describe("findFlickers", () => {
     expect(findFlickers(view(frames, 500), 1, 2).isCoarse).toBe(false);
     expect(findFlickers(view(frames, 501), 1, 2).isCoarse).toBe(true);
     expect(COARSE_WINDOW_MS).toBe(1000);
+  });
+});
+
+describe("isCoarseWindow", () => {
+  it("is true when n median steps exceed the coarse window", () => {
+    expect(isCoarseWindow([0, 600, 1200], 2)).toBe(true);
+    expect(isCoarseWindow([0, 40, 80], 2)).toBe(false);
+    expect(isCoarseWindow([0], 10)).toBe(false);
   });
 });

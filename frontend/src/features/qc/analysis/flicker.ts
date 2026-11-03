@@ -30,6 +30,11 @@ function medianStep(timestamps: number[]): number {
   return steps.length % 2 ? steps[middle] : (steps[middle - 1] + steps[middle]) / 2;
 }
 
+/** True when a window of `n` processed frames spans more than COARSE_WINDOW_MS. */
+export function isCoarseWindow(timestamps: number[], n: number): boolean {
+  return medianStep(timestamps) * n > COARSE_WINDOW_MS;
+}
+
 /** Flicker by class presence over processed frames, without tracking boxes.
  * A blink is a run of presence of at most `n` frames with absence on both
  * sides; a dropout is a run of absence of at most `n` frames with presence
@@ -61,5 +66,5 @@ export function findFlickers(view: FrameIndex, classCount: number, n: number): F
   }
 
   events.sort((a, b) => a.startMs - b.startMs || a.classId - b.classId);
-  return { events, isCoarse: medianStep(timestamps) * n > COARSE_WINDOW_MS };
+  return { events, isCoarse: isCoarseWindow(timestamps, n) };
 }

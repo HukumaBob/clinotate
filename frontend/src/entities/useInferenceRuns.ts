@@ -84,8 +84,9 @@ export function useDeleteInferenceRun() {
 /** Downloads the predictions document once and keeps it in the cache. It
  * can be tens of megabytes for a long video, so it is never refetched on
  * focus. The presigned URL points at object storage, not the API, which
- * is why this is a plain fetch and not apiClient. */
-export function usePredictions(runId: number | null, enabled: boolean) {
+ * is why this is a plain fetch and not apiClient. The document's shape
+ * depends on the run: pass ClassificationDocument for a run with axes. */
+export function usePredictions<TDocument = PredictionsDocument>(runId: number | null, enabled: boolean) {
   return useQuery({
     queryKey: ["inference-predictions", runId],
     queryFn: async () => {
@@ -95,7 +96,7 @@ export function usePredictions(runId: number | null, enabled: boolean) {
       if (link.error || !link.data) throw link.error ?? new Error("No predictions link");
       const response = await fetch(link.data.download_url);
       if (!response.ok) throw new Error(`Could not download predictions (${response.status})`);
-      return (await response.json()) as PredictionsDocument;
+      return (await response.json()) as TDocument;
     },
     enabled: runId !== null && enabled,
     staleTime: Infinity,

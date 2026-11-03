@@ -10,7 +10,7 @@ import { DatasetsPage } from "../features/datasets/DatasetsPage";
 import { MediaPage } from "../features/media/MediaPage";
 import { QcPage } from "../features/qc/QcPage";
 import { AbComparePage } from "../features/qc/AbComparePage";
-import { RunViewPage } from "../features/qc/RunViewPage";
+import { RunRoute } from "../features/qc/RunRoute";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TagsPage } from "../features/tags/TagsPage";
 import { TrainPage } from "../features/training/TrainPage";
@@ -41,7 +41,7 @@ export function App() {
           <Route path="/train" element={<TrainPage />} />
           <Route path="/qc" element={<QcPage />} />
           <Route path="/qc/compare/:runA/:runB" element={<AbComparePage />} />
-          <Route path="/qc/:runId" element={<RunViewPage />} />
+          <Route path="/qc/:runId" element={<RunRoute />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
