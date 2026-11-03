@@ -11,7 +11,7 @@ const doc = makeDoc();
 const indexes = buildAxisIndexes(doc);
 const blips = mergeBlips(indexes.map((index, axis) => findBlips(index, axis, 2)));
 
-function Harness({ onSeek }: { onSeek: (ms: number) => void }) {
+function Harness({ onSeek, reference }: { onSeek: (ms: number) => void; reference?: React.ReactNode[] }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   return (
     <>
@@ -23,6 +23,7 @@ function Harness({ onSeek }: { onSeek: (ms: number) => void }) {
         durationMs={1000}
         blips={blips}
         onSeek={onSeek}
+        reference={reference}
       />
     </>
   );
@@ -69,5 +70,18 @@ describe("AxisLanes", () => {
     });
     fireEvent.click(track, { clientX: 200 });
     expect(onSeek).toHaveBeenCalledWith(250);
+  });
+
+  it("puts a reference lane above the model lane of its axis only", () => {
+    render(<Harness onSeek={() => {}} reference={[<div key="r" data-testid="ref-node" />, null]} />);
+    const anatomy = screen.getByRole("group", { name: "Anatomy" });
+    const refNode = within(anatomy).getByTestId("ref-node");
+    const track = within(anatomy).getByTestId("lane-track");
+    expect(refNode.compareDocumentPosition(track) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(anatomy).getByText("reference")).toBeInTheDocument();
+    expect(within(anatomy).getByText("model")).toBeInTheDocument();
+    const mode = screen.getByRole("group", { name: "Mode" });
+    expect(within(mode).queryByTestId("ref-node")).toBeNull();
+    expect(within(mode).queryByText("reference")).toBeNull();
   });
 });

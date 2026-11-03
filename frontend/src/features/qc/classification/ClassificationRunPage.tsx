@@ -17,6 +17,7 @@ import { buildAxisIndexes } from "./axisIndex";
 import { BlipWindowControl } from "./BlipWindowControl";
 import { findBlips, mergeBlips, type Blip } from "./blips";
 import type { ClassificationDocument } from "./types";
+import { useRunReference } from "./useRunReference";
 
 const NO_BLIPS: Blip[] = [];
 
@@ -62,6 +63,13 @@ export function ClassificationRunPage() {
     const lastFrameMs = timestamps[timestamps.length - 1] ?? 0;
     return Math.max((video?.duration_seconds ?? 0) * 1000, lastFrameMs);
   }, [video, indexes]);
+
+  const runReference = useRunReference({
+    videoRef,
+    videoId: run?.video_id ?? null,
+    modelAxes: document?.axes,
+    durationMs,
+  });
 
   const moveTo = useCallback((ms: number) => {
     const el = videoRef.current;
@@ -138,6 +146,7 @@ export function ClassificationRunPage() {
       {run?.status === "succeeded" && video && video.browser_playable !== false && (
         <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
           <div className="flex min-w-0 flex-1 flex-col gap-3 lg:min-h-0 lg:overflow-y-auto">
+            {runReference.banner}
             <div className="relative bg-black lg:min-h-[16rem] lg:flex-1">
               <video
                 ref={videoRef}
@@ -160,6 +169,7 @@ export function ClassificationRunPage() {
 
             {document && durationMs > 0 ? (
               <>
+                {runReference.bar}
                 <AxisLanes
                   videoRef={videoRef}
                   axes={document.axes}
@@ -168,6 +178,7 @@ export function ClassificationRunPage() {
                   blips={blips}
                   onSeek={seekTo}
                   activeAxis={activeAxis}
+                  reference={runReference.lanes}
                 />
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                   <EventNav

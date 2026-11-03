@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,8 @@ import type { ClassificationDocument } from "./types";
 let runState: Record<string, unknown>;
 let predictionsState: { data?: ClassificationDocument; isPending?: boolean; isError?: boolean };
 let videoState: Record<string, unknown>;
+let referenceState: { data?: Record<string, unknown>; isPending?: boolean; isError?: boolean };
+const createInterval = vi.fn();
 
 vi.mock("../../../entities/useInferenceRuns", () => ({
   useInferenceRun: () => ({ data: runState }),
@@ -18,9 +20,40 @@ vi.mock("../../../entities/useInferenceRuns", () => ({
 vi.mock("../../../entities/useVideo", () => ({
   useVideo: () => ({ data: videoState, refetch: vi.fn() }),
 }));
+vi.mock("../../../entities/useReference", () => ({
+  useReference: () => referenceState,
+  useCreateInterval: () => ({ mutateAsync: createInterval }),
+  useUpdateInterval: () => ({ mutateAsync: vi.fn() }),
+  useDeleteInterval: () => ({ mutateAsync: vi.fn() }),
+  useRestoreClean: () => ({ mutate: vi.fn() }),
+}));
 vi.mock("../../media/TranscodePrompt", () => ({
   TranscodePrompt: () => <p>Transcode prompt</p>,
 }));
+
+/** Location shares its class names with the model's Anatomy axis; Quality
+ * matches no model axis. */
+function makeReference(status: "none" | "clean" | "compromised", withAxes = true) {
+  return {
+    video_id: 9, procedure_id: 1, duration_ms: 1000, status,
+    compromised_at: status === "compromised" ? "2026-11-01T10:00:00Z" : null,
+    compromised_by_training_run_id: status === "compromised" ? 4 : null,
+    axes: withAxes
+      ? [
+          {
+            category_id: 2, name: "Location",
+            classes: [
+              { label_id: 10, name: "caecum", key: "1" },
+              { label_id: 11, name: "ascending", key: "2" },
+              { label_id: 12, name: "transverse", key: "3" },
+            ],
+          },
+          { category_id: 3, name: "Quality", classes: [{ label_id: 20, name: "Good", key: "4" }] },
+        ]
+      : [],
+    intervals: [],
+  };
+}
 
 function renderPage() {
   return render(
@@ -40,6 +73,12 @@ beforeEach(() => {
     axes: [{ name: "Anatomy" }, { name: "Mode" }],
   };
   predictionsState = { data: makeDoc(), isPending: false };
+  createInterval.mockReset();
+  createInterval.mockImplementation(async (vars: { labelId: number; startMs: number; endMs: number }) => ({
+    id: 100, video_id: 9, category_id: 2, label_id: vars.labelId, taxonomy_version: 1,
+    start_ms: vars.startMs, end_ms: vars.endMs, orphaned: false,
+  }));
+  referenceState = { data: makeReference("clean") };
   videoState = { id: 9, title: "Colonoscopy 1", stream_url: "/v.mp4", duration_seconds: 1, browser_playable: true };
 });
 
@@ -145,5 +184,83 @@ describe("ClassificationRunPage", () => {
     predictionsState = { isPending: false, isError: true };
     renderPage();
     expect(screen.getByText("Could not load predictions.")).toBeInTheDocument();
+  });
+
+  it("puts the reference lane above the matching model lane and none on unmatched axes", () => {
+    renderPage();
+    const anatomy = screen.getByRole("group", { name: "Anatomy" });
+    const refLane = within(anatomy).getByTestId("lane-2");
+    const modelTrack = within(anatomy).getByTestId("lane-track");
+    expect(refLane.compareDocumentPosition(modelTrack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(screen.getByRole("group", { name: "Mode" })).queryByTestId(/^lane-\d/)).toBeNull();
+    expect(screen.queryByTestId("lane-3")).toBeNull();
+    // The legend shows the matched axis' keys only.
+    expect(screen.getByRole("button", { name: /caecum/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Good/ })).toBeNull();
+  });
+
+  it("edits the reference with a digit key", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.keyboard("1");
+    await vi.waitFor(() =>
+      expect(createInterval).toHaveBeenCalledWith(expect.objectContaining({ labelId: 10, startMs: 0 })),
+    );
+  });
+
+  it("does not edit the reference with a key of an unmatched axis", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.keyboard("4");
+    expect(createInterval).not.toHaveBeenCalled();
+  });
+
+  it("still steps blips with ] when a reference is shown", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPage();
+    await user.keyboard("]");
+    expect(container.querySelector("video")!.currentTime).toBeCloseTo(0.2);
+    expect(createInterval).not.toHaveBeenCalled();
+  });
+
+  it("warns when the reference is compromised and not when it is clean", () => {
+    const banner = "This video's reference is no longer an unbiased test: frames of it were used for training";
+    renderPage();
+    expect(screen.queryByText(banner)).toBeNull();
+    referenceState = { data: makeReference("compromised") };
+    renderPage();
+    expect(screen.getByText(banner)).toBeInTheDocument();
+  });
+
+  it("offers to label a video with no reference axes and shows the model lanes alone", () => {
+    referenceState = { data: makeReference("none", false) };
+    renderPage();
+    expect(screen.getByRole("group", { name: "Anatomy" })).toBeInTheDocument();
+    expect(screen.queryByTestId("lane-2")).toBeNull();
+    expect(screen.getByRole("link", { name: "Label reference" })).toHaveAttribute("href", "/qc/reference/9");
+  });
+
+  it("offers to label when the video has no reference yet", () => {
+    referenceState = { data: makeReference("none") };
+    renderPage();
+    expect(screen.getByRole("link", { name: "Label reference" })).toHaveAttribute("href", "/qc/reference/9");
+  });
+
+  it("does not offer the link for a labeled, matched reference", () => {
+    renderPage();
+    expect(screen.queryByRole("link", { name: "Label reference" })).toBeNull();
+  });
+
+  it("shows only the model lanes while the reference loads or when it fails", () => {
+    referenceState = { isPending: true };
+    const first = renderPage();
+    expect(screen.getByRole("group", { name: "Anatomy" })).toBeInTheDocument();
+    expect(screen.queryByTestId("lane-2")).toBeNull();
+    first.unmount();
+    referenceState = { isPending: false, isError: true };
+    renderPage();
+    expect(screen.getByRole("group", { name: "Anatomy" })).toBeInTheDocument();
+    expect(screen.queryByTestId("lane-2")).toBeNull();
+    expect(screen.queryByText(/unbiased test/)).toBeNull();
   });
 });

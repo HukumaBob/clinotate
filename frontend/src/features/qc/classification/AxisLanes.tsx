@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { formatClock } from "../analysis/strip";
 import { colorForClass } from "../predictions";
@@ -20,10 +20,13 @@ interface AxisLanesProps {
   onSeek: (ms: number) => void;
   /** Axis of the current event, highlighted. */
   activeAxis?: number | null;
-  /** Reference intervals per axis. Accepted and ignored for now: a later
-   * sub-project draws them as a paired lane above the prediction lane. */
-  reference?: unknown[];
+  /** Per model axis, the reference lane drawn above its model lane (null or
+   * missing: none). The nodes keep their own clock subscription, so a stable
+   * element is not re-rendered by this component's playhead ticks. */
+  reference?: (ReactNode | null | undefined)[];
 }
+
+const ROW_LABEL = "w-16 shrink-0 text-[11px] text-gray-500";
 
 /** Below this width (px) a segment carries no name inside. */
 const MIN_LABEL_PX = 56;
@@ -129,7 +132,16 @@ const BlipTicks = memo(function BlipTicks({ blips, durationMs }: { blips: Blip[]
 
 /** One lane per classification axis under the player: a coloured segment per
  * stretch of one label, white ticks at blips, a playhead, click to seek. */
-export function AxisLanes({ videoRef, axes, indexes, durationMs, blips, onSeek, activeAxis = null }: AxisLanesProps) {
+export function AxisLanes({
+  videoRef,
+  axes,
+  indexes,
+  durationMs,
+  blips,
+  onSeek,
+  activeAxis = null,
+  reference,
+}: AxisLanesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [widthPx, setWidthPx] = useState(0);
   const timeMs = useVideoClock(videoRef);
@@ -164,6 +176,7 @@ export function AxisLanes({ videoRef, axes, indexes, durationMs, blips, onSeek, 
     <div ref={containerRef} className="flex flex-col gap-3">
       {axes.map((axis, i) => {
         const active = activeAxis === i;
+        const refNode = reference?.[i];
         return (
           <div
             key={i}
@@ -173,25 +186,34 @@ export function AxisLanes({ videoRef, axes, indexes, durationMs, blips, onSeek, 
             className={`flex flex-col gap-1 rounded px-1 py-0.5 ${active ? "ring-1 ring-blue-500" : ""}`}
           >
             <LaneHeader axis={axis} segments={segmentsByAxis[i] ?? []} active={active} />
-            <div
-              data-testid="lane-track"
-              className="relative h-6 w-full cursor-pointer rounded bg-gray-900"
-              onClick={seek}
-            >
-              <div className="absolute inset-0 overflow-hidden rounded">
-                <LaneSegments
-                  axis={axis}
-                  segments={segmentsByAxis[i] ?? []}
-                  durationMs={durationMs}
-                  widthPx={widthPx}
+            {refNode != null && (
+              <div className="flex items-end gap-2">
+                <span className={`${ROW_LABEL} pb-1`}>reference</span>
+                <div className="min-w-0 flex-1">{refNode}</div>
+              </div>
+            )}
+            <div className={refNode != null ? "flex items-center gap-2" : "contents"}>
+              {refNode != null && <span className={ROW_LABEL}>model</span>}
+              <div
+                data-testid="lane-track"
+                className="relative h-6 w-full cursor-pointer rounded bg-gray-900"
+                onClick={seek}
+              >
+                <div className="absolute inset-0 overflow-hidden rounded">
+                  <LaneSegments
+                    axis={axis}
+                    segments={segmentsByAxis[i] ?? []}
+                    durationMs={durationMs}
+                    widthPx={widthPx}
+                  />
+                </div>
+                <BlipTicks blips={blipsByAxis[i] ?? []} durationMs={durationMs} />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -inset-y-0.5 w-0.5 bg-blue-400"
+                  style={{ left: percent(timeMs, durationMs) }}
                 />
               </div>
-              <BlipTicks blips={blipsByAxis[i] ?? []} durationMs={durationMs} />
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -inset-y-0.5 w-0.5 bg-blue-400"
-                style={{ left: percent(timeMs, durationMs) }}
-              />
             </div>
           </div>
         );
