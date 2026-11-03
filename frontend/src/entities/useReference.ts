@@ -20,26 +20,45 @@ export function useReference(videoId: number | null) {
   });
 }
 
-/** Cancels in-flight fetches (so a refetch cannot overwrite the optimistic
- * state), applies `edit` to the cached reference and returns the snapshot. */
-async function optimistic(
+const TEMP_ID_ERROR = "Interval is still being saved";
+
+function mutationKey(videoId: number | null) {
+  return ["reference-mutation", videoId];
+}
+
+/** Cancels in-flight fetches (so a refetch cannot overwrite optimistic state)
+ * and applies `edit` to the cached reference, if there is one. */
+async function applyOptimistic(
   queryClient: QueryClient,
   videoId: number | null,
   edit: (reference: ReferenceRead) => ReferenceRead,
 ) {
   const key = ["reference", videoId];
   await queryClient.cancelQueries({ queryKey: key });
-  const previous = queryClient.getQueryData<ReferenceRead>(key);
-  if (previous) queryClient.setQueryData<ReferenceRead>(key, edit(previous));
-  return { previous };
+  queryClient.setQueryData<ReferenceRead>(key, (reference) =>
+    reference ? edit(reference) : reference,
+  );
 }
 
-function rollback(
+/** Per-item rollback: only the rows one mutation touched are reverted, never
+ * the whole document, so newer in-flight optimistic edits survive. */
+function patchCache(
   queryClient: QueryClient,
   videoId: number | null,
-  context: { previous?: ReferenceRead } | undefined,
+  edit: (reference: ReferenceRead) => ReferenceRead,
 ) {
-  if (context?.previous) queryClient.setQueryData(["reference", videoId], context.previous);
+  queryClient.setQueryData<ReferenceRead>(["reference", videoId], (reference) =>
+    reference ? edit(reference) : reference,
+  );
+}
+
+/** Refetch only when the last in-flight reference mutation of this video
+ * settles (the settling one still counts itself), so an early settle cannot
+ * overwrite a later optimistic state with stale server data. */
+function settle(queryClient: QueryClient, videoId: number | null) {
+  if (queryClient.isMutating({ mutationKey: mutationKey(videoId) }) <= 1) {
+    void queryClient.invalidateQueries({ queryKey: ["reference", videoId] });
+  }
 }
 
 let tempId = 0;
@@ -47,6 +66,7 @@ let tempId = 0;
 export function useCreateInterval(videoId: number | null) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: mutationKey(videoId),
     mutationFn: async (vars: { labelId: number; startMs: number; endMs: number }) => {
       const result = await apiClient.POST("/reference/videos/{video_id}/intervals", {
         params: { path: { video_id: videoId as number } },
@@ -57,7 +77,7 @@ export function useCreateInterval(videoId: number | null) {
     },
     onMutate: async (vars) => {
       const id = --tempId;
-      const context = await optimistic(queryClient, videoId, (reference) => {
+      await applyOptimistic(queryClient, videoId, (reference) => {
         const axis = reference.axes.find((a) => a.classes.some((c) => c.label_id === vars.labelId));
         const row: ReferenceInterval = {
           id,
@@ -71,26 +91,32 @@ export function useCreateInterval(videoId: number | null) {
         };
         return { ...reference, intervals: [...reference.intervals, row] };
       });
-      return { ...context, tempId: id };
+      return { tempId: id };
     },
     onSuccess: (created, _vars, context) => {
-      queryClient.setQueryData<ReferenceRead>(["reference", videoId], (reference) =>
-        reference
-          ? {
-              ...reference,
-              intervals: reference.intervals.map((i) => (i.id === context?.tempId ? created : i)),
-            }
-          : reference,
-      );
+      patchCache(queryClient, videoId, (reference) => ({
+        ...reference,
+        intervals: reference.intervals.map((i) => (i.id === context?.tempId ? created : i)),
+      }));
     },
-    onError: (_error, _vars, context) => rollback(queryClient, videoId, context),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["reference", videoId] }),
+    onError: (_error, _vars, context) => {
+      if (!context) return;
+      patchCache(queryClient, videoId, (reference) => ({
+        ...reference,
+        intervals: reference.intervals.filter((i) => i.id !== context.tempId),
+      }));
+    },
+    onSettled: () => settle(queryClient, videoId),
   });
 }
 
+// The editor must wait for the server id of a new interval (the create
+// mutation's success) before issuing update/delete for it: a temporary
+// (negative) id must never reach the server.
 export function useUpdateInterval(videoId: number | null) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: mutationKey(videoId),
     mutationFn: async (vars: {
       intervalId: number;
       labelId?: number;
@@ -108,8 +134,12 @@ export function useUpdateInterval(videoId: number | null) {
       if (result.error) throw result.error;
       return result.data as ReferenceInterval;
     },
-    onMutate: (vars) =>
-      optimistic(queryClient, videoId, (reference) => ({
+    onMutate: async (vars) => {
+      if (vars.intervalId < 0) throw new Error(TEMP_ID_ERROR);
+      const previous = queryClient
+        .getQueryData<ReferenceRead>(["reference", videoId])
+        ?.intervals.find((i) => i.id === vars.intervalId);
+      await applyOptimistic(queryClient, videoId, (reference) => ({
         ...reference,
         intervals: reference.intervals.map((i) =>
           i.id === vars.intervalId
@@ -121,28 +151,72 @@ export function useUpdateInterval(videoId: number | null) {
               }
             : i,
         ),
-      })),
-    onError: (_error, _vars, context) => rollback(queryClient, videoId, context),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["reference", videoId] }),
+      }));
+      return { previous };
+    },
+    onError: (_error, vars, context) => {
+      const previous = context?.previous;
+      if (!previous) return;
+      patchCache(queryClient, videoId, (reference) => ({
+        ...reference,
+        intervals: reference.intervals.map((i) => (i.id === vars.intervalId ? previous : i)),
+      }));
+    },
+    onSettled: (_data, error) => {
+      if (error instanceof Error && error.message === TEMP_ID_ERROR) return;
+      settle(queryClient, videoId);
+    },
   });
+}
+
+/** Re-inserts a row, keeping the order by start within its category. */
+function insertSorted(intervals: ReferenceInterval[], row: ReferenceInterval) {
+  const sameCategory = intervals
+    .map((i, index) => ({ i, index }))
+    .filter(({ i }) => i.category_id === row.category_id);
+  const next = sameCategory.find(({ i }) => i.start_ms > row.start_ms);
+  const at = next
+    ? next.index
+    : sameCategory.length > 0
+      ? sameCategory[sameCategory.length - 1].index + 1
+      : intervals.length;
+  return [...intervals.slice(0, at), row, ...intervals.slice(at)];
 }
 
 export function useDeleteInterval(videoId: number | null) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: mutationKey(videoId),
     mutationFn: async (intervalId: number) => {
       const result = await apiClient.DELETE("/reference/videos/{video_id}/intervals/{interval_id}", {
         params: { path: { video_id: videoId as number, interval_id: intervalId } },
       });
       if (result.error) throw result.error;
     },
-    onMutate: (intervalId) =>
-      optimistic(queryClient, videoId, (reference) => ({
+    onMutate: async (intervalId) => {
+      if (intervalId < 0) throw new Error(TEMP_ID_ERROR);
+      const removed = queryClient
+        .getQueryData<ReferenceRead>(["reference", videoId])
+        ?.intervals.find((i) => i.id === intervalId);
+      await applyOptimistic(queryClient, videoId, (reference) => ({
         ...reference,
         intervals: reference.intervals.filter((i) => i.id !== intervalId),
-      })),
-    onError: (_error, _vars, context) => rollback(queryClient, videoId, context),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["reference", videoId] }),
+      }));
+      return { removed };
+    },
+    onError: (_error, _intervalId, context) => {
+      const removed = context?.removed;
+      if (!removed) return;
+      patchCache(queryClient, videoId, (reference) =>
+        reference.intervals.some((i) => i.id === removed.id)
+          ? reference
+          : { ...reference, intervals: insertSorted(reference.intervals, removed) },
+      );
+    },
+    onSettled: (_data, error) => {
+      if (error instanceof Error && error.message === TEMP_ID_ERROR) return;
+      settle(queryClient, videoId);
+    },
   });
 }
 

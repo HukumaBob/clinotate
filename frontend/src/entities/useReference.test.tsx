@@ -61,7 +61,7 @@ function setup() {
 
 const cached = (qc: QueryClient) => qc.getQueryData<ReferenceRead>(["reference", 5])!;
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => vi.resetAllMocks());
 
 describe("useReference", () => {
   it("reads the reference of the video", async () => {
@@ -221,5 +221,261 @@ describe("useReferenceExposure", () => {
     const { wrapper } = setup();
     renderHook(() => useReferenceExposure(null), { wrapper });
     expect(apiClient.GET).not.toHaveBeenCalled();
+  });
+});
+
+// ---- concurrency: per-item rollback, deferred invalidation, temp ids ----
+
+const second = { ...existing, id: 2, label_id: 11, start_ms: 2000, end_ms: 3000 };
+
+function setupTwo() {
+  const ctx = setup();
+  ctx.queryClient.setQueryData(["reference", 5], { ...reference, intervals: [existing, second] });
+  return ctx;
+}
+
+function deferred() {
+  let resolve!: (v: unknown) => void;
+  const promise = new Promise((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+describe("overlapping updates", () => {
+  it("reverts only the failed interval while a later edit is in flight", async () => {
+    const first = deferred();
+    const later = deferred();
+    vi.mocked(apiClient.PATCH)
+      .mockReturnValueOnce(first.promise as never)
+      .mockReturnValueOnce(later.promise as never);
+    const { wrapper, queryClient } = setupTwo();
+    const { result } = renderHook(() => useUpdateInterval(5), { wrapper });
+    let p1!: Promise<unknown>;
+    let p2!: Promise<unknown>;
+    act(() => {
+      p1 = result.current.mutateAsync({ intervalId: 1, endMs: 1500 });
+    });
+    await waitFor(() => expect(cached(queryClient).intervals[0].end_ms).toBe(1500));
+    act(() => {
+      p2 = result.current.mutateAsync({ intervalId: 2, endMs: 3500 });
+    });
+    await waitFor(() => expect(cached(queryClient).intervals[1].end_ms).toBe(3500));
+
+    await act(async () => {
+      first.resolve({ error: { detail: "overlaps" } });
+      await expect(p1).rejects.toEqual({ detail: "overlaps" });
+    });
+    expect(cached(queryClient).intervals[0]).toEqual(existing);
+    expect(cached(queryClient).intervals[1].end_ms).toBe(3500);
+
+    await act(async () => {
+      later.resolve({ data: { ...second, end_ms: 3500 } });
+      await p2;
+    });
+  });
+
+  it("reverts the second interval when it fails after the first succeeded", async () => {
+    const first = deferred();
+    const later = deferred();
+    vi.mocked(apiClient.PATCH)
+      .mockReturnValueOnce(first.promise as never)
+      .mockReturnValueOnce(later.promise as never);
+    const { wrapper, queryClient } = setupTwo();
+    const { result } = renderHook(() => useUpdateInterval(5), { wrapper });
+    let p1!: Promise<unknown>;
+    let p2!: Promise<unknown>;
+    act(() => {
+      p1 = result.current.mutateAsync({ intervalId: 1, endMs: 1500 });
+    });
+    await waitFor(() => expect(cached(queryClient).intervals[0].end_ms).toBe(1500));
+    act(() => {
+      p2 = result.current.mutateAsync({ intervalId: 2, endMs: 3500 });
+    });
+    await waitFor(() => expect(cached(queryClient).intervals[1].end_ms).toBe(3500));
+    await act(async () => {
+      first.resolve({ data: { ...existing, end_ms: 1500 } });
+      await p1;
+    });
+    await act(async () => {
+      later.resolve({ error: { detail: "too long" } });
+      await expect(p2).rejects.toEqual({ detail: "too long" });
+    });
+    expect(cached(queryClient).intervals[0].end_ms).toBe(1500);
+    expect(cached(queryClient).intervals[1]).toEqual(second);
+  });
+
+  it("sends labelId and startMs as snake_case", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({ data: existing } as never);
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useUpdateInterval(5), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ intervalId: 1, labelId: 11, startMs: 100 });
+    });
+    expect(vi.mocked(apiClient.PATCH).mock.calls[0][1]?.body).toEqual({
+      label_id: 11,
+      start_ms: 100,
+    });
+  });
+
+  it("surfaces the 409 detail", async () => {
+    vi.mocked(apiClient.PATCH).mockResolvedValue({ error: { detail: "overlaps" } } as never);
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useUpdateInterval(5), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync({ intervalId: 1, endMs: 5 })).rejects.toEqual({
+        detail: "overlaps",
+      });
+    });
+  });
+});
+
+describe("overlapping creates", () => {
+  it("a failed first create leaves the second temp row, which the server row replaces", async () => {
+    const first = deferred();
+    const later = deferred();
+    vi.mocked(apiClient.POST)
+      .mockReturnValueOnce(first.promise as never)
+      .mockReturnValueOnce(later.promise as never);
+    const { wrapper, queryClient } = setup();
+    const { result } = renderHook(() => useCreateInterval(5), { wrapper });
+    let p1!: Promise<unknown>;
+    let p2!: Promise<unknown>;
+    act(() => {
+      p1 = result.current.mutateAsync({ labelId: 11, startMs: 2000, endMs: 3000 });
+    });
+    await waitFor(() => expect(cached(queryClient).intervals).toHaveLength(2));
+    act(() => {
+      p2 = result.current.mutateAsync({ labelId: 11, startMs: 4000, endMs: 5000 });
+    });
+    await waitFor(() => expect(cached(queryClient).intervals).toHaveLength(3));
+
+    await act(async () => {
+      first.resolve({ error: { detail: "overlaps" } });
+      await expect(p1).rejects.toBeTruthy();
+    });
+    const rows = cached(queryClient).intervals;
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toMatchObject({ start_ms: 4000, end_ms: 5000 });
+    expect(rows[1].id).toBeLessThan(0);
+
+    await act(async () => {
+      later.resolve({ data: { ...existing, id: 77, start_ms: 4000, end_ms: 5000 } });
+      await p2;
+    });
+    expect(cached(queryClient).intervals.map((i) => i.id)).toEqual([1, 77]);
+  });
+});
+
+describe("failed delete", () => {
+  it("re-inserts its row in start order without disturbing other edits", async () => {
+    const del = deferred();
+    const upd = deferred();
+    vi.mocked(apiClient.DELETE).mockReturnValue(del.promise as never);
+    vi.mocked(apiClient.PATCH).mockReturnValue(upd.promise as never);
+    const { wrapper, queryClient } = setupTwo();
+    const { result: d } = renderHook(() => useDeleteInterval(5), { wrapper });
+    const { result: u } = renderHook(() => useUpdateInterval(5), { wrapper });
+    let pd!: Promise<unknown>;
+    let pu!: Promise<unknown>;
+    act(() => {
+      pd = d.current.mutateAsync(1);
+    });
+    await waitFor(() => expect(cached(queryClient).intervals).toHaveLength(1));
+    act(() => {
+      pu = u.current.mutateAsync({ intervalId: 2, endMs: 3500 });
+    });
+    await waitFor(() => expect(cached(queryClient).intervals[0].end_ms).toBe(3500));
+
+    await act(async () => {
+      del.resolve({ error: { detail: "locked" } });
+      await expect(pd).rejects.toEqual({ detail: "locked" });
+    });
+    expect(cached(queryClient).intervals.map((i) => i.id)).toEqual([1, 2]);
+    expect(cached(queryClient).intervals[1].end_ms).toBe(3500);
+    await act(async () => {
+      upd.resolve({ data: { ...second, end_ms: 3500 } });
+      await pu;
+    });
+  });
+});
+
+describe("invalidation under overlap", () => {
+  it("refetches only after the last in-flight mutation settles", async () => {
+    const first = deferred();
+    const later = deferred();
+    vi.mocked(apiClient.PATCH)
+      .mockReturnValueOnce(first.promise as never)
+      .mockReturnValueOnce(later.promise as never);
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: reference } as never);
+    const { wrapper } = setupTwo();
+    const { result } = renderHook(
+      () => ({ update: useUpdateInterval(5), query: useReference(5) }),
+      { wrapper },
+    );
+    await waitFor(() => expect(apiClient.GET).toHaveBeenCalledTimes(1));
+    let p1!: Promise<unknown>;
+    let p2!: Promise<unknown>;
+    act(() => {
+      p1 = result.current.update.mutateAsync({ intervalId: 1, endMs: 1500 });
+      p2 = result.current.update.mutateAsync({ intervalId: 2, endMs: 3500 });
+    });
+    await act(async () => {
+      first.resolve({ data: { ...existing, end_ms: 1500 } });
+      await p1;
+    });
+    expect(apiClient.GET).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      later.resolve({ data: { ...second, end_ms: 3500 } });
+      await p2;
+    });
+    await waitFor(() => expect(apiClient.GET).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("temporary ids", () => {
+  it("update with a negative id sends nothing and leaves the cache alone", async () => {
+    const { wrapper, queryClient } = setup();
+    const before = cached(queryClient);
+    const { result } = renderHook(() => useUpdateInterval(5), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync({ intervalId: -1, endMs: 5 })).rejects.toThrow(
+        "Interval is still being saved",
+      );
+    });
+    expect(apiClient.PATCH).not.toHaveBeenCalled();
+    expect(cached(queryClient)).toEqual(before);
+  });
+
+  it("delete with a negative id sends nothing and leaves the cache alone", async () => {
+    const { wrapper, queryClient } = setup();
+    const before = cached(queryClient);
+    const { result } = renderHook(() => useDeleteInterval(5), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync(-3)).rejects.toThrow("Interval is still being saved");
+    });
+    expect(apiClient.DELETE).not.toHaveBeenCalled();
+    expect(cached(queryClient)).toEqual(before);
+  });
+});
+
+describe("delete and restore failures", () => {
+  it("delete surfaces the 409 detail", async () => {
+    vi.mocked(apiClient.DELETE).mockResolvedValue({ error: { detail: "no" } } as never);
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useDeleteInterval(5), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync(1)).rejects.toEqual({ detail: "no" });
+    });
+  });
+
+  it("restore-clean surfaces the error and still invalidates", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({ error: { detail: "not compromised" } } as never);
+    const { wrapper, invalidate } = setup();
+    const { result } = renderHook(() => useRestoreClean(5), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync()).rejects.toEqual({ detail: "not compromised" });
+    });
+    expect(invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toContain(
+      JSON.stringify(["reference", 5]),
+    );
   });
 });
