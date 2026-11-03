@@ -33,6 +33,7 @@ def create_run(
     session: Session = Depends(get_session),
 ):
     perturbation = body.perturbation.model_dump() if body.perturbation else None
+    crop_box = body.crop.model_dump() if body.crop else None
     try:
         if body.classifiers is not None:
             return service.create_classification_run(
@@ -41,6 +42,7 @@ def create_run(
                 classifiers=body.classifiers,
                 frame_stride=body.frame_stride,
                 perturbation=perturbation,
+                crop_box=crop_box,
                 created_by=current_user,
             )
         return service.create_inference_run(
@@ -49,6 +51,7 @@ def create_run(
             model_version_id=body.model_version_id,
             frame_stride=body.frame_stride,
             perturbation=perturbation,
+            crop_box=crop_box,
             created_by=current_user,
         )
     except (service.VideoNotFound, ModelVersionNotFound) as exc:

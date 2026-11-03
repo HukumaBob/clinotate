@@ -297,3 +297,23 @@ def test_axis_names_are_stripped(committed_inference_rows, classifiers):
     )
     assert response.status_code == 202, response.text
     assert response.json()["axes"][0]["name"] == "Padded axis"
+
+
+def test_classification_run_stores_crop_and_puts_it_in_the_payload(
+    committed_inference_rows, classifiers
+):
+    crop = {"left": 10, "right": 5, "top": 0, "bottom": 2.5}
+    response = _post(
+        _headers("qcc-crop@example.com"),
+        committed_inference_rows,
+        classifiers=[{"model_version_id": classifiers.quality}],
+        crop=crop,
+    )
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["crop_box"] == crop
+    session = db_module.SessionLocal()
+    try:
+        assert session.get(Job, body["job_id"]).payload["crop_box"] == crop
+    finally:
+        session.close()

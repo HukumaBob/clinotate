@@ -71,6 +71,7 @@ def create_inference_run(
     frame_stride: int,
     created_by: User,
     perturbation: dict | None = None,
+    crop_box: dict | None = None,
 ) -> InferenceRun:
     video = session.get(Video, video_id)
     if video is None:
@@ -101,6 +102,7 @@ def create_inference_run(
         model_name=version.name,
         frame_stride=frame_stride,
         perturbation=perturbation,
+        crop_box=crop_box,
         created_by_id=created_by.id,
     )
     session.add(run)
@@ -119,6 +121,7 @@ def create_inference_run(
             "task_type": version.task_type.value,
             "frame_stride": frame_stride,
             "perturbation": perturbation,
+            "crop_box": crop_box,
         },
         created_by,
     )
@@ -169,6 +172,7 @@ def create_classification_run(
     frame_stride: int,
     created_by: User,
     perturbation: dict | None = None,
+    crop_box: dict | None = None,
 ) -> InferenceRun:
     """One run, one decode, one classifier model per axis."""
     video = session.get(Video, video_id)
@@ -231,6 +235,7 @@ def create_classification_run(
         model_name=model_name,
         frame_stride=frame_stride,
         perturbation=perturbation,
+        crop_box=crop_box,
         axes=axes,
         created_by_id=created_by.id,
     )
@@ -247,6 +252,7 @@ def create_classification_run(
             "model_name": model_name,
             "frame_stride": frame_stride,
             "perturbation": perturbation,
+            "crop_box": crop_box,
             "axes": [
                 {"name": axis["name"], "weights_key": key, "classes": axis["classes"]}
                 for axis, key in zip(axes, weights, strict=True)

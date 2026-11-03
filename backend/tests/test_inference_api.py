@@ -355,3 +355,44 @@ def test_create_run_rejects_a_bad_perturbation(committed_inference_rows):
         perturbation={"kind": "blur", "strength": 99},
     )
     assert response.status_code == 422
+
+
+CROP = {"left": 10, "right": 5, "top": 0, "bottom": 2.5}
+
+
+def test_create_run_stores_crop_and_puts_it_in_the_payload(committed_inference_rows):
+    headers = _register_and_login("infer-crop@example.com")
+
+    response = _create(headers, committed_inference_rows, crop=CROP)
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["crop_box"] == CROP
+    session = db_module.SessionLocal()
+    try:
+        assert session.get(Job, body["job_id"]).payload["crop_box"] == CROP
+    finally:
+        session.close()
+
+
+def test_create_run_without_crop_has_null_crop_box(committed_inference_rows):
+    headers = _register_and_login("infer-nocrop@example.com")
+
+    body = _create(headers, committed_inference_rows).json()
+
+    assert body["crop_box"] is None
+    session = db_module.SessionLocal()
+    try:
+        assert session.get(Job, body["job_id"]).payload["crop_box"] is None
+    finally:
+        session.close()
+
+
+def test_create_run_rejects_a_crop_that_leaves_no_area(committed_inference_rows):
+    headers = _register_and_login("infer-badcrop@example.com")
+
+    response = _create(
+        headers, committed_inference_rows, crop={"left": 60, "right": 40, "top": 0, "bottom": 0}
+    )
+
+    assert response.status_code == 422

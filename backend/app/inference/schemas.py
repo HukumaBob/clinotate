@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from app.inference.models import InferenceRunStatus, QcFlagKind
+from app.media.schemas import CropBox
 
 
 # Mirrored by ml-worker/app/perturbation.py; keep the kinds in step.
@@ -56,6 +57,7 @@ class InferenceRunCreate(BaseModel):
     # any plausible video length just yields frame 0.
     frame_stride: int = Field(default=1, ge=1, le=1000)
     perturbation: PerturbationSpec | None = None
+    crop: CropBox | None = None
 
     @model_validator(mode="after")
     def _exactly_one_model_source(self):
@@ -82,6 +84,7 @@ class InferenceRunRead(BaseModel):
     job_id: int | None
     frame_stride: int
     perturbation: dict | None = None
+    crop_box: dict | None = None
     axes: list[AxisRead] | None = None
     status: InferenceRunStatus
     frames_total: int

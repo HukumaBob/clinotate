@@ -36,6 +36,9 @@ class InferenceRun(Base):
     frame_stride: Mapped[int] = mapped_column(Integer, default=1)
     # Stress test: {"kind", "strength"} applied to each frame before the model.
     perturbation: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Working area: percent insets (the media CropBox shape) cut from every
+    # frame before the model, as training frames were. None = whole frame.
+    crop_box: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Classification runs only: one entry per axis (see AxisRead), each
     # {"model_version_id", "model_name", "name", "category_id", "classes"}.
     axes: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
