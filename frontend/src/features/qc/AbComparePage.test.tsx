@@ -12,6 +12,7 @@ let compareState: { data?: unknown; error?: unknown; isPending?: boolean };
 const run = (id: number) => ({
   id, video_id: 9, model_name: `model-${id}`, frame_stride: 1, status: "succeeded",
   perturbation: id === 2 ? { kind: "blur", strength: 2 } : null,
+  crop_box: id === 1 ? { left: 10, right: 10, top: 5, bottom: 5 } : null,
 });
 const doc = { task_type: "detection", model: { name: "m", version_id: 1 }, fps: 25, frame_stride: 1, classes: ["polyp"], frames: {} };
 
@@ -89,5 +90,12 @@ describe("AbComparePage", () => {
     const { container } = renderPage();
     expect(screen.getByRole("alert")).toHaveTextContent("The runs are of different videos");
     expect(container.querySelector("video")).toBeNull();
+  });
+});
+
+describe("AbComparePage working areas", () => {
+  it("outlines only the pane whose run has a working area", () => {
+    renderPage();
+    expect(screen.getAllByTestId("crop-overlay-border")).toHaveLength(1);
   });
 });

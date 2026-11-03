@@ -12,13 +12,20 @@ import { PredictionOverlay } from "./PredictionOverlay";
 import { buildFrameIndex, DISPLAY_CONFIDENCE_THRESHOLD, type PredictionsDocument } from "./predictions";
 import { useSyncedVideos } from "./useSyncedVideos";
 import { useVideoClock } from "./useVideoClock";
+import { WorkingAreaOutline } from "./WorkingAreaOutline";
 
 const BUTTON =
   "rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-gray-100 disabled:opacity-50";
 
 interface SideProps {
   title: string;
-  run: { model_name: string; perturbation?: { kind: string; strength: number } | null } | undefined;
+  run:
+    | {
+        model_name: string;
+        perturbation?: { kind: string; strength: number } | null;
+        crop_box?: object | null;
+      }
+    | undefined;
   streamUrl: string | undefined;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   controls: boolean;
@@ -43,6 +50,7 @@ function Side({ title, run, streamUrl, videoRef, controls, doc, confidence, onCo
       <div className="relative bg-black">
         <video ref={videoRef} src={streamUrl} controls={controls} className="block max-h-[60vh] w-full" />
         {index && doc && <PredictionOverlay videoRef={videoRef} index={index} classes={doc.classes} />}
+        <WorkingAreaOutline videoRef={videoRef} crop={run?.crop_box} />
       </div>
       <label className="flex items-center gap-2 text-xs text-gray-400">
         {`Confidence ${title}`}

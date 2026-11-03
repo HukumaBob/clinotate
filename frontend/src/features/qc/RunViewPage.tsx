@@ -30,6 +30,7 @@ import { FlagsPanel } from "./FlagsPanel";
 import { decideFlagAction } from "./flagDecision";
 import { LatencyPanel } from "./LatencyPanel";
 import { PredictionOverlay } from "./PredictionOverlay";
+import { WorkingAreaOutline } from "./WorkingAreaOutline";
 import { buildProcessedFrames, processedFrameAt } from "./processedFrame";
 import { colorForClass, countByClass } from "./predictions";
 import { ReelsPanel } from "./ReelsPanel";
@@ -279,6 +280,7 @@ export function RunViewPage() {
               {view && document && (
                 <PredictionOverlay videoRef={videoRef} index={view} classes={document.classes} />
               )}
+              <WorkingAreaOutline videoRef={videoRef} crop={run.crop_box} />
               {predictionsQuery.isPending && (
                 <p className="absolute left-2 top-2 rounded bg-gray-900/80 px-2 py-1 text-xs text-gray-300">
                   Loading predictions…

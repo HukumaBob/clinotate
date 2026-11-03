@@ -459,3 +459,17 @@ describe("ClassificationRunPage", () => {
     expect(screen.queryByRole("region", { name: "Evaluation" })).toBeNull();
   });
 });
+
+describe("ClassificationRunPage working area", () => {
+  it("outlines the run's working area over the full video", () => {
+    runState = { ...runState, crop_box: { left: 10, right: 10, top: 5, bottom: 5 } };
+    renderPage();
+    expect(screen.getByTestId("crop-overlay-border")).toBeInTheDocument();
+  });
+
+  it.each([null, undefined])("draws no outline when crop_box is %s", (crop_box) => {
+    runState = { ...runState, crop_box };
+    renderPage();
+    expect(screen.queryByTestId("crop-overlay-root")).toBeNull();
+  });
+});

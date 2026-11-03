@@ -19,6 +19,7 @@ import { findBlips, mergeBlips, type Blip } from "./blips";
 import type { ClassificationDocument } from "./types";
 import { useRunEvaluation } from "./useRunEvaluation";
 import { useRunReference } from "./useRunReference";
+import { WorkingAreaOutline } from "../WorkingAreaOutline";
 
 const NO_BLIPS: Blip[] = [];
 
@@ -166,6 +167,7 @@ export function ClassificationRunPage() {
                 controls
                 className="block max-h-[70vh] w-full lg:absolute lg:inset-0 lg:h-full lg:max-h-none"
               />
+              <WorkingAreaOutline videoRef={videoRef} crop={run?.crop_box} />
               {document && <AxisBadges videoRef={videoRef} indexes={indexes} axes={document.axes} />}
               {predictionsQuery.isPending && (
                 <p className="absolute left-2 top-2 rounded bg-gray-900/80 px-2 py-1 text-xs text-gray-300">
