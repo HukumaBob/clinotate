@@ -108,6 +108,19 @@ export function AbComparePage() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  if (
+    (docA as { task_type?: string } | undefined)?.task_type === "classification" ||
+    (docB as { task_type?: string } | undefined)?.task_type === "classification"
+  ) {
+    return (
+      <div className="p-6">
+        <p role="alert" className="text-sm text-gray-300">
+          Classification runs cannot be compared.
+        </p>
+      </div>
+    );
+  }
+
   if (compare.error) {
     return (
       <div className="p-6">

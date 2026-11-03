@@ -2,13 +2,15 @@ interface EventNavProps {
   count: number;
   onPrev: () => void;
   onNext: () => void;
+  /** Shown when there are no events; the detection view's flicker wording by default. */
+  emptyText?: string;
 }
 
 const BUTTON =
   "inline-flex items-center gap-1.5 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-gray-100 disabled:opacity-50";
 const KEY = "rounded border border-gray-600 px-1 font-mono text-[10px] text-gray-400";
 
-export function EventNav({ count, onPrev, onNext }: EventNavProps) {
+export function EventNav({ count, onPrev, onNext, emptyText = "No flicker events at these settings" }: EventNavProps) {
   const none = count === 0;
   return (
     <div role="group" aria-label="Events" className="flex items-center gap-2">
@@ -22,7 +24,7 @@ export function EventNav({ count, onPrev, onNext }: EventNavProps) {
         <kbd aria-hidden="true" className={KEY}>]</kbd>
       </button>
       <span className="text-xs text-gray-500">
-        {none ? "No flicker events at these settings" : `${count} ${count === 1 ? "event" : "events"}`}
+        {none ? emptyText : `${count} ${count === 1 ? "event" : "events"}`}
       </span>
     </div>
   );

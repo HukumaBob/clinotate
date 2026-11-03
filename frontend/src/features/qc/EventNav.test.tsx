@@ -12,6 +12,12 @@ describe("EventNav", () => {
     expect(screen.getByText("No flicker events at these settings")).toBeInTheDocument();
   });
 
+  it("uses the given empty-state text", () => {
+    render(<EventNav count={0} onPrev={vi.fn()} onNext={vi.fn()} emptyText="No blips at these settings" />);
+    expect(screen.getByText("No blips at these settings")).toBeInTheDocument();
+    expect(screen.queryByText(/flicker/)).not.toBeInTheDocument();
+  });
+
   it("calls the matching handler when there are events", async () => {
     const user = userEvent.setup();
     const onPrev = vi.fn();

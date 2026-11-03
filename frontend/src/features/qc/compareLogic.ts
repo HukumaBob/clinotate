@@ -4,6 +4,7 @@ export type Comparability = { ok: true } | { ok: false; reason: string };
 
 export function comparability(a: InferenceRun | undefined, b: InferenceRun | undefined): Comparability {
   if (!a || !b) return { ok: false, reason: "Select two runs to compare" };
+  if (a.axes || b.axes) return { ok: false, reason: "Classification runs cannot be compared" };
   if (a.id === b.id) return { ok: false, reason: "Select two different runs" };
   if (a.status !== "succeeded" || b.status !== "succeeded")
     return { ok: false, reason: "Both runs must be finished" };

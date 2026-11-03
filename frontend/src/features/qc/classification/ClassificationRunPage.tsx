@@ -63,10 +63,18 @@ export function ClassificationRunPage() {
     return Math.max((video?.duration_seconds ?? 0) * 1000, lastFrameMs);
   }, [video, indexes]);
 
-  const seekTo = useCallback((ms: number) => {
+  const moveTo = useCallback((ms: number) => {
     const el = videoRef.current;
     if (el) el.currentTime = ms / 1000;
   }, []);
+  // A manual seek (lane click) leaves the active blip behind.
+  const seekTo = useCallback(
+    (ms: number) => {
+      moveTo(ms);
+      setActiveBlip(null);
+    },
+    [moveTo],
+  );
 
   const jump = useCallback(
     (direction: "prev" | "next") => {
@@ -75,12 +83,25 @@ export function ClassificationRunPage() {
       const now = el.currentTime * 1000;
       const target = direction === "next" ? nextEvent(blips, now) : prevEvent(blips, now);
       if (target) {
-        seekTo(target.startMs);
+        moveTo(target.startMs);
         setActiveBlip(target);
       }
     },
-    [blips, seekTo],
+    [blips, moveTo],
   );
+
+  // Scrubbing or playing past the active blip drops the highlight.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !activeBlip) return;
+    const blip = activeBlip;
+    function onTime() {
+      const now = (el as HTMLVideoElement).currentTime * 1000;
+      if (now < blip.startMs - 1 || now >= blip.endMs) setActiveBlip(null);
+    }
+    el.addEventListener("timeupdate", onTime);
+    return () => el.removeEventListener("timeupdate", onTime);
+  }, [activeBlip]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -149,7 +170,12 @@ export function ClassificationRunPage() {
                   activeAxis={activeAxis}
                 />
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                  <EventNav count={blips.length} onPrev={() => jump("prev")} onNext={() => jump("next")} />
+                  <EventNav
+                    count={blips.length}
+                    onPrev={() => jump("prev")}
+                    onNext={() => jump("next")}
+                    emptyText="No blips at these settings"
+                  />
                   {activeBlip && activeAxisInfo && (
                     <span className="text-xs text-gray-400">
                       {`${activeAxisInfo.name} at ${formatClock(activeBlip.startMs)}: ${

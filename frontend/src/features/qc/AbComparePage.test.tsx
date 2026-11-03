@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AbComparePage } from "./AbComparePage";
 
 const mutateByRun: Record<number, ReturnType<typeof vi.fn>> = { 1: vi.fn(), 2: vi.fn() };
+let docOverride: unknown;
 let compareState: { data?: unknown; error?: unknown; isPending?: boolean };
 
 const run = (id: number) => ({
@@ -16,7 +17,7 @@ const doc = { task_type: "detection", model: { name: "m", version_id: 1 }, fps: 
 
 vi.mock("../../entities/useInferenceRuns", () => ({
   useInferenceRun: (id: number) => ({ data: run(id) }),
-  usePredictions: () => ({ data: doc, isPending: false }),
+  usePredictions: () => ({ data: docOverride ?? doc, isPending: false }),
 }));
 vi.mock("../../entities/useVideo", () => ({
   useVideo: () => ({ data: { id: 9, stream_url: "/v.mp4", duration_seconds: 10, browser_playable: true } }),
@@ -39,6 +40,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  docOverride = undefined;
   mutateByRun[1] = vi.fn();
   mutateByRun[2] = vi.fn();
   compareState = {
@@ -56,6 +58,13 @@ beforeEach(() => {
 });
 
 describe("AbComparePage", () => {
+  it("refuses a classification run instead of rendering it", () => {
+    docOverride = { task_type: "classification", axes: [{ name: "Anatomy", classes: ["a"] }], fps: 25, frame_stride: 1, frames: {} };
+    const { container } = renderPage();
+    expect(screen.getByText(/classification runs cannot be compared/i)).toBeInTheDocument();
+    expect(container.querySelector("video")).toBeNull();
+  });
+
   it("summarises the disagreements and badges the stress run", () => {
     renderPage();
     expect(screen.getByText("2 disagreements out of 50 frames")).toBeInTheDocument();

@@ -78,6 +78,43 @@ describe("ClassificationRunPage", () => {
     expect(video.currentTime).toBeCloseTo(0.4);
   });
 
+  it("says blips, not flicker events, when there are none", () => {
+    const doc = makeDoc();
+    for (const frame of Object.values(doc.frames)) {
+      frame.axes = frame.axes.map((axis) => ({ ...axis, class_id: 0 }));
+    }
+    predictionsState = { data: doc, isPending: false };
+    renderPage();
+    expect(screen.getByText("No blips at these settings")).toBeInTheDocument();
+    expect(screen.queryByText(/flicker/i)).toBeNull();
+  });
+
+  it("clears the highlight when the user seeks elsewhere after a jump", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPage();
+    await user.keyboard("]");
+    expect(screen.getByRole("group", { name: "Anatomy" })).toHaveAttribute("data-active", "true");
+    const [track] = screen.getAllByTestId("lane-track");
+    track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 10, right: 100, bottom: 10, x: 0, y: 0, toJSON: () => ({}) });
+    await user.click(track);
+    expect(screen.getByRole("group", { name: "Anatomy" })).toHaveAttribute("data-active", "false");
+    expect(container.querySelector("video")).not.toBeNull();
+  });
+
+  it("clears the highlight when playback leaves the blip but keeps it inside", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPage();
+    const video = container.querySelector("video")!;
+    await user.keyboard("]");
+    video.dispatchEvent(new Event("timeupdate"));
+    expect(screen.getByRole("group", { name: "Anatomy" })).toHaveAttribute("data-active", "true");
+    video.currentTime = 0.5;
+    video.dispatchEvent(new Event("timeupdate"));
+    await vi.waitFor(() =>
+      expect(screen.getByRole("group", { name: "Anatomy" })).toHaveAttribute("data-active", "false"),
+    );
+  });
+
   it("warns when the stride makes the blip window span seconds", () => {
     predictionsState = { data: makeDoc(800, 20), isPending: false };
     renderPage();

@@ -15,6 +15,8 @@ describe("comparability", () => {
     [run({ id: 1 }), run({ id: 2, frame_stride: 5 }), /stride/i],
     [run({ id: 1 }), run({ id: 2, status: "running" }), /finished/i],
     [undefined, run({ id: 2 }), /two runs/i],
+    [run({ id: 1, axes: [{ name: "Anatomy" }] }), run({ id: 2, axes: [{ name: "Anatomy" }] }), /classification/i],
+    [run({ id: 1 }), run({ id: 2, axes: [{ name: "Anatomy" }] }), /classification/i],
   ])("explains why not", (a, b, reason) => {
     const result = comparability(a, b);
     expect(result.ok).toBe(false);
