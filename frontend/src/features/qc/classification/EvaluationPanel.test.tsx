@@ -305,4 +305,142 @@ describe("EvaluationPanel", () => {
     expect(screen.getAllByRole("button", { name: /Polyp → Fold/ })).toHaveLength(250);
     expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
   });
+
+  describe("episode selection", () => {
+    const box = (clock: string) => screen.getByRole("checkbox", { name: `Select episode at ${clock}` });
+    const count = (n: number) =>
+      expect(screen.getByText(new RegExp(`^${n} episodes? selected`))).toBeInTheDocument();
+    const send = () => screen.getByRole("button", { name: "Send to training…" });
+
+    it("ticking and unticking rows updates the footer", async () => {
+      renderPanel();
+      count(0);
+      await userEvent.click(box("0:01"));
+      count(1);
+      expect(screen.getByText(/^1 episode selected, 3 frames/)).toBeInTheDocument();
+      await userEvent.click(box("0:05"));
+      count(2);
+      await userEvent.click(box("0:01"));
+      count(1);
+    });
+
+    it("clicking the row text seeks and does not toggle the checkbox", async () => {
+      const onSeek = renderPanel();
+      await userEvent.click(screen.getAllByRole("button", { name: /Polyp → Fold/ })[0]);
+      expect(onSeek).toHaveBeenCalledWith(1000);
+      expect(box("0:01")).not.toBeChecked();
+      count(0);
+    });
+
+    it("selects all and none", async () => {
+      renderPanel();
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      count(3);
+      expect(box("1:05")).toBeChecked();
+      await userEvent.click(screen.getByRole("button", { name: "Select none" }));
+      count(0);
+    });
+
+    it("disables Send at zero and sends the keys otherwise", async () => {
+      const onSend = vi.fn();
+      renderPanel({ onSend });
+      expect(send()).toBeDisabled();
+      await userEvent.click(box("0:05"));
+      expect(send()).toBeEnabled();
+      await userEvent.click(send());
+      expect(onSend).toHaveBeenCalledWith(["Finding|5000"]);
+    });
+
+    it("Interior only replaces the selection and hides nothing", async () => {
+      renderPanel();
+      await userEvent.click(box("1:05"));
+      await userEvent.click(screen.getByRole("button", { name: "Interior only" }));
+      count(1); // toggling alone does not apply
+      await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+      count(2);
+      expect(box("1:05")).not.toBeChecked();
+      expect(box("0:01")).toBeChecked();
+      expect(box("0:05")).toBeChecked();
+      expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    });
+
+    it("the frames and confidence filters replace the selection", async () => {
+      renderPanel();
+      await userEvent.click(box("1:05"));
+      await userEvent.type(screen.getByLabelText("At least N frames"), "2");
+      await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+      count(2);
+      expect(box("1:05")).not.toBeChecked();
+      await userEvent.clear(screen.getByLabelText("At least N frames"));
+      await userEvent.type(screen.getByLabelText("Mean confidence at least X%"), "45");
+      await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+      count(2);
+      expect(box("0:01")).not.toBeChecked();
+      expect(box("1:05")).toBeChecked();
+      expect(box("0:05")).toBeChecked();
+    });
+
+    it("Apply keeps the selection of other axes", async () => {
+      evalState = { data: makeEval([makeAxis(), makeAxis({ name: "Anatomy" })]) };
+      renderPanel();
+      await userEvent.click(box("0:01"));
+      await userEvent.selectOptions(screen.getByLabelText("Axis"), "Anatomy");
+      count(1);
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      count(4);
+      await userEvent.click(screen.getByRole("button", { name: "Select none" }));
+      count(1);
+      await userEvent.selectOptions(screen.getByLabelText("Axis"), "Finding");
+      expect(box("0:01")).toBeChecked();
+    });
+
+    it("select all covers rows beyond the 200-row cap", async () => {
+      const many = Array.from({ length: 250 }, (_, i) => ep(i * 1000, 1, 0.5));
+      evalState = { data: makeEval([makeAxis({ episodes: many })]) };
+      renderPanel();
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      count(250);
+    });
+
+    it("survives a tolerance change, and interior uses the loaded kinds", async () => {
+      renderPanel();
+      await userEvent.click(box("0:01"));
+      evalState = {
+        data: makeEval([makeAxis({ episodes: [ep(65000, 1, 0.5, "interior"), ep(1000, 3, 0.4, "boundary"), ep(5000, 2, 0.9)] })]),
+      };
+      const input = screen.getByLabelText("Boundary tolerance (s)");
+      await userEvent.clear(input);
+      await userEvent.type(input, "5{Enter}");
+      count(1);
+      expect(box("0:01")).toBeChecked();
+      await userEvent.click(screen.getByRole("button", { name: "Interior only" }));
+      await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+      expect(box("1:05")).toBeChecked();
+      expect(box("0:01")).not.toBeChecked();
+    });
+
+    it("drops keys that no longer exist and clears on a run change", () => {
+      const view = render(
+        <MemoryRouter>
+          <EvaluationPanel runId={7} videoId={9} referenceState="ready" hasReference onSeek={vi.fn()} />
+        </MemoryRouter>,
+      );
+      const rerender = (runId: number) =>
+        view.rerender(
+          <MemoryRouter>
+            <EvaluationPanel runId={runId} videoId={9} referenceState="ready" hasReference onSeek={vi.fn()} />
+          </MemoryRouter>,
+        );
+      act(() => screen.getByRole("button", { name: "Select all" }).click());
+      count(3);
+      evalState = { data: makeEval([makeAxis({ episodes: [ep(1000, 3, 0.4)] })]) };
+      rerender(7);
+      count(1);
+      evalState = { data: makeEval() };
+      rerender(7);
+      count(1); // the dropped keys do not come back
+      rerender(8);
+      count(0);
+    });
+  });
 });

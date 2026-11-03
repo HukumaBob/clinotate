@@ -2,8 +2,9 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom";
 
 import { useEvaluation } from "../../../entities/useEvaluation";
-import { formatClock } from "../analysis/strip";
 import { ConfusionMatrix } from "./ConfusionMatrix";
+import { EpisodeList } from "./EpisodeList";
+import { episodeKey, selectionSummary } from "./episodeSelection";
 import { formatRatio, sortEpisodes } from "./evaluationLogic";
 
 export interface EvaluationPanelProps {
@@ -20,11 +21,13 @@ export interface EvaluationPanelProps {
   onBoundaryChange?: (ms: number) => void;
   /** The boundary tolerance the panel starts with, in milliseconds (default 2000). */
   initialBoundaryMs?: number;
+  /** Called with the selected episode keys (`axis|start_ms`, all axes) when
+   * "Send to training…" is pressed. The button is disabled with nothing selected. */
+  onSend?: (keys: string[]) => void;
 }
 
 export type ReferenceState = "loading" | "error" | "ready";
 
-const EPISODE_CAP = 200;
 /** A valid tolerance commits after this pause in typing (or arrow clicks). */
 const TOLERANCE_DEBOUNCE_MS = 500;
 const MAX_TOLERANCE_S = 60;
@@ -50,12 +53,13 @@ export function EvaluationPanel({
   onSeek,
   onBoundaryChange,
   initialBoundaryMs = 2000,
+  onSend,
 }: EvaluationPanelProps) {
   const [boundaryMs, setBoundaryMs] = useState(initialBoundaryMs);
   const [draft, setDraft] = useState(String(initialBoundaryMs / 1000));
   const [axisName, setAxisName] = useState<string | null>(null);
   const [sort, setSort] = useState<"longest" | "confident">("longest");
-  const [shown, setShown] = useState(EPISODE_CAP);
+  const [selection, setSelection] = useState<Set<string>>(() => new Set());
   const scoring = referenceState === "ready" && hasReference;
   const query = useEvaluation(runId, boundaryMs, scoring);
 
@@ -103,7 +107,27 @@ export function EvaluationPanel({
     return axes.find((a) => a.name === axisName) ?? axes[0];
   }, [query.data, axisName]);
   const episodes = useMemo(() => (axis ? sortEpisodes(axis.episodes, sort) : []), [axis, sort]);
-  useEffect(() => setShown(EPISODE_CAP), [axis?.name, sort]);
+
+  // A new run starts with nothing selected.
+  useEffect(() => setSelection((prev) => (prev.size === 0 ? prev : new Set())), [runId]);
+  // An evaluation that changes under the user must not leave ghost keys behind.
+  const loaded = query.data;
+  useEffect(() => {
+    if (!loaded) return;
+    const present = new Set(loaded.axes.flatMap((a) => a.episodes.map((e) => episodeKey(a.name, e))));
+    setSelection((prev) => {
+      const kept = [...prev].filter((k) => present.has(k));
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }, [loaded]);
+  const summary = useMemo(
+    () =>
+      selectionSummary(
+        [...selection],
+        Object.fromEntries((loaded?.axes ?? []).map((a) => [a.name, a.episodes])),
+      ),
+    [selection, loaded],
+  );
 
   if (referenceState === "loading") {
     return (
@@ -257,33 +281,15 @@ export function EvaluationPanel({
               </button>
             ))}
           </div>
-          {episodes.length === 0 ? (
-            <p className="text-xs text-gray-400">No error episodes</p>
-          ) : (
-            <ul className="flex flex-col gap-0.5">
-              {episodes.slice(0, shown).map((e, index) => (
-                <li key={`${e.start_ms}-${e.truth}-${e.predicted}-${index}`}>
-                  <button
-                    type="button"
-                    onClick={() => onSeek(e.start_ms)}
-                    className="w-full rounded px-1 py-0.5 text-left text-xs hover:bg-gray-800"
-                  >
-                    {formatClock(e.start_ms)} {e.truth} → {e.predicted}, {e.frames}{" "}
-                    {e.frames === 1 ? "frame" : "frames"}, {Math.round(e.mean_confidence * 100)}%, {e.kind}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {episodes.length > shown && (
-            <button
-              type="button"
-              onClick={() => setShown((n) => n + EPISODE_CAP)}
-              className="rounded border border-gray-700 px-2 py-0.5 text-xs text-gray-300"
-            >
-              Show more
-            </button>
-          )}
+          <EpisodeList
+            axisName={axis.name}
+            episodes={episodes}
+            selection={selection}
+            onSelectionChange={setSelection}
+            onSeek={onSeek}
+            summary={summary}
+            onSend={onSend}
+          />
         </div>
       )}
     </section>
