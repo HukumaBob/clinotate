@@ -6,6 +6,7 @@ from app.auth.router import router as auth_router
 from app.datasets.router import router as datasets_router
 from app.inference.router import router as inference_router
 from app.reference import models as reference_models  # noqa: F401 -- registers tables
+from app.reference.router import router as reference_router
 from app.jobs.router import router as jobs_router
 from app.media.router import router as media_router
 from app.settings.router import router as settings_router
@@ -30,6 +31,7 @@ app.include_router(jobs_router)
 app.include_router(settings_router)
 app.include_router(training_router)
 app.include_router(inference_router)
+app.include_router(reference_router)
 
 
 @app.get("/health")
