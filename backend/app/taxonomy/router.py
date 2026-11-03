@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
 from app.db import get_session
+from app.reference.models import ReferenceInterval
 from app.taxonomy.hierarchy import HierarchyError, validate_label_edges, validate_parent_assignment
 from app.taxonomy.models import Category, EvaluationType, Label, Procedure
 from app.taxonomy.schemas import (
@@ -231,6 +232,18 @@ def delete_label(label_id: int, session: Session = Depends(get_session)) -> None
     label = session.get(Label, label_id)
     if label is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
+    interval_count = (
+        session.query(ReferenceInterval).filter(ReferenceInterval.label_id == label_id).count()
+    )
+    if interval_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Label is used by {interval_count} reference "
+                f"{'interval' if interval_count == 1 else 'intervals'}: "
+                "delete them first in the video's reference"
+            ),
+        )
     session.delete(label)
     try:
         session.commit()

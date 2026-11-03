@@ -17,6 +17,7 @@ from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
 from app.jobs.service import enqueue_find_similar, enqueue_rank_quality, enqueue_video_transcode
 from app.media.models import Frame, Sequence, Video
+from app.reference.models import ReferenceInterval, VideoReference
 from app.taxonomy.models import AnnotationScope, EvaluationType, Label
 from app.media.schemas import (
     FindSimilarRequest,
@@ -813,6 +814,16 @@ def delete_video(video_id: int, session: Session = Depends(get_session)) -> None
             ),
         )
 
+    if session.query(ReferenceInterval).filter(ReferenceInterval.video_id == video_id).count() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This video still has a reference: delete its intervals first",
+        )
+
+    # The state row (RESTRICT FK) outlives its last interval; drop it with the video.
+    session.query(VideoReference).filter(VideoReference.video_id == video_id).delete(
+        synchronize_session=False
+    )
     session.delete(video)
     session.commit()
 

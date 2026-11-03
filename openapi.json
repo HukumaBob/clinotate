@@ -4995,6 +4995,314 @@
         }
       }
     },
+    "/reference/videos/{video_id}": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Read Reference",
+        "operationId": "read_reference_reference_videos__video_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reference/videos/{video_id}/intervals": {
+      "post": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Create Interval",
+        "operationId": "create_interval_reference_videos__video_id__intervals_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntervalCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceIntervalRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reference/videos/{video_id}/intervals/{interval_id}": {
+      "patch": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Update Interval",
+        "operationId": "update_interval_reference_videos__video_id__intervals__interval_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "interval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Interval Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntervalUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceIntervalRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Delete Interval",
+        "operationId": "delete_interval_reference_videos__video_id__intervals__interval_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "interval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Interval Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reference/datasets/{dataset_id}/exposure": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Dataset Exposure",
+        "operationId": "dataset_exposure_reference_datasets__dataset_id__exposure_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExposureVideoRead"
+                  },
+                  "title": "Response Dataset Exposure Reference Datasets  Dataset Id  Exposure Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reference/videos/{video_id}/restore-clean": {
+      "post": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Restore Clean",
+        "operationId": "restore_clean_reference_videos__video_id__restore_clean_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -5295,6 +5603,13 @@
             },
             "type": "array",
             "title": "Qc Origin"
+          },
+          "reference_exposure": {
+            "items": {
+              "$ref": "#/components/schemas/ExposureVideoRead"
+            },
+            "type": "array",
+            "title": "Reference Exposure"
           }
         },
         "type": "object",
@@ -6053,6 +6368,29 @@
         "type": "object",
         "title": "ExportRequest"
       },
+      "ExposureVideoRead": {
+        "properties": {
+          "video_id": {
+            "type": "integer",
+            "title": "Video Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video_id",
+          "title",
+          "frames"
+        ],
+        "title": "ExposureVideoRead"
+      },
       "FindSimilarRequest": {
         "properties": {
           "percent": {
@@ -6410,6 +6748,68 @@
         ],
         "title": "InferenceRunStatus",
         "description": "No STOPPED: cancelling a run is out of scope for the first QC slice."
+      },
+      "IntervalCreate": {
+        "properties": {
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label_id",
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "IntervalCreate"
+      },
+      "IntervalUpdate": {
+        "properties": {
+          "label_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Id"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          }
+        },
+        "type": "object",
+        "title": "IntervalUpdate"
       },
       "JobRead": {
         "properties": {
@@ -7416,6 +7816,191 @@
           "message"
         ],
         "title": "RecommendationRead"
+      },
+      "ReferenceAxisRead": {
+        "properties": {
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceClassRead"
+            },
+            "type": "array",
+            "title": "Classes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category_id",
+          "name",
+          "classes"
+        ],
+        "title": "ReferenceAxisRead"
+      },
+      "ReferenceClassRead": {
+        "properties": {
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label_id",
+          "name",
+          "key"
+        ],
+        "title": "ReferenceClassRead"
+      },
+      "ReferenceIntervalRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "video_id": {
+            "type": "integer",
+            "title": "Video Id"
+          },
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "taxonomy_version": {
+            "type": "integer",
+            "title": "Taxonomy Version"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          },
+          "orphaned": {
+            "type": "boolean",
+            "title": "Orphaned"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "video_id",
+          "category_id",
+          "label_id",
+          "taxonomy_version",
+          "start_ms",
+          "end_ms",
+          "orphaned"
+        ],
+        "title": "ReferenceIntervalRead"
+      },
+      "ReferenceRead": {
+        "properties": {
+          "video_id": {
+            "type": "integer",
+            "title": "Video Id"
+          },
+          "procedure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Id"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "clean",
+              "compromised"
+            ],
+            "title": "Status"
+          },
+          "compromised_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compromised At"
+          },
+          "compromised_by_training_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compromised By Training Run Id"
+          },
+          "axes": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceAxisRead"
+            },
+            "type": "array",
+            "title": "Axes"
+          },
+          "intervals": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceIntervalRead"
+            },
+            "type": "array",
+            "title": "Intervals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video_id",
+          "procedure_id",
+          "duration_ms",
+          "status",
+          "compromised_at",
+          "compromised_by_training_run_id",
+          "axes",
+          "intervals"
+        ],
+        "title": "ReferenceRead"
       },
       "RegionLabelCountRead": {
         "properties": {

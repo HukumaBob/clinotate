@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.datasets.models import SplitName, TaskType
+from app.reference.schemas import ExposureVideoRead
 
 
 class GroupingOverrides(BaseModel):
@@ -48,6 +49,7 @@ class BalanceReportRead(BaseModel):
     metrics: dict
     recommendations: list[RecommendationRead] = Field(default_factory=list)
     qc_origin: list[QcOriginRead] = Field(default_factory=list)
+    reference_exposure: list[ExposureVideoRead] = Field(default_factory=list)
 
 
 class DatasetCreate(BaseModel):

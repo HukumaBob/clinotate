@@ -20,6 +20,7 @@ from app.db import get_session
 from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
 from app.media.models import Frame
+from app.reference.service import exposure_for_sequences
 from app.storage import StorageService, get_storage_service
 from app.taxonomy.hierarchy import GroupingRules
 from app.training.models import ModelVersion, TrainingRun, TrainingRunStatus
@@ -129,6 +130,9 @@ def dataset_balance(payload: BalanceRequest, session: Session = Depends(get_sess
             {"kind": r.kind, "message": r.message} for r in report.recommendations
         ],
         "qc_origin": qc_origin_for_sequences(session, payload.sequence_ids),
+        "reference_exposure": exposure_for_sequences(
+            session, payload.sequence_ids, payload.task_type
+        ),
     }
 
 
