@@ -2,7 +2,7 @@ import math
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from app.inference.models import InferenceRunStatus, QcFlagKind
 
@@ -35,6 +35,16 @@ class ClassifierSpec(BaseModel):
     # Axis name; inferred from the taxonomy when omitted.
     name: str | None = Field(default=None, min_length=1, max_length=100)
     category_id: int | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("Axis name must not be blank")
+        return value
 
 
 class InferenceRunCreate(BaseModel):

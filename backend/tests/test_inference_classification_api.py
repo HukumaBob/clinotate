@@ -278,3 +278,22 @@ def test_deleting_an_axis_model_version_keeps_the_axes_snapshot(
     assert body["task_type"] == "classification"
     assert body["axes"][0]["name"] == "QccQuality"
     assert body["axes"][0]["classes"] == ["qcc_good", "qcc_bad"]
+
+
+def test_a_blank_axis_name_is_422(committed_inference_rows, classifiers):
+    headers = _headers("qcc-blank@example.com")
+    response = _post(
+        headers, committed_inference_rows,
+        classifiers=[{"model_version_id": classifiers.quality, "name": "   "}],
+    )
+    assert response.status_code == 422
+
+
+def test_axis_names_are_stripped(committed_inference_rows, classifiers):
+    headers = _headers("qcc-strip@example.com")
+    response = _post(
+        headers, committed_inference_rows,
+        classifiers=[{"model_version_id": classifiers.quality, "name": "  Padded axis  "}],
+    )
+    assert response.status_code == 202, response.text
+    assert response.json()["axes"][0]["name"] == "Padded axis"
