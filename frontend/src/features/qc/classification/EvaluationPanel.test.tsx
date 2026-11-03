@@ -444,3 +444,29 @@ describe("EvaluationPanel", () => {
     });
   });
 });
+
+vi.mock("../../../entities/useCommitEpisodes", () => ({
+  useCommitEpisodes: () => ({ mutate: commitMutate, isPending: false }),
+}));
+vi.mock("../../../entities/useQcFlags", () => ({ useVideoSent: () => ({ data: undefined }) }));
+const commitMutate = vi.fn();
+
+describe("EvaluationPanel commit dialog", () => {
+  it("opens the dialog from the footer and clears the selection after a commit", async () => {
+    commitMutate.mockReset();
+    renderPanel();
+    fireEvent.click(screen.getAllByRole("checkbox", { name: /Select episode at/ })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Send to training…" }));
+    expect(screen.getByRole("dialog", { name: "Send frames to training" })).toBeInTheDocument();
+    // Dry runs fire after the debounce; answer none, go straight to a real commit.
+    const ok = { dry_run: false, episodes: 1, frames: 4, dropped_unlabeled: 0, annotations_by_axis: {}, sequence_id: 5, sequence_name: "S" };
+    await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+    act(() => commitMutate.mock.calls[0][1].onSuccess({ ...ok, dry_run: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    const real = commitMutate.mock.calls.find(([v]) => v.dryRun === false)!;
+    act(() => real[1].onSuccess(ok));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("0 episodes selected")).toBeInTheDocument();
+  });
+});

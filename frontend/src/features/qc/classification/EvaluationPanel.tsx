@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { useEvaluation } from "../../../entities/useEvaluation";
 import { ConfusionMatrix } from "./ConfusionMatrix";
+import { EpisodeCommitDialog } from "./EpisodeCommitDialog";
 import { EpisodeList } from "./EpisodeList";
 import { episodeKey, selectionSummary } from "./episodeSelection";
 import { formatRatio, sortEpisodes } from "./evaluationLogic";
@@ -60,6 +61,7 @@ export function EvaluationPanel({
   const [axisName, setAxisName] = useState<string | null>(null);
   const [sort, setSort] = useState<"longest" | "confident">("longest");
   const [selection, setSelection] = useState<Set<string>>(() => new Set());
+  const [sendKeys, setSendKeys] = useState<string[] | null>(null);
   const scoring = referenceState === "ready" && hasReference;
   const query = useEvaluation(runId, boundaryMs, scoring);
 
@@ -288,9 +290,22 @@ export function EvaluationPanel({
             onSelectionChange={setSelection}
             onSeek={onSeek}
             summary={summary}
-            onSend={onSend}
+            onSend={(keys) => {
+              setSendKeys(keys);
+              onSend?.(keys);
+            }}
           />
         </div>
+      )}
+      {sendKeys !== null && (
+        <EpisodeCommitDialog
+          runId={runId}
+          videoId={videoId}
+          keys={sendKeys}
+          referenceStatus={query.data?.reference_status}
+          onClose={() => setSendKeys(null)}
+          onCommitted={() => setSelection(new Set())}
+        />
       )}
     </section>
   );
