@@ -82,7 +82,7 @@ def compare(
         return service.compare_runs(session, storage, run_a, run_b, conf_a, conf_b)
     except service.InferenceRunNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except service.RunsNotComparable as exc:
+    except (service.RunsNotComparable, service.NotForClassificationRuns) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
@@ -120,7 +120,7 @@ def put_flag(
         )
     except service.InferenceRunNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except (service.RunNotSucceeded, service.FlagAlreadyCommitted) as exc:
+    except (service.RunNotSucceeded, service.FlagAlreadyCommitted, service.NotForClassificationRuns) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except service.NotAProcessedFrame as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
@@ -141,7 +141,7 @@ def delete_flag(run_id: int, flag_id: int, session: Session = Depends(get_sessio
         service.delete_flag(session, run_id, flag_id)
     except (service.InferenceRunNotFound, service.FlagNotFound) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except service.FlagAlreadyCommitted as exc:
+    except (service.FlagAlreadyCommitted, service.NotForClassificationRuns) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
@@ -190,7 +190,7 @@ def commit_flags(
         )
     except service.InferenceRunNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except (service.RunNotSucceeded, service.NoPendingFlags) as exc:
+    except (service.RunNotSucceeded, service.NoPendingFlags, service.NotForClassificationRuns) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except (service.FramesPastEnd, service.VideoUnreadable) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))

@@ -266,6 +266,13 @@ def list_runs(session: Session) -> list[InferenceRun]:
     return list(session.scalars(select(InferenceRun).order_by(InferenceRun.id.desc())))
 
 
+class NotForClassificationRuns(Exception):
+    """Flags, commit and compare only make sense for detection and segmentation runs."""
+
+    def __init__(self) -> None:
+        super().__init__("Not available for classification runs")
+
+
 class RunsNotComparable(Exception):
     """The two runs cannot be put side by side."""
 
@@ -281,6 +288,8 @@ def compare_runs(
     if run_a_id == run_b_id:
         raise RunsNotComparable("Pick two different runs to compare")
     run_a, run_b = get_run(session, run_a_id), get_run(session, run_b_id)
+    if run_a.axes or run_b.axes:
+        raise NotForClassificationRuns()
     for run in (run_a, run_b):
         if run.status != InferenceRunStatus.SUCCEEDED or not run.predictions_key:
             raise RunsNotComparable(f"Run {run.id} is {run.status.value}, not finished")
@@ -353,6 +362,8 @@ class FlagAlreadyCommitted(Exception):
 
 def _require_flaggable_run(session: Session, run_id: int) -> InferenceRun:
     run = get_run(session, run_id)
+    if run.axes:
+        raise NotForClassificationRuns()
     if run.status != InferenceRunStatus.SUCCEEDED:
         raise RunNotSucceeded(f"Inference run {run_id} is {run.status.value}")
     return run
@@ -445,7 +456,8 @@ def list_flags(session: Session, run_id: int) -> list[tuple[QcFlag, int | None]]
 
 
 def delete_flag(session: Session, run_id: int, flag_id: int) -> None:
-    get_run(session, run_id)
+    if get_run(session, run_id).axes:
+        raise NotForClassificationRuns()
     # Locked like put_flag and commit_flags, so a DELETE cannot race a commit.
     flag = session.scalars(select(QcFlag).where(QcFlag.id == flag_id).with_for_update()).first()
     if flag is None or flag.run_id != run_id:
