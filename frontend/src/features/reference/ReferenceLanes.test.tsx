@@ -95,4 +95,17 @@ describe("ReferenceLanes", () => {
     renderLanes({ orphanedCount: 2 });
     expect(screen.getByText(/2 orphaned intervals/)).toBeInTheDocument();
   });
+
+  it("does not draw or count orphaned intervals (class no longer on the axis)", () => {
+    renderLanes({
+      intervals: [
+        { id: 1, categoryId: 2, labelId: 10, startMs: 0, endMs: 2000 },
+        { id: 9, categoryId: 2, labelId: 99, startMs: 5000, endMs: 10000 },
+      ],
+      orphanedCount: 1,
+    });
+    expect(screen.queryByTestId("segment-9")).toBeNull();
+    expect(screen.getByText("20% labeled")).toBeInTheDocument();
+    expect(screen.getByText(/1 orphaned interval/)).toBeInTheDocument();
+  });
 });

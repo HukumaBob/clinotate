@@ -234,7 +234,7 @@ export function useReferenceEditor({ videoRef, reference, durationMs }: EditorAr
         handlers.current.closeAll();
         return;
       }
-      if (event.key === "Delete") {
+      if (event.key === "Delete" || event.key === "Backspace") {
         handlers.current.deleteSelected();
         return;
       }

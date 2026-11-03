@@ -19,7 +19,11 @@ export function ReferenceKeys({ axes, onPress }: ReferenceKeysProps) {
               key={cls.labelId}
               type="button"
               title={cls.key === null ? "No key: click to use" : undefined}
-              onClick={() => onPress(axis.categoryId, cls.labelId)}
+              onClick={(event) => {
+                // Give up focus so a later Space or Enter does not press it again.
+                event.currentTarget.blur();
+                onPress(axis.categoryId, cls.labelId);
+              }}
               className="flex items-center gap-1.5 rounded border border-gray-700 bg-gray-800 px-2 py-0.5 text-xs text-gray-200 hover:border-gray-500"
             >
               <span

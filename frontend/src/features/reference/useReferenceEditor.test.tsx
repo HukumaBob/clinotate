@@ -27,10 +27,11 @@ type Body = { label_id?: number; start_ms?: number; end_ms?: number };
 type Opts = { params: { path: { interval_id?: number } }; body?: Body };
 
 /** A tiny in-memory server behind the mocked apiClient. */
-function setup(initial: ReferenceInterval[] = [], options: { holdCreate?: boolean } = {}) {
+function setup(initial: ReferenceInterval[] = [], options: { holdCreate?: boolean; holdPatch?: boolean } = {}) {
   let rows = [...initial];
   let nextId = 100;
   const heldCreates: (() => void)[] = [];
+  const heldPatches: (() => void)[] = [];
   const doc = (): ReferenceRead => ({
     video_id: 5, procedure_id: 1, duration_ms: DURATION, status: "clean", compromised_at: null,
     compromised_by_training_run_id: null, axes: AXES, intervals: rows,
@@ -38,7 +39,11 @@ function setup(initial: ReferenceInterval[] = [], options: { holdCreate?: boolea
   vi.mocked(apiClient.GET).mockImplementation((async () => ({ data: doc() })) as never);
   vi.mocked(apiClient.POST).mockImplementation((async (_path: string, opts: Opts) => {
     const body = opts.body as Required<Body>;
-    const created = iv(nextId++, CATEGORY_OF[body.label_id], body.label_id, body.start_ms, body.end_ms);
+    const category = CATEGORY_OF[body.label_id];
+    if (rows.some((r) => r.category_id === category && r.start_ms < body.end_ms && body.start_ms < r.end_ms)) {
+      return { error: { detail: "overlap" } };
+    }
+    const created = iv(nextId++, category, body.label_id, body.start_ms, body.end_ms);
     if (options.holdCreate) await new Promise<void>((resolve) => heldCreates.push(resolve));
     rows = [...rows, created];
     return { data: created };
@@ -46,6 +51,7 @@ function setup(initial: ReferenceInterval[] = [], options: { holdCreate?: boolea
   vi.mocked(apiClient.PATCH).mockImplementation((async (_path: string, opts: Opts) => {
     const id = opts.params.path.interval_id;
     const body = opts.body ?? {};
+    if (options.holdPatch) await new Promise<void>((resolve) => heldPatches.push(resolve));
     rows = rows.map((r) => r.id === id
       ? { ...r, label_id: body.label_id ?? r.label_id, start_ms: body.start_ms ?? r.start_ms, end_ms: body.end_ms ?? r.end_ms }
       : r);
@@ -76,10 +82,13 @@ function setup(initial: ReferenceInterval[] = [], options: { holdCreate?: boolea
   const press = (code: string, target: Element | Window = window) => {
     act(() => { fireEvent.keyDown(target, { code, key: code.replace(/^(Digit|Numpad)/, "") }); });
   };
+  const releasePatches = async () => {
+    await act(async () => { heldPatches.splice(0).forEach((release) => release()); });
+  };
   const releaseCreates = async () => {
     await act(async () => { heldCreates.splice(0).forEach((release) => release()); });
   };
-  return { ...hook, at, tick, press, releaseCreates, video };
+  return { ...hook, at, tick, press, releaseCreates, releasePatches, video };
 }
 
 const patches = () => vi.mocked(apiClient.PATCH).mock.calls.map((c) => (c[1] as Opts).body);
@@ -253,5 +262,43 @@ describe("useReferenceEditor", () => {
     act(() => result.current.dragEdge(1, "end", 2500));
     expect(video.currentTime).toBe(2.5);
     expect(result.current.intervals[0]).toMatchObject({ id: 1, endMs: 2500 });
+  });
+
+  it("a create after an unsaved edge drag waits for that PATCH (no overlap 409)", async () => {
+    const { result, at, press, releasePatches } = setup([iv(1, 2, 10, 0, 5000)], { holdPatch: true });
+    act(() => result.current.select(1));
+    act(() => result.current.dragEdge(1, "end", 3000));
+    act(() => result.current.select(null));
+    at(3);
+    press("Digit2");
+    expect(result.current.growing[2]).toMatchObject({ labelId: 11, startMs: 3000 });
+    await waitFor(() => expect(apiClient.PATCH).toHaveBeenCalledTimes(1));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(apiClient.POST).not.toHaveBeenCalled();
+    await releasePatches();
+    await waitFor(() => expect(posts()).toEqual([{ label_id: 11, start_ms: 3000, end_ms: 3100 }]));
+    await waitFor(() => expect(result.current.growing[2]?.id).toBe(100));
+    expect(result.current.saveState).not.toBe("error");
+  });
+
+  it("Backspace also deletes the selected interval", async () => {
+    const { result } = setup([iv(1, 2, 10, 0, 1000)]);
+    act(() => result.current.select(1));
+    act(() => { fireEvent.keyDown(window, { key: "Backspace", code: "Backspace" }); });
+    expect(result.current.intervals).toEqual([]);
+    await waitFor(() => expect(apiClient.DELETE).toHaveBeenCalledTimes(1));
+  });
+
+  it("Backspace in an input or with a modifier does not delete", () => {
+    const { result } = setup([iv(1, 2, 10, 0, 1000)]);
+    act(() => result.current.select(1));
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    act(() => {
+      fireEvent.keyDown(input, { key: "Backspace", code: "Backspace" });
+      fireEvent.keyDown(window, { key: "Backspace", code: "Backspace", metaKey: true });
+    });
+    expect(result.current.intervals).toHaveLength(1);
+    expect(apiClient.DELETE).not.toHaveBeenCalled();
   });
 });

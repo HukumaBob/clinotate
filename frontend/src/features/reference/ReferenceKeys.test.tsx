@@ -38,4 +38,12 @@ describe("ReferenceKeys", () => {
     fireEvent.click(screen.getByRole("button", { name: /Body/ }));
     expect(onPress).toHaveBeenCalledWith(2, 11);
   });
+
+  it("a clicked chip gives up focus so Space or Enter cannot re-fire it", () => {
+    render(<ReferenceKeys axes={AXES} onPress={vi.fn()} />);
+    const chip = screen.getByRole("button", { name: /Antrum/ });
+    chip.focus();
+    fireEvent.click(chip);
+    expect(document.activeElement).not.toBe(chip);
+  });
 });

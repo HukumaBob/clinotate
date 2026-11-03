@@ -90,8 +90,11 @@ export function ReferenceLanes({
   return (
     <div className="flex flex-col gap-2">
       {axes.map((axis) => {
-        const own = intervals.filter((iv) => iv.categoryId === axis.categoryId);
-        const share = durationMs > 0 ? Math.round(coverage(intervals, axis.categoryId, durationMs) * 100) : 0;
+        // Orphaned intervals (class no longer on the axis) are only counted in
+        // the warning; they are neither drawn nor part of the coverage.
+        const classIds = new Set(axis.classes.map((c) => c.labelId));
+        const own = intervals.filter((iv) => iv.categoryId === axis.categoryId && classIds.has(iv.labelId));
+        const share = durationMs > 0 ? Math.round(coverage(own, axis.categoryId, durationMs) * 100) : 0;
         return (
           <div key={axis.categoryId} className="flex flex-col gap-1">
             <div className="flex justify-between text-xs text-gray-400">

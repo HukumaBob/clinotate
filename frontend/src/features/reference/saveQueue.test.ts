@@ -132,4 +132,92 @@ describe("SaveQueue", () => {
     expect(queue.rows()).toEqual([]);
     expect(queue.state()).toBe("idle");
   });
+
+  describe("per-axis ordering", () => {
+    const other = (id: number, startMs: number, endMs: number): RefInterval => ({
+      id,
+      categoryId: 3,
+      labelId: 20,
+      startMs,
+      endMs,
+    });
+
+    it("a create waits for a throttled edit of another interval on the axis", async () => {
+      const held = deferred<void>();
+      const update = vi.fn(() => held.promise);
+      const { queue, ops } = setup({ update });
+      queue.edit(row(5, 0, 5000), row(5, 0, 3000), "throttled");
+      queue.create(row(-1, 3000, 3100, 11));
+      expect(update).toHaveBeenCalledWith({ intervalId: 5, endMs: 3000 });
+      expect(ops.create).not.toHaveBeenCalled();
+
+      held.resolve();
+      await flushPromises();
+      expect(ops.create).toHaveBeenCalledWith({ categoryId: 2, labelId: 11, startMs: 3000, endMs: 3100 });
+    });
+
+    it("the switch case: a create waits for the close PATCH in flight", async () => {
+      const held = deferred<void>();
+      const update = vi.fn(() => held.promise);
+      const { queue, ops } = setup({ update });
+      queue.edit(row(5, 0, 1000), row(5, 0, 4000), "now");
+      queue.create(row(-1, 4000, 4100, 11));
+      expect(ops.create).not.toHaveBeenCalled();
+      held.resolve();
+      await flushPromises();
+      expect(ops.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps one request in flight per axis, even for different intervals", async () => {
+      const held = deferred<void>();
+      const update = vi.fn().mockReturnValueOnce(held.promise).mockResolvedValue(undefined);
+      const { queue } = setup({ update });
+      queue.edit(row(5, 0, 1000), row(5, 0, 900), "now");
+      queue.edit(row(6, 2000, 3000), row(6, 1500, 3000), "now");
+      expect(update).toHaveBeenCalledTimes(1);
+      held.resolve();
+      await flushPromises();
+      expect(update).toHaveBeenCalledTimes(2);
+      expect(update).toHaveBeenLastCalledWith({ intervalId: 6, startMs: 1500 });
+    });
+
+    it("two axes do not block each other", () => {
+      const held = deferred<void>();
+      const { queue, ops } = setup({ update: vi.fn(() => held.promise) });
+      queue.edit(row(5, 0, 1000), row(5, 0, 2000), "now");
+      queue.create(other(-1, 0, 100));
+      expect(ops.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("a create flushes a chain of throttled edits on its axis in order first", async () => {
+      vi.useFakeTimers();
+      const log: string[] = [];
+      const { queue } = setup({
+        update: vi.fn(async (v) => {
+          log.push(`update ${v.intervalId}`);
+        }),
+        create: vi.fn(async (v) => {
+          log.push("create");
+          return { id: 100, ...v };
+        }),
+      });
+      queue.edit(row(5, 0, 1000), row(5, 0, 900), "throttled");
+      queue.edit(row(6, 2000, 3000), row(6, 2000, 2900), "throttled");
+      queue.edit(row(7, 4000, 5000), row(7, 4000, 4900), "throttled");
+      queue.create(row(-1, 6000, 6100, 11));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(log).toEqual(["update 5", "update 6", "update 7", "create"]);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(log).toHaveLength(4);
+    });
+
+    it("a create waiting behind a failed edit is still sent", async () => {
+      const { queue, ops, onFail } = setup({ update: vi.fn(async () => Promise.reject(new Error("409"))) });
+      queue.edit(row(5, 0, 1000), row(5, 0, 2000), "now");
+      queue.create(row(-1, 3000, 3100, 11));
+      await flushPromises();
+      expect(onFail).toHaveBeenCalledWith(5);
+      expect(ops.create).toHaveBeenCalledTimes(1);
+    });
+  });
 });
