@@ -25,7 +25,7 @@ from app.inference.schemas import ClassifierSpec, InferenceRunRead
 from app.jobs.models import Job, JobStatus, JobType
 from app.media.models import Frame, Sequence, Video
 from app.media.schemas import CropBox
-from app.media.service import FramesOutOfRange, extract_frames_at
+from app.media.service import FramesOutOfRange, detect_crop, extract_frames_at
 from app.storage import StorageService
 from app.training import service as training_service
 from app.training.catalog import YOLO_ADAPTER
@@ -519,6 +519,19 @@ class FramesPastEnd(Exception):
 
 class VideoUnreadable(Exception):
     """The stored video could not be opened or decoded."""
+
+
+def detect_video_crop(
+    session: Session, storage: StorageService, video_id: int
+) -> CropBox | None:
+    """Propose a working area for a video (see `media.service.detect_crop`)."""
+    video = session.get(Video, video_id)
+    if video is None:
+        raise VideoNotFound(f"Video {video_id} not found")
+    try:
+        return detect_crop(storage.download(video.storage_key))
+    except ValueError as exc:
+        raise VideoUnreadable(str(exc)) from exc
 
 
 def _default_sequence_name(video: Video, run: InferenceRun) -> str:

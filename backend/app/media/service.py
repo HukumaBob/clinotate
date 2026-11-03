@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 
 import cv2
+import numpy as np
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -164,6 +165,93 @@ def extract_frames(
             source_frame_number += 1
         capture.release()
     return results
+
+
+# Detection tuning. A pixel counts as "live" when its std over time exceeds this
+# fraction of the frame's strongest std (but never less than the floor, so that
+# codec noise on a static border is not mistaken for picture).
+_LIVE_STD_FRACTION = 0.1
+_LIVE_STD_FLOOR = 2.0
+_DETECT_WIDTH = 320
+_MIN_SAMPLED_FRAMES = 5
+_MIN_ACTIVE_AREA = 0.05
+_MIN_INSET_PCT = 1.0
+
+
+def detect_crop(
+    video_bytes: bytes, samples: int = 50, margin_pct: float = 1.0
+) -> "CropBox | None":
+    """Propose a working area: the part of the picture that changes over time.
+
+    The endoscope image is live while the black frame and burned-in text are
+    static, even when bright. Samples `samples` frames spread over the video,
+    takes the per-pixel standard deviation over time, and boxes the largest
+    live region. Insets are loosened by `margin_pct` (never tightened), so
+    the area errs towards keeping picture. Returns None when there is nothing
+    reliable to say: too few frames, a static video, a live region that is
+    tiny, or no border to remove.
+    """
+    gray_frames: list[np.ndarray] = []
+    with tempfile.NamedTemporaryFile(suffix=".mp4") as tmp:
+        tmp.write(video_bytes)
+        tmp.flush()
+        capture = cv2.VideoCapture(tmp.name)
+        if not capture.isOpened():
+            capture.release()
+            raise ValueError("Could not open the video file")
+        try:
+            total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+            if total <= 0:
+                return None
+            wanted = sorted({int(i * total / samples) for i in range(samples)})
+            position = 0
+            index = 0
+            while position < len(wanted) and capture.grab():
+                if index == wanted[position]:
+                    success, frame = capture.retrieve()
+                    if success:
+                        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        scale = _DETECT_WIDTH / gray.shape[1]
+                        if scale < 1:
+                            gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+                        gray_frames.append(gray.astype(np.float32))
+                    position += 1
+                index += 1
+        except cv2.error as exc:
+            raise ValueError(f"Could not decode the video: {exc}") from exc
+        finally:
+            capture.release()
+
+    if len(gray_frames) < _MIN_SAMPLED_FRAMES:
+        return None
+    std = np.std(np.stack(gray_frames), axis=0)
+    strongest = float(std.max())
+    if strongest < _LIVE_STD_FLOOR:
+        return None
+    live = (std > max(strongest * _LIVE_STD_FRACTION, _LIVE_STD_FLOOR)).astype(np.uint8)
+    live = cv2.morphologyEx(live, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    live = cv2.morphologyEx(live, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+
+    count, _labels, stats, _centroids = cv2.connectedComponentsWithStats(live)
+    if count < 2:
+        return None
+    biggest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    x, y, w, h, _area = stats[biggest]
+    height, width = live.shape
+    if w * h < _MIN_ACTIVE_AREA * width * height:
+        return None
+
+    insets = {
+        "left": x / width * 100,
+        "right": (width - x - w) / width * 100,
+        "top": y / height * 100,
+        "bottom": (height - y - h) / height * 100,
+    }
+    if all(value < _MIN_INSET_PCT for value in insets.values()):
+        return None
+    return CropBox(
+        **{side: round(max(0.0, value - margin_pct), 1) for side, value in insets.items()}
+    )
 
 
 class FramesOutOfRange(Exception):

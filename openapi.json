@@ -4514,6 +4514,53 @@
         ]
       }
     },
+    "/inference/videos/{video_id}/detect-crop": {
+      "post": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Detect Crop",
+        "operationId": "detect_crop_inference_videos__video_id__detect_crop_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectedCropRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/inference/compare": {
       "get": {
         "tags": [
@@ -6620,6 +6667,25 @@
           "split_counts"
         ],
         "title": "DatasetRead"
+      },
+      "DetectedCropRead": {
+        "properties": {
+          "crop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CropBox"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "crop"
+        ],
+        "title": "DetectedCropRead"
       },
       "EpisodeKey": {
         "properties": {

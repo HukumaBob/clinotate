@@ -396,3 +396,53 @@ def test_create_run_rejects_a_crop_that_leaves_no_area(committed_inference_rows)
     )
 
     assert response.status_code == 422
+
+
+def _serve_video(video_bytes):
+    from tests.test_qc_flags_api import FakeStorage
+
+    storage = FakeStorage({"videos/inference-playable.mp4": video_bytes})
+    app.dependency_overrides[get_storage_service] = lambda: storage
+    return storage
+
+
+def test_detect_crop_returns_the_proposed_working_area(committed_inference_rows):
+    from tests.test_detect_crop import make_bordered_video
+
+    headers = _register_and_login("infer-detect@example.com")
+    _serve_video(make_bordered_video())
+    try:
+        response = client.post(
+            f"/inference/videos/{committed_inference_rows.video_id}/detect-crop", headers=headers
+        )
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+
+    assert response.status_code == 200, response.text
+    crop = response.json()["crop"]
+    assert crop["left"] == pytest.approx(20.3, abs=2)
+    assert crop["right"] == pytest.approx(10.2, abs=2)
+
+
+def test_detect_crop_says_null_when_there_is_no_border(committed_inference_rows):
+    from tests.test_detect_crop import make_bordered_video
+
+    headers = _register_and_login("infer-detect-none@example.com")
+    _serve_video(make_bordered_video(live_everywhere=True))
+    try:
+        response = client.post(
+            f"/inference/videos/{committed_inference_rows.video_id}/detect-crop", headers=headers
+        )
+    finally:
+        app.dependency_overrides.pop(get_storage_service, None)
+
+    assert response.status_code == 200
+    assert response.json() == {"crop": None}
+
+
+def test_detect_crop_of_an_unknown_video_is_404(committed_inference_rows):
+    headers = _register_and_login("infer-detect-404@example.com")
+
+    response = client.post("/inference/videos/999999/detect-crop", headers=headers)
+
+    assert response.status_code == 404

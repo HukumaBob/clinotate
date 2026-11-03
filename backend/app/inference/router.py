@@ -8,6 +8,7 @@ from app.auth.models import User
 from app.db import get_session
 from app.inference import service
 from app.inference.schemas import (
+    DetectedCropRead,
     InferenceRunCreate,
     InferenceRunRead,
     PredictionsRead,
@@ -62,6 +63,20 @@ def create_run(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except service.EnqueueFailed as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.post("/videos/{video_id}/detect-crop", response_model=DetectedCropRead)
+def detect_crop(
+    video_id: int,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+):
+    try:
+        return DetectedCropRead(crop=service.detect_video_crop(session, storage, video_id))
+    except service.VideoNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except service.VideoUnreadable as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.get("/runs", response_model=list[InferenceRunRead])

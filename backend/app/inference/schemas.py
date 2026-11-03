@@ -66,6 +66,11 @@ class InferenceRunCreate(BaseModel):
         return self
 
 
+class DetectedCropRead(BaseModel):
+    # None: nothing reliable to propose (no border, too static, too short).
+    crop: CropBox | None
+
+
 class AxisRead(BaseModel):
     model_version_id: int | None
     model_name: str
