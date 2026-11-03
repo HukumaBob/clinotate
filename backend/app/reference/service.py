@@ -330,7 +330,10 @@ def exposure_for_dataset(session: Session, dataset_id: int) -> list[ExposureVide
 
 
 def mark_compromised(session: Session, dataset_id: int, run_id: int) -> list[int]:
-    """Flag clean reference videos whose frames a classification run trains on."""
+    """Flag clean reference videos whose frames a classification run trains on.
+
+    Every existing reference row counts, even one with no intervals right now:
+    it may be labeled again later and must not read clean then."""
     from app.training.models import TrainingRun
 
     run = session.get(TrainingRun, run_id)
@@ -345,9 +348,6 @@ def mark_compromised(session: Session, dataset_id: int, run_id: int) -> list[int
         .where(
             VideoReference.video_id.in_(video_ids),
             VideoReference.compromised_at.is_(None),
-            select(ReferenceInterval.id)
-            .where(ReferenceInterval.video_id == VideoReference.video_id)
-            .exists(),
         )
         .with_for_update()
     ).all()

@@ -264,3 +264,49 @@ def test_first_interval_on_video_in_no_dataset_stays_clean(env):
     assert _first_interval(env, video_id).status_code == 201
     body = client.get(f"/reference/videos/{video_id}", headers=env.headers).json()
     assert body["status"] == "clean"
+
+
+def _interval_ids(env, video_id):
+    body = client.get(f"/reference/videos/{video_id}", headers=env.headers).json()
+    return [i["id"] for i in body["intervals"]]
+
+
+def test_emptied_reference_trained_on_later_ends_compromised(env):
+    video_id, _, frames = env.make_video(True)
+    for interval_id in _interval_ids(env, video_id):
+        r = client.delete(
+            f"/reference/videos/{video_id}/intervals/{interval_id}", headers=env.headers
+        )
+        assert r.status_code == 204
+    assert env.session.get(VideoReference, video_id) is not None
+    run = env.train(env.make_dataset(TaskType.CLASSIFICATION, frames))
+    body = client.get(f"/reference/videos/{video_id}", headers=env.headers).json()
+    assert body["status"] == "compromised"
+    assert body["intervals"] == []
+    assert body["compromised_by_training_run_id"] == run.id
+    added = client.post(
+        f"/reference/videos/{video_id}/intervals",
+        json={"label_id": env.labels["Anatomy"][1], "start_ms": 0, "end_ms": 400},
+        headers=env.headers,
+    )
+    assert added.status_code == 201, added.text
+    body = client.get(f"/reference/videos/{video_id}", headers=env.headers).json()
+    assert body["status"] == "compromised"
+    assert body["compromised_by_training_run_id"] == run.id
+
+
+def test_empty_reference_in_detection_dataset_stays_unmarked(env):
+    video_id, _, frames = env.make_video(True)
+    for interval_id in _interval_ids(env, video_id):
+        client.delete(f"/reference/videos/{video_id}/intervals/{interval_id}", headers=env.headers)
+    env.train(env.make_dataset(TaskType.DETECTION, frames))
+    env.session.expire_all()
+    assert env.session.get(VideoReference, video_id).compromised_at is None
+
+
+def test_exposure_ignores_empty_references(env):
+    video_id, _, frames = env.make_video(True)
+    for interval_id in _interval_ids(env, video_id):
+        client.delete(f"/reference/videos/{video_id}/intervals/{interval_id}", headers=env.headers)
+    ds = env.make_dataset(TaskType.CLASSIFICATION, frames)
+    assert service.exposure_for_dataset(env.session, ds) == []
