@@ -1,19 +1,29 @@
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReferencePage } from "./ReferencePage";
 
 let referenceState: { data?: Record<string, unknown>; isError?: boolean; isPending?: boolean };
 let videoState: Record<string, unknown>;
+let videoQuery: { isPending?: boolean; isError?: boolean };
 let saveState: string;
+let restoreState: { error?: unknown; isError?: boolean };
+let referenceArg: number | null | undefined;
+let mounts: { videoId: number | null }[];
+const deleteInterval = vi.fn();
 
 vi.mock("../../entities/useReference", () => ({
-  useReference: () => referenceState,
-  useRestoreClean: () => ({ mutate: vi.fn() }),
+  useReference: (videoId: number | null) => {
+    referenceArg = videoId;
+    return referenceState;
+  },
+  useRestoreClean: () => ({ mutate: vi.fn(), ...restoreState }),
+  useDeleteInterval: () => ({ mutate: deleteInterval }),
 }));
 vi.mock("../../entities/useVideo", () => ({
-  useVideo: () => ({ data: videoState, refetch: vi.fn() }),
+  useVideo: () => ({ data: videoState, refetch: vi.fn(), ...videoQuery }),
 }));
 vi.mock("../media/TranscodePrompt", () => ({
   TranscodePrompt: () => <p>Transcode prompt</p>,
@@ -25,7 +35,15 @@ vi.mock("./useReferenceEditor", () => ({
       name: a.name,
       classes: a.classes.map((c) => ({ labelId: c.label_id, name: c.name, key: c.key })),
     })),
-  useReferenceEditor: () => ({
+  useReferenceEditor: ({ reference }: { reference?: { video_id: number } }) => {
+    // One record per editor mount: a new video must get a new editor.
+    const [mount] = useState(() => {
+      const record = { videoId: reference?.video_id ?? null };
+      mounts.push(record);
+      return record;
+    });
+    void mount;
+    return {
     intervals: [],
     growing: {},
     selectedId: null,
@@ -35,12 +53,23 @@ vi.mock("./useReferenceEditor", () => ({
     deleteSelected: vi.fn(),
     dragEdge: vi.fn(),
     saveState,
-  }),
+    };
+  },
 }));
 
-function renderPage() {
+function GoTo10() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate("/qc/reference/10")}>
+      go
+    </button>
+  );
+}
+
+function renderPage(path = "/qc/reference/9") {
   return render(
-    <MemoryRouter initialEntries={["/qc/reference/9"]}>
+    <MemoryRouter initialEntries={[path]}>
+      <GoTo10 />
       <Routes>
         <Route path="/qc/reference/:videoId" element={<ReferencePage />} />
       </Routes>
@@ -50,6 +79,11 @@ function renderPage() {
 
 beforeEach(() => {
   saveState = "idle";
+  videoQuery = {};
+  restoreState = {};
+  referenceArg = undefined;
+  mounts = [];
+  deleteInterval.mockReset();
   referenceState = {
     data: {
       video_id: 9, procedure_id: 1, duration_ms: 10000, status: "clean", compromised_at: null,
@@ -94,6 +128,59 @@ describe("ReferencePage", () => {
   it("flags unsaved edits", () => {
     saveState = "error";
     renderPage();
-    expect(screen.getByText(/not saved/i)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Not saved: the change was undone.");
+  });
+
+  it("lists orphaned intervals and deletes one through the delete mutation", () => {
+    const data = referenceState.data as { intervals: unknown[] };
+    data.intervals = [
+      { id: 31, video_id: 9, category_id: 2, label_id: 77, taxonomy_version: 1, start_ms: 2000, end_ms: 4000, orphaned: true },
+      { id: 32, video_id: 9, category_id: 2, label_id: 10, taxonomy_version: 1, start_ms: 5000, end_ms: 6000, orphaned: false },
+    ];
+    renderPage();
+    expect(screen.getByText(/1 orphaned interval/)).toBeInTheDocument();
+    expect(screen.getByText(/Label #77 0:02–0:04/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(deleteInterval).toHaveBeenCalledWith(31);
+  });
+
+  it("shows why restoring clean failed", () => {
+    restoreState = { isError: true, error: { detail: "Video 9 has no reference" } };
+    renderPage();
+    expect(screen.getByRole("alert")).toHaveTextContent("Video 9 has no reference");
+  });
+
+  it("says it is loading while the reference or the video is pending", () => {
+    referenceState = { isPending: true };
+    const first = renderPage();
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    first.unmount();
+    referenceState = { data: referenceState.data };
+    videoQuery = { isPending: true };
+    renderPage();
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+  });
+
+  it("says so when only the video fails to load", () => {
+    videoQuery = { isError: true };
+    videoState = undefined as unknown as Record<string, unknown>;
+    renderPage();
+    expect(screen.getByText("This video could not be loaded.")).toBeInTheDocument();
+    expect(screen.queryByText("This video's reference could not be loaded.")).toBeNull();
+  });
+
+  it("treats a non-numeric video id as a reference that cannot be loaded", () => {
+    referenceState = {};
+    renderPage("/qc/reference/abc");
+    expect(referenceArg).toBeNull();
+    expect(screen.getByText("This video's reference could not be loaded.")).toBeInTheDocument();
+  });
+
+  it("mounts a fresh editor for another video", () => {
+    renderPage();
+    expect(mounts).toEqual([{ videoId: 9 }]);
+    (referenceState.data as { video_id: number }).video_id = 10;
+    fireEvent.click(screen.getByRole("button", { name: "go" }));
+    expect(mounts).toEqual([{ videoId: 9 }, { videoId: 10 }]);
   });
 });

@@ -1,8 +1,10 @@
 import { type ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
 
-import { useReference, useRestoreClean } from "../../../entities/useReference";
+import { useDeleteInterval, useReference, useRestoreClean } from "../../../entities/useReference";
+import { errorMessage } from "../errorMessage";
 import { matchAxes } from "../../reference/matchAxes";
+import { OrphanedIntervals, orphanRows } from "../../reference/OrphanedIntervals";
 import { ReferenceKeys } from "../../reference/ReferenceKeys";
 import { ReferenceLanes } from "../../reference/ReferenceLanes";
 import { ReferenceStatus } from "../../reference/ReferenceStatus";
@@ -35,7 +37,10 @@ export interface RunReference {
 export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: RunReferenceArgs): RunReference {
   const query = useReference(videoId);
   const restore = useRestoreClean(videoId);
+  const deleteOrphan = useDeleteInterval(videoId);
   const reference = query.data;
+  // One time scale for the editor and the reference lanes.
+  const referenceDurationMs = reference && reference.duration_ms > 0 ? reference.duration_ms : durationMs;
 
   const refAxes = useMemo(() => toRefAxes(reference), [reference]);
   const matches = useMemo(
@@ -57,16 +62,14 @@ export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: Ru
   const editor = useReferenceEditor({
     videoRef,
     reference: editorReference,
-    durationMs: reference?.duration_ms || durationMs,
+    durationMs: referenceDurationMs,
   });
 
   if (!reference) return { banner: null, bar: null, lanes: undefined };
 
   const matchedAxes = matchedIndexes.map((i) => refAxes[i]);
   const matchedCategories = new Set(matchedAxes.map((axis) => axis.categoryId));
-  const orphanedCount = reference.intervals.filter(
-    (interval) => interval.orphaned && matchedCategories.has(interval.category_id),
-  ).length;
+  const orphaned = orphanRows(reference, matchedCategories);
 
   const banner =
     reference.status === "compromised" ? (
@@ -87,15 +90,15 @@ export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: Ru
             onRestore={() => restore.mutate()}
           />
         )}
+        {restore.isError && (
+          <span role="alert" className="text-xs text-red-400">
+            {errorMessage(restore.error, "The reference could not be restored to clean.")}
+          </span>
+        )}
         {editor.saveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
         {editor.saveState === "error" && (
           <span role="alert" className="text-xs text-red-400">
-            Not saved: changes will be retried on your next edit
-          </span>
-        )}
-        {orphanedCount > 0 && (
-          <span className="text-xs text-amber-400">
-            {`${orphanedCount} orphaned reference ${orphanedCount === 1 ? "interval" : "intervals"}`}
+            Not saved: the change was undone.
           </span>
         )}
         {showLink && videoId !== null && (
@@ -104,6 +107,12 @@ export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: Ru
           </Link>
         )}
       </div>
+      <OrphanedIntervals rows={orphaned} onDelete={(id) => deleteOrphan.mutate(id)} />
+      {deleteOrphan.isError && (
+        <p role="alert" className="text-xs text-red-400">
+          {errorMessage(deleteOrphan.error, "The interval could not be deleted.")}
+        </p>
+      )}
     </div>
   );
 
@@ -115,10 +124,9 @@ export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: Ru
         intervals={editor.intervals}
         growing={editor.growing}
         selectedId={editor.selectedId}
-        durationMs={durationMs}
+        durationMs={referenceDurationMs}
         onSelect={editor.select}
         onDragEdge={editor.dragEdge}
-        orphanedCount={0}
       />
     ),
   );

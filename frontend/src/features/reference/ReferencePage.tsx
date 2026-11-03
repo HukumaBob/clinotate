@@ -1,22 +1,31 @@
 import { useCallback, useMemo, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { useReference, useRestoreClean } from "../../entities/useReference";
+import { useDeleteInterval, useReference, useRestoreClean } from "../../entities/useReference";
 import { useVideo } from "../../entities/useVideo";
 import { TranscodePrompt } from "../media/TranscodePrompt";
+import { errorMessage } from "../qc/errorMessage";
+import { orphanRows } from "./OrphanedIntervals";
 import { ReferenceKeys } from "./ReferenceKeys";
 import { ReferenceLanes } from "./ReferenceLanes";
 import { ReferenceStatus } from "./ReferenceStatus";
 import { toRefAxes, useReferenceEditor } from "./useReferenceEditor";
 
 /** The reference labeling page: the player with a legend, one editable lane
- * per axis under it, and the reference's status. */
+ * per axis under it, and the reference's status. Keyed by video so another
+ * video gets a fresh editor (and save queue). */
 export function ReferencePage() {
   const params = useParams();
-  const videoId = params.videoId ? Number(params.videoId) : null;
+  const parsed = params.videoId ? Number(params.videoId) : Number.NaN;
+  const videoId = Number.isFinite(parsed) ? parsed : null;
+  return <ReferenceVideoPage key={videoId ?? "invalid"} videoId={videoId} />;
+}
+
+function ReferenceVideoPage({ videoId }: { videoId: number | null }) {
   const referenceQuery = useReference(videoId);
   const videoQuery = useVideo(videoId);
   const restore = useRestoreClean(videoId);
+  const deleteOrphan = useDeleteInterval(videoId);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const reference = referenceQuery.data;
@@ -29,7 +38,10 @@ export function ReferencePage() {
   const axes = useMemo(() => (reference ? toRefAxes(reference) : []), [reference]);
   const durationMs = reference?.duration_ms || (video?.duration_seconds ?? 0) * 1000;
   const editor = useReferenceEditor({ videoRef, reference, durationMs });
-  const orphanedCount = reference?.intervals.filter((interval) => interval.orphaned).length ?? 0;
+  const orphaned = useMemo(() => (reference ? orphanRows(reference) : []), [reference]);
+  const referenceFailed = videoId === null || referenceQuery.isError;
+  const videoFailed = !referenceFailed && videoQuery.isError;
+  const loading = !referenceFailed && !videoFailed && (referenceQuery.isPending || videoQuery.isPending);
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -40,9 +52,11 @@ export function ReferencePage() {
         </Link>
       </div>
 
-      {referenceQuery.isError && (
+      {referenceFailed && (
         <p className="text-sm text-red-400">This video&apos;s reference could not be loaded.</p>
       )}
+      {videoFailed && <p className="text-sm text-red-400">This video could not be loaded.</p>}
+      {loading && <p className="text-sm text-gray-500">Loading…</p>}
 
       {video?.browser_playable === false && (
         <TranscodePrompt videoId={video.id} onTranscodeComplete={handleTranscodeComplete} />
@@ -69,18 +83,29 @@ export function ReferencePage() {
                 durationMs={durationMs}
                 onSelect={editor.select}
                 onDragEdge={editor.dragEdge}
-                orphanedCount={orphanedCount}
+                orphaned={orphaned}
+                onDeleteOrphan={(id) => deleteOrphan.mutate(id)}
               />
+              {deleteOrphan.isError && (
+                <p role="alert" className="text-xs text-red-400">
+                  {errorMessage(deleteOrphan.error, "The interval could not be deleted.")}
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                 <ReferenceStatus
                   status={reference.status}
                   compromisedAt={reference.compromised_at}
                   onRestore={() => restore.mutate()}
                 />
+                {restore.isError && (
+                  <span role="alert" className="text-xs text-red-400">
+                    {errorMessage(restore.error, "The reference could not be restored to clean.")}
+                  </span>
+                )}
                 {editor.saveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
                 {editor.saveState === "error" && (
                   <span role="alert" className="text-xs text-red-400">
-                    Not saved: changes will be retried on your next edit
+                    Not saved: the change was undone.
                   </span>
                 )}
               </div>

@@ -215,7 +215,7 @@ export function useReferenceEditor({ videoRef, reference, durationMs }: EditorAr
     for (const row of Object.values(growingRows(view))) {
       if (!row) continue;
       const end = clampEnd(view, row.categoryId, row.id, row.startMs, t, live.current.durationMs);
-      if (end !== row.endMs) queue.edit(row, { ...row, endMs: end }, "throttled");
+      if (end !== row.endMs) queue.edit(row, { ...row, endMs: end }, "throttled", "auto");
     }
   }
 

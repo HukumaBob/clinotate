@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,8 @@ let predictionsState: { data?: ClassificationDocument; isPending?: boolean; isEr
 let videoState: Record<string, unknown>;
 let referenceState: { data?: Record<string, unknown>; isPending?: boolean; isError?: boolean };
 const createInterval = vi.fn();
+const deleteInterval = vi.fn();
+let restoreState: { isError?: boolean; error?: unknown };
 
 vi.mock("../../../entities/useInferenceRuns", () => ({
   useInferenceRun: () => ({ data: runState }),
@@ -24,8 +26,8 @@ vi.mock("../../../entities/useReference", () => ({
   useReference: () => referenceState,
   useCreateInterval: () => ({ mutateAsync: createInterval }),
   useUpdateInterval: () => ({ mutateAsync: vi.fn() }),
-  useDeleteInterval: () => ({ mutateAsync: vi.fn() }),
-  useRestoreClean: () => ({ mutate: vi.fn() }),
+  useDeleteInterval: () => ({ mutateAsync: vi.fn(), mutate: deleteInterval }),
+  useRestoreClean: () => ({ mutate: vi.fn(), ...restoreState }),
 }));
 vi.mock("../../media/TranscodePrompt", () => ({
   TranscodePrompt: () => <p>Transcode prompt</p>,
@@ -74,6 +76,8 @@ beforeEach(() => {
   };
   predictionsState = { data: makeDoc(), isPending: false };
   createInterval.mockReset();
+  deleteInterval.mockReset();
+  restoreState = {};
   createInterval.mockImplementation(async (vars: { labelId: number; startMs: number; endMs: number }) => ({
     id: 100, video_id: 9, category_id: 2, label_id: vars.labelId, taxonomy_version: 1,
     start_ms: vars.startMs, end_ms: vars.endMs, orphaned: false,
@@ -262,5 +266,47 @@ describe("ClassificationRunPage", () => {
     expect(screen.getByRole("group", { name: "Anatomy" })).toBeInTheDocument();
     expect(screen.queryByTestId("lane-2")).toBeNull();
     expect(screen.queryByText(/unbiased test/)).toBeNull();
+  });
+  it("says a failed reference save was undone", async () => {
+    createInterval.mockRejectedValue({ detail: "overlap" });
+    const user = userEvent.setup();
+    renderPage();
+    await user.keyboard("1");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Not saved: the change was undone.");
+  });
+
+  it("lists orphaned reference intervals of the matched axes and deletes one", () => {
+    const reference = makeReference("clean");
+    reference.intervals = [
+      { id: 31, video_id: 9, category_id: 2, label_id: 77, taxonomy_version: 1, start_ms: 0, end_ms: 500, orphaned: true },
+      { id: 32, video_id: 9, category_id: 3, label_id: 78, taxonomy_version: 1, start_ms: 0, end_ms: 500, orphaned: true },
+    ] as never[];
+    referenceState = { data: reference };
+    renderPage();
+    expect(screen.getByText(/1 orphaned interval/)).toBeInTheDocument();
+    expect(screen.getByText(/Label #77 0:00–0:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/Label #78/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(deleteInterval).toHaveBeenCalledWith(31);
+  });
+
+  it("draws the reference lane on the same duration the editor uses", () => {
+    const reference = makeReference("clean");
+    reference.duration_ms = 2000;
+    reference.intervals = [
+      { id: 40, video_id: 9, category_id: 2, label_id: 10, taxonomy_version: 1, start_ms: 1000, end_ms: 2000, orphaned: false },
+    ] as never[];
+    referenceState = { data: reference };
+    renderPage();
+    const segment = screen.getByTestId("segment-40");
+    expect(segment.style.left).toBe("50%");
+    expect(segment.style.width).toBe("50%");
+  });
+
+  it("shows why restoring the reference to clean failed", () => {
+    referenceState = { data: makeReference("compromised") };
+    restoreState = { isError: true, error: { detail: "Video 9 has no reference" } };
+    renderPage();
+    expect(screen.getByRole("alert")).toHaveTextContent("Video 9 has no reference");
   });
 });

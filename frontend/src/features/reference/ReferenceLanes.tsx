@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { colorForClass } from "../qc/predictions";
 import { useVideoClock } from "../qc/useVideoClock";
 import { coverage } from "./intervals";
+import { OrphanedIntervals, type OrphanRow } from "./OrphanedIntervals";
 import type { RefAxis, RefInterval } from "./types";
 
 interface ReferenceLanesProps {
@@ -14,7 +15,9 @@ interface ReferenceLanesProps {
   durationMs: number;
   onSelect: (id: number | null) => void;
   onDragEdge: (id: number, edge: "start" | "end", ms: number) => void;
-  orphanedCount: number;
+  /** Orphaned intervals to list under the lanes (they are never drawn). */
+  orphaned?: OrphanRow[];
+  onDeleteOrphan?: (id: number) => void;
 }
 
 const HATCH = {
@@ -47,7 +50,8 @@ export function ReferenceLanes({
   durationMs,
   onSelect,
   onDragEdge,
-  orphanedCount,
+  orphaned = [],
+  onDeleteOrphan = () => {},
 }: ReferenceLanesProps) {
   const timeMs = useVideoClock(videoRef);
   const drag = useRef<{ id: number; edge: "start" | "end"; lane: HTMLElement } | null>(null);
@@ -90,7 +94,7 @@ export function ReferenceLanes({
   return (
     <div className="flex flex-col gap-2">
       {axes.map((axis) => {
-        // Orphaned intervals (class no longer on the axis) are only counted in
+        // Orphaned intervals (class no longer on the axis) are only listed in
         // the warning; they are neither drawn nor part of the coverage.
         const classIds = new Set(axis.classes.map((c) => c.labelId));
         const own = intervals.filter((iv) => iv.categoryId === axis.categoryId && classIds.has(iv.labelId));
@@ -167,11 +171,7 @@ export function ReferenceLanes({
           </div>
         );
       })}
-      {orphanedCount > 0 && (
-        <p className="text-xs text-amber-400">
-          {`${orphanedCount} orphaned ${orphanedCount === 1 ? "interval" : "intervals"}: the class is no longer in the taxonomy`}
-        </p>
-      )}
+      <OrphanedIntervals rows={orphaned} onDelete={onDeleteOrphan} />
     </div>
   );
 }

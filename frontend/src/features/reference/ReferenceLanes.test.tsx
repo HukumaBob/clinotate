@@ -25,7 +25,6 @@ function renderLanes(overrides: Partial<React.ComponentProps<typeof ReferenceLan
     durationMs: 10000,
     onSelect: vi.fn(),
     onDragEdge: vi.fn(),
-    orphanedCount: 0,
     ...overrides,
   };
   render(<ReferenceLanes {...props} />);
@@ -87,13 +86,22 @@ describe("ReferenceLanes", () => {
   });
 
   it("warns about orphaned intervals only when there are some", () => {
-    renderLanes({ orphanedCount: 0 });
+    renderLanes();
     expect(screen.queryByText(/orphaned/)).toBeNull();
   });
 
-  it("shows the orphaned count", () => {
-    renderLanes({ orphanedCount: 2 });
+  it("lists the orphaned intervals with their spans and deletes one", () => {
+    const props = renderLanes({
+      orphaned: [
+        { id: 7, labelName: "Antrum", startMs: 5000, endMs: 65000 },
+        { id: 8, labelName: "Label #99", startMs: 0, endMs: 1500 },
+      ],
+      onDeleteOrphan: vi.fn(),
+    });
     expect(screen.getByText(/2 orphaned intervals/)).toBeInTheDocument();
+    expect(screen.getByText(/Antrum 0:05–1:05/)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    expect(props.onDeleteOrphan).toHaveBeenCalledWith(7);
   });
 
   it("does not draw or count orphaned intervals (class no longer on the axis)", () => {
@@ -102,7 +110,7 @@ describe("ReferenceLanes", () => {
         { id: 1, categoryId: 2, labelId: 10, startMs: 0, endMs: 2000 },
         { id: 9, categoryId: 2, labelId: 99, startMs: 5000, endMs: 10000 },
       ],
-      orphanedCount: 1,
+      orphaned: [{ id: 9, labelName: "Label #99", startMs: 5000, endMs: 10000 }],
     });
     expect(screen.queryByTestId("segment-9")).toBeNull();
     expect(screen.getByText("20% labeled")).toBeInTheDocument();

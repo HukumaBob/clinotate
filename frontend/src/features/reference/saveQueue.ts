@@ -9,7 +9,8 @@ export interface SaveOps {
 export interface SaveListener {
   /** A created interval got its server id; replace the local id everywhere. */
   onRemap(localId: number, serverId: number): void;
-  /** A save of this interval failed; the cache rolls back, the entry is gone. */
+  /** A save of this interval failed; the cache rolls back, the entry is gone
+   * (nothing is retried). */
   onFail(id: number): void;
   /** Rows or state changed; re-render. */
   onChange(): void;
@@ -42,6 +43,8 @@ export class SaveQueue {
   private busyAxes = new Set<number>();
   private seq = 0;
   private inFlight = 0;
+  /** A save failed; stays set until the next user edit, create or delete
+   * (a later success of another request does not clear it). */
   private failed = false;
   private ops: SaveOps;
   private listener: SaveListener;
@@ -63,6 +66,7 @@ export class SaveQueue {
   }
 
   create(row: RefInterval): void {
+    this.failed = false;
     this.entries.set(row.id, {
       row,
       sent: null,
@@ -77,8 +81,11 @@ export class SaveQueue {
   }
 
   /** Records `next` as the desired values of an interval currently shown as
-   * `current`; "now" sends as soon as possible, "throttled" within throttleMs. */
-  edit(current: RefInterval, next: RefInterval, mode: "now" | "throttled"): void {
+   * `current`; "now" sends as soon as possible, "throttled" within throttleMs.
+   * An "auto" edit (the growing end following the playhead) is not a user
+   * edit and leaves a save error shown. */
+  edit(current: RefInterval, next: RefInterval, mode: "now" | "throttled", origin: "user" | "auto" = "user"): void {
+    if (origin === "user") this.failed = false;
     const entry = this.entryFor(current);
     if (entry.deleted) return;
     entry.row = { ...next, id: entry.row.id, categoryId: entry.row.categoryId };
@@ -94,6 +101,7 @@ export class SaveQueue {
   }
 
   remove(current: RefInterval): void {
+    this.failed = false;
     const entry = this.entryFor(current);
     entry.deleted = true;
     this.requestFlush(entry);
@@ -150,6 +158,13 @@ export class SaveQueue {
 
   /** Sends the next request of one axis, if the axis is free. */
   private pump(categoryId: number) {
+    // A deleted interval whose create was never sent needs no request at all.
+    for (const entry of [...this.entries.values()]) {
+      if (entry.row.categoryId === categoryId && entry.deleted && entry.sent === null && !entry.busy) {
+        if (entry.timer !== null) clearTimeout(entry.timer);
+        this.entries.delete(entry.row.id);
+      }
+    }
     if (this.busyAxes.has(categoryId)) return;
     const axis = [...this.entries.values()].filter((e) => e.row.categoryId === categoryId);
     const creates = axis.filter((e) => e.sent === null && !e.busy).sort((a, b) => a.flushOrder - b.flushOrder);
@@ -186,7 +201,6 @@ export class SaveQueue {
     request.then(
       (value) => {
         this.inFlight -= 1;
-        this.failed = false;
         entry.busy = false;
         this.busyAxes.delete(categoryId);
         onDone(value);

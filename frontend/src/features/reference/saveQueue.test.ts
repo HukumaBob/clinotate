@@ -220,4 +220,59 @@ describe("SaveQueue", () => {
       expect(ops.create).toHaveBeenCalledTimes(1);
     });
   });
+  describe("error flag", () => {
+    it("survives a later successful request of another interval", async () => {
+      const other = deferred<void>();
+      const update = vi.fn((vars: { intervalId: number }) =>
+        vars.intervalId === 5 ? Promise.reject(new Error("409")) : other.promise,
+      );
+      const { queue } = setup({ update });
+      queue.edit({ ...row(6, 0, 1000), categoryId: 3 }, { ...row(6, 0, 2000), categoryId: 3 }, "now");
+      queue.edit(row(5, 0, 1000), row(5, 0, 2000), "now");
+      await flushPromises();
+      expect(queue.state()).toBe("error");
+      other.resolve();
+      await flushPromises();
+      expect(queue.state()).toBe("error");
+    });
+
+    it("survives an automatic edit (the growing end following the playhead)", async () => {
+      const { queue } = setup({ update: vi.fn().mockRejectedValueOnce(new Error("409")).mockResolvedValue(undefined) });
+      queue.edit(row(5, 0, 1000), row(5, 0, 2000), "now");
+      await flushPromises();
+      expect(queue.state()).toBe("error");
+      queue.edit(row(6, 3000, 3100), row(6, 3000, 3500), "throttled", "auto");
+      expect(queue.state()).toBe("error");
+    });
+
+    it("clears on the next user edit, create or delete", async () => {
+      const fail = () => setup({ update: vi.fn().mockRejectedValueOnce(new Error("409")).mockResolvedValue(undefined) });
+      for (const act of [
+        (q: SaveQueue) => q.edit(row(6, 3000, 3100), row(6, 3000, 3500), "throttled"),
+        (q: SaveQueue) => q.create(row(-1, 5000, 5100)),
+        (q: SaveQueue) => q.remove(row(7, 6000, 6500)),
+      ]) {
+        const { queue } = fail();
+        queue.edit(row(5, 0, 1000), row(5, 0, 2000), "now");
+        await flushPromises();
+        expect(queue.state()).toBe("error");
+        act(queue);
+        expect(queue.state()).not.toBe("error");
+      }
+    });
+  });
+
+  it("drops a deleted interval whose create was never sent, with no request at all", async () => {
+    const busy = deferred<void>();
+    const { queue, ops } = setup({ update: vi.fn(() => busy.promise) });
+    queue.edit(row(5, 0, 1000), row(5, 0, 900), "now");
+    queue.create(row(-1, 3000, 3100, 11));
+    queue.remove(row(-1, 3000, 3100, 11));
+    expect(queue.rows().some((r) => r.row.id === -1)).toBe(false);
+    busy.resolve();
+    await flushPromises();
+    expect(ops.create).not.toHaveBeenCalled();
+    expect(ops.remove).not.toHaveBeenCalled();
+    expect(queue.state()).toBe("idle");
+  });
 });

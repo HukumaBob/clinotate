@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RunRoute } from "./RunRoute";
@@ -10,8 +11,13 @@ vi.mock("../../entities/useInferenceRuns", () => ({
   useInferenceRun: () => runState,
 }));
 vi.mock("./RunViewPage", () => ({ RunViewPage: () => <p>Detection page</p> }));
+let mounts = 0;
 vi.mock("./classification/ClassificationRunPage", () => ({
-  ClassificationRunPage: () => <p>Classification page</p>,
+  ClassificationRunPage: () => {
+    // Counts mounts: a run of another video must get a fresh page (and editor).
+    useState(() => ++mounts);
+    return <p>Classification page</p>;
+  },
 }));
 
 function renderRoute() {
@@ -49,5 +55,27 @@ describe("RunRoute", () => {
     expect(screen.queryByText("Detection page")).toBeNull();
     expect(screen.queryByText("Classification page")).toBeNull();
     expect(screen.getByText("Loading run…")).toBeInTheDocument();
+  });
+  it("remounts the classification page for a run of another video", () => {
+    mounts = 0;
+    runState = { data: { id: 5, video_id: 9, axes: [{ name: "Anatomy" }] }, isPending: false };
+    const { rerender } = renderRoute();
+    rerender(
+      <MemoryRouter initialEntries={["/qc/5"]}>
+        <Routes>
+          <Route path="/qc/:runId" element={<RunRoute />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(mounts).toBe(1);
+    runState = { data: { id: 5, video_id: 10, axes: [{ name: "Anatomy" }] }, isPending: false };
+    rerender(
+      <MemoryRouter initialEntries={["/qc/5"]}>
+        <Routes>
+          <Route path="/qc/:runId" element={<RunRoute />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(mounts).toBe(2);
   });
 });
