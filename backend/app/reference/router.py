@@ -107,7 +107,7 @@ def evaluate_run(
 ):
     try:
         return service.evaluate_run(session, storage, run_id, boundary_ms)
-    except service.RunNotFound as exc:
+    except (service.RunNotFound, service.VideoNotFound) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except service.RunNotEvaluable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

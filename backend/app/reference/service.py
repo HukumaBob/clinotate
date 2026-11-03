@@ -459,18 +459,23 @@ def evaluate_document(
     for i, model_axis in enumerate(model_axes):
         classes = model_axis["classes"]
         frames: list[EvalFrame] = []
+        # Malformed frames (too few axes, a class id outside the axis) are
+        # excluded frames: counted, never scored.
+        invalid = 0
         for frame in doc_frames:
-            entry = frame["axes"][i]
-            class_id = entry["class_id"]
-            if 0 <= class_id < len(classes):
-                frames.append(
-                    EvalFrame(
-                        ts_ms=frame["timestamp_ms"], predicted=classes[class_id],
-                        confidence=entry["confidence"],
-                    )
+            entries = frame["axes"]
+            class_id = entries[i]["class_id"] if i < len(entries) else None
+            if class_id is None or not 0 <= class_id < len(classes):
+                invalid += 1
+                continue
+            frames.append(
+                EvalFrame(
+                    ts_ms=frame["timestamp_ms"], predicted=classes[class_id],
+                    confidence=entries[i]["confidence"],
                 )
+            )
         if matches[i] is None:
-            results.append(_unmatched(model_axis["name"], len(frames)))
+            results.append(_unmatched(model_axis["name"], len(frames) + invalid))
             continue
         ref_axis = reference.axes[matches[i]]
         label_names = {c.label_id: c.name for c in ref_axis.classes}
@@ -482,6 +487,8 @@ def evaluate_document(
         result = evaluate_axis(
             frames, intervals, classes, [c.name for c in ref_axis.classes], boundary_ms
         )
+        result.frames_total += invalid
+        result.frames_excluded += invalid
         results.append(_axis_read(model_axis["name"], ref_axis, result))
     return EvaluationRead(
         run_id=run.id, video_id=run.video_id, reference_status=reference.status,
@@ -495,12 +502,18 @@ def evaluate_run(
     run = session.get(InferenceRun, run_id)
     if run is None:
         raise RunNotFound(f"Inference run {run_id} not found")
-    if run.status != InferenceRunStatus.SUCCEEDED or not run.predictions_key:
+    if run.status != InferenceRunStatus.SUCCEEDED:
         raise RunNotEvaluable(f"Run {run_id} is {run.status.value}, not finished")
+    if not run.predictions_key:
+        raise RunNotEvaluable(f"Run {run_id} has no stored predictions")
     if run.axes is None:
         raise RunNotEvaluable(f"Run {run_id} is not a classification run")
     reference = get_reference(session, run.video_id)
     if not any(not iv.orphaned for iv in reference.intervals):
         raise RunNotEvaluable("The video has no reference intervals to score against")
-    document = json.loads(storage.download(run.predictions_key))
+    try:
+        raw = storage.download(run.predictions_key)
+    except Exception as exc:
+        raise RunNotEvaluable(f"Predictions of run {run_id} are no longer stored") from exc
+    document = json.loads(raw)
     return evaluate_document(run, document, reference, boundary_ms)

@@ -403,3 +403,82 @@ def test_match_axes_unit():
         [{"classes": ["a", "b", "c"]}, {"classes": ["zzz"]}, {"classes": ["a"]}], refs
     )
     assert got == [1, None, 0]
+
+
+def test_matched_axis_without_intervals_on_it_is_all_excluded(world):
+    procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY, "Quality": ["good", "bad"]})
+    qcat, qlabels = axes["Quality"]
+    video_id = world.make_video(procedure_id, [(qcat, qlabels["good"], 0, 5000)])
+    doc = make_doc([("Anatomy", ANATOMY, [("caecum", 0.9)] * 4)])
+    response = _evaluate(world.make_run(video_id, doc))
+    assert response.status_code == 200
+    axis = response.json()["axes"][0]
+    assert axis["matched"] is True and axis["reference_axis_name"] == "Anatomy"
+    assert (axis["frames_total"], axis["frames_evaluated"], axis["frames_excluded"]) == (4, 0, 4)
+    assert axis["accuracy"] is None and axis["macro_f1"] is None
+
+
+def test_frame_with_too_few_axes_is_excluded_not_a_500(world):
+    procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY})
+    cat, labels = axes["Anatomy"]
+    video_id = world.make_video(procedure_id, [(cat, labels["caecum"], 0, 5000)])
+    doc = make_doc([
+        ("Anatomy", ANATOMY, [("caecum", 0.9)] * 3),
+        ("Other", ["p", "q"], [("p", 0.9)] * 3),
+    ])
+    doc["frames"]["1"]["axes"] = doc["frames"]["1"]["axes"][:1]
+    response = _evaluate(world.make_run(video_id, doc))
+    assert response.status_code == 200
+    anatomy, other = response.json()["axes"]
+    assert (anatomy["frames_total"], anatomy["frames_evaluated"]) == (3, 3)
+    assert (other["frames_total"], other["frames_evaluated"], other["frames_excluded"]) == (3, 0, 3)
+
+
+def test_out_of_range_class_id_counts_as_excluded(world):
+    procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY})
+    cat, labels = axes["Anatomy"]
+    video_id = world.make_video(procedure_id, [(cat, labels["caecum"], 0, 5000)])
+    doc = make_doc([("Anatomy", ANATOMY, [("caecum", 0.9)] * 3)])
+    doc["frames"]["2"]["axes"][0]["class_id"] = 99
+    axis = _evaluate(world.make_run(video_id, doc)).json()["axes"][0]
+    assert (axis["frames_total"], axis["frames_evaluated"], axis["frames_excluded"]) == (3, 2, 1)
+    assert axis["accuracy"] == 1.0
+
+
+def test_unmatched_axis_counts_out_of_range_frames(world):
+    procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY})
+    cat, labels = axes["Anatomy"]
+    video_id = world.make_video(procedure_id, [(cat, labels["caecum"], 0, 3000)])
+    doc = make_doc([("Other", ["x", "y"], [("x", 0.9)] * 3)])
+    doc["frames"]["0"]["axes"][0]["class_id"] = -1
+    axis = _evaluate(world.make_run(video_id, doc)).json()["axes"][0]
+    assert (axis["frames_total"], axis["frames_evaluated"], axis["frames_excluded"]) == (3, 0, 3)
+
+
+def test_predictions_no_longer_stored_is_409(world):
+    _, run_id, _ = _scenario(world)
+    world.docs.clear()
+    response = _evaluate(run_id)
+    assert response.status_code == 409
+    assert response.json()["detail"] == f"Predictions of run {run_id} are no longer stored"
+
+
+def test_succeeded_run_without_predictions_key_says_so(world):
+    procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY})
+    cat, labels = axes["Anatomy"]
+    video_id = world.make_video(procedure_id, [(cat, labels["caecum"], 0, 3000)])
+    run_id = world.make_run(video_id, None)
+    response = _evaluate(run_id)
+    assert response.status_code == 409
+    assert response.json()["detail"] == f"Run {run_id} has no stored predictions"
+
+
+def test_missing_video_of_the_reference_is_404(world, monkeypatch):
+    _, run_id, _ = _scenario(world)
+
+    def missing(session, video_id):
+        raise reference_service.VideoNotFound(f"Video {video_id} not found")
+
+    monkeypatch.setattr(reference_service, "get_reference", missing)
+    response = _evaluate(run_id)
+    assert response.status_code == 404

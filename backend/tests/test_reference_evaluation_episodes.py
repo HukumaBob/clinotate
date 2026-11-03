@@ -166,3 +166,41 @@ def test_core_fields_carried_through_and_empty_input():
     assert ev.transitions.reference == 1
     assert ev.transitions.median_lag_ms is None
     assert ev.transitions.never_switched == 1
+
+
+def test_prediction_matching_b_only_after_b_ends_gives_no_lag():
+    intervals = [
+        EvalInterval(0, 1000, "a"),
+        EvalInterval(1000, 2000, "b"),
+        EvalInterval(2000, 3000, "c"),
+    ]
+    frames = frames_of([(0, "a"), (1000, "a"), (1500, "a"), (2500, "b")])
+    ev = evaluate_axis(frames, intervals, ["a", "b", "c"], ["a", "b", "c"], 0)
+    assert ev.transitions.lags[0].to_label == "b"
+    assert ev.transitions.lags[0].lag_ms is None
+
+
+def test_multi_frame_episode_mean_and_max_confidence():
+    intervals = [EvalInterval(0, 2000, "a")]
+    frames = [EvalFrame(0, "b", 0.5), EvalFrame(500, "b", 0.6)]
+    ev = evaluate_axis(frames, intervals, ["a", "b"], ["a"], 0)
+    (episode,) = ev.episodes
+    assert episode.frames == 2
+    assert episode.mean_confidence == pytest.approx(0.55)
+    assert episode.max_confidence == pytest.approx(0.6)
+
+
+def test_two_classes_swapping_at_the_boundary():
+    intervals = [EvalInterval(0, 3000, "x"), EvalInterval(3000, 6000, "y")]
+    predicted = ["x"] * 4 + ["y"] * 2 + ["x"] * 2 + ["y"] * 4
+    frames = [EvalFrame(i * 500, p, 0.9) for i, p in enumerate(predicted)]
+    ev = evaluate_axis(frames, intervals, ["x", "y"], ["x", "y"], 2000)
+    assert ev.accuracy == pytest.approx(8 / 12)
+    assert [(e.start_ms, e.end_ms, e.truth, e.predicted, e.frames, e.kind)
+            for e in ev.episodes] == [
+        (2000, 2500, "x", "y", 2, "boundary"),
+        (3000, 3500, "y", "x", 2, "boundary"),
+    ]
+    t = ev.transitions
+    assert (t.model_switches, t.reference, t.excess_switches) == (3, 1, 2)
+    assert [l.lag_ms for l in t.lags] == [1000]
