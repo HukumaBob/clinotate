@@ -186,6 +186,54 @@ describe("EpisodeCommitDialog", () => {
     expect(send()).toBeEnabled();
   });
 
+  it("clears a failed commit's error when step, margin or name change", async () => {
+    renderDialog();
+    await settle();
+    await answer(dry()[0], preview());
+    const failCommit = async () => {
+      fireEvent.click(send());
+      await tick(5);
+      await fail(real()[real().length - 1], { detail: "Boom" });
+      expect(screen.getByRole("alert")).toHaveTextContent("Boom");
+    };
+    await failCommit();
+    fireEvent.change(screen.getByLabelText("Step (s)"), { target: { value: "2" } });
+    expect(screen.queryByText("Boom")).not.toBeInTheDocument();
+    await settle();
+    await answer(dry()[1], preview());
+    await failCommit();
+    fireEvent.change(screen.getByLabelText("Margin (s)"), { target: { value: "2" } });
+    expect(screen.queryByText("Boom")).not.toBeInTheDocument();
+    await settle();
+    await answer(dry()[2], preview());
+    await failCommit();
+    fireEvent.change(screen.getByLabelText("Sequence name"), { target: { value: "x" } });
+    expect(screen.queryByText("Boom")).not.toBeInTheDocument();
+  });
+
+  it("a 422 from the preview or the commit reloads the run's evaluation", async () => {
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    try {
+      renderDialog();
+      await settle();
+      dry()[0].resolve({ error: { detail: "No error episode starts at 1000 ms" }, response: { status: 422 } });
+      await tick(5);
+      expect(screen.getByRole("alert")).toHaveTextContent("No error episode starts at 1000 ms");
+      const keys = () => spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey);
+      expect(keys()).toEqual([["evaluation", 7]]);
+      fireEvent.change(screen.getByLabelText("Step (s)"), { target: { value: "2" } });
+      await settle();
+      await answer(dry()[1], preview());
+      fireEvent.click(send());
+      await tick(5);
+      real()[0].resolve({ error: { detail: "stale" }, response: { status: 422 } });
+      await tick(5);
+      expect(keys()).toEqual([["evaluation", 7], ["evaluation", 7]]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("locks the inputs and fires no preview while a commit is pending", async () => {
     renderDialog();
     await settle();

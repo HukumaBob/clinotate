@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -317,7 +317,8 @@ describe("EvaluationPanel", () => {
   });
 
   describe("episode selection", () => {
-    const box = (clock: string) => screen.getByRole("checkbox", { name: `Select episode at ${clock}` });
+    const box = (clock: string) =>
+      screen.getByRole("checkbox", { name: new RegExp(`^Select episode at ${clock}: Polyp to Fold`) });
     const count = (n: number) =>
       expect(screen.getByText(new RegExp(`^${n} episodes? selected`))).toBeInTheDocument();
     const send = () => screen.getByRole("button", { name: "Send to training…" });
@@ -327,7 +328,7 @@ describe("EvaluationPanel", () => {
       count(0);
       await userEvent.click(box("0:01"));
       count(1);
-      expect(screen.getByText(/^1 episode selected, 3 frames/)).toBeInTheDocument();
+      expect(screen.getByText(/^1 episode selected \(all axes\), 3 frames/)).toBeInTheDocument();
       await userEvent.click(box("0:05"));
       count(2);
       await userEvent.click(box("0:01"));
@@ -403,6 +404,43 @@ describe("EvaluationPanel", () => {
       expect(box("0:01")).toBeChecked();
     });
 
+    it("checkbox names say the time, the error and, with several axes, the axis", async () => {
+      renderPanel();
+      expect(screen.getByRole("checkbox", { name: "Select episode at 0:01: Polyp to Fold" })).toBeInTheDocument();
+      cleanup();
+      evalState = { data: makeEval([makeAxis(), makeAxis({ name: "Anatomy" })]) };
+      renderPanel();
+      expect(
+        screen.getByRole("checkbox", { name: "Select episode at 0:01: Polyp to Fold (Finding)" }),
+      ).toBeInTheDocument();
+    });
+
+    it("replacing axis A keeps the selection of an axis named A|B", async () => {
+      evalState = { data: makeEval([makeAxis({ name: "A" }), makeAxis({ name: "A|B" })]) };
+      renderPanel();
+      await userEvent.selectOptions(screen.getByLabelText("Axis"), "A|B");
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      count(3);
+      await userEvent.selectOptions(screen.getByLabelText("Axis"), "A");
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      count(6);
+      await userEvent.click(screen.getByRole("button", { name: "Select none" }));
+      count(3);
+      await userEvent.click(screen.getByRole("button", { name: "Interior only" }));
+      await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+      count(5);
+    });
+
+    it("Show more starts over when the sort changes", async () => {
+      const many = Array.from({ length: 250 }, (_, i) => ep(i * 1000, 1, 0.5));
+      evalState = { data: makeEval([makeAxis({ episodes: many })]) };
+      renderPanel();
+      await userEvent.click(screen.getByRole("button", { name: "Show more" }));
+      expect(screen.getAllByRole("checkbox")).toHaveLength(250);
+      await userEvent.click(screen.getByRole("button", { name: "Most confident first" }));
+      expect(screen.getAllByRole("checkbox")).toHaveLength(200);
+    });
+
     it("select all covers rows beyond the 200-row cap", async () => {
       const many = Array.from({ length: 250 }, (_, i) => ep(i * 1000, 1, 0.5));
       evalState = { data: makeEval([makeAxis({ episodes: many })]) };
@@ -455,6 +493,20 @@ describe("EvaluationPanel", () => {
 });
 
 describe("EvaluationPanel commit dialog", () => {
+  it("closes the dialog when the run changes", () => {
+    const panel = (runId: number) => (
+      <MemoryRouter>
+        <EvaluationPanel runId={runId} videoId={9} referenceState="ready" hasReference onSeek={vi.fn()} />
+      </MemoryRouter>
+    );
+    const view = render(panel(7));
+    fireEvent.click(screen.getAllByRole("checkbox", { name: /Select episode at/ })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Send to training…" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    view.rerender(panel(8));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("opens the dialog with the selection and clears it after a commit", () => {
     renderPanel();
     fireEvent.click(screen.getAllByRole("checkbox", { name: /Select episode at/ })[0]);
@@ -464,6 +516,6 @@ describe("EvaluationPanel commit dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "committed" }));
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByText("0 episodes selected")).toBeInTheDocument();
+    expect(screen.getByText("0 episodes selected (all axes)")).toBeInTheDocument();
   });
 });

@@ -68,6 +68,10 @@ export function EpisodeCommitDialog({
   locked.current = submitting || created !== null;
   const commitError = commit.error ? errorText(commit.error, "Could not send the frames.") : null;
   const sent = useVideoSent(videoId).data;
+  // A failed commit's error is stale once the user changes what would be sent.
+  const clearCommitError = () => {
+    if (commit.isError) commit.reset();
+  };
 
   const stepMs = parseSeconds(step, 0.1, 60);
   const marginMs = parseSeconds(margin, 0, 60);
@@ -189,7 +193,10 @@ export function EpisodeCommitDialog({
               value={name}
               placeholder="Default name (server-generated)"
               disabled={submitting}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                clearCommitError();
+                setName(e.target.value);
+              }}
               className="mb-3 w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-100"
             />
 
@@ -204,7 +211,10 @@ export function EpisodeCommitDialog({
                   step={0.1}
                   value={step}
                   disabled={submitting}
-                  onChange={(e) => setStep(e.target.value)}
+                  onChange={(e) => {
+                    clearCommitError();
+                    setStep(e.target.value);
+                  }}
                   className={field}
                 />
               </label>
@@ -218,7 +228,10 @@ export function EpisodeCommitDialog({
                   step={0.5}
                   value={margin}
                   disabled={submitting}
-                  onChange={(e) => setMargin(e.target.value)}
+                  onChange={(e) => {
+                    clearCommitError();
+                    setMargin(e.target.value);
+                  }}
                   className={field}
                 />
               </label>

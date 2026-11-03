@@ -106,8 +106,12 @@ export function EvaluationPanel({
   }, [query.data, axisName]);
   const episodes = useMemo(() => (axis ? sortEpisodes(axis.episodes, sort) : []), [axis, sort]);
 
-  // A new run starts with nothing selected.
-  useEffect(() => setSelection((prev) => (prev.size === 0 ? prev : new Set())), [runId]);
+  // A new run starts with nothing selected and no dialog: an open dialog
+  // must never send the old run's keys for the new run.
+  useEffect(() => {
+    setSelection((prev) => (prev.size === 0 ? prev : new Set()));
+    setSendKeys(null);
+  }, [runId]);
   // An evaluation that changes under the user must not leave ghost keys behind.
   const loaded = query.data;
   useEffect(() => {
@@ -287,6 +291,8 @@ export function EvaluationPanel({
             onSeek={onSeek}
             summary={summary}
             onSend={setSendKeys}
+            sortMode={sort}
+            multipleAxes={query.data.axes.length > 1}
           />
         </div>
       )}

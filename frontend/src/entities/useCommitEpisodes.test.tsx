@@ -59,8 +59,46 @@ describe("useCommitEpisodes", () => {
       await result.current.mutateAsync(vars);
     });
     const keys = spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey);
-    expect(keys).toContainEqual(["video-sent", 9]);
-    expect(keys).toContainEqual(["video-sequences", 9]);
+    expect(keys).toEqual([
+      ["video-sent", 9],
+      ["video-sequences", 9],
+      ["sequences"],
+      ["sequences-list"],
+      ["sequences-stats"],
+      ["media-library"],
+    ]);
+  });
+
+  it("a failed commit and a failed dry run invalidate nothing", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      error: { detail: "down" }, response: { status: 500 },
+    } as never);
+    const { wrapper, spy } = setup();
+    const { result } = renderHook(() => useCommitEpisodes(7, 9), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync(vars).catch(() => {});
+      await result.current.mutateAsync({ ...vars, dryRun: true }).catch(() => {});
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("a 422 (stale or unknown key) reloads this run's evaluation only", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValue({
+      error: { detail: "No error episode starts at 1 ms" }, response: { status: 422 },
+    } as never);
+    const { wrapper, spy } = setup();
+    const { result } = renderHook(() => useCommitEpisodes(7, 9), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ ...vars, dryRun: true }).catch(() => {});
+    });
+    await act(async () => {
+      await result.current.mutateAsync(vars).catch(() => {});
+    });
+    const keys = spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey);
+    expect(keys).toEqual([
+      ["evaluation", 7],
+      ["evaluation", 7],
+    ]);
   });
 
   it("throws the server error", async () => {

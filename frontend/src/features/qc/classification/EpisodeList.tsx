@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { formatClock } from "../analysis/strip";
 import type { Episode } from "./evaluationLogic";
-import { episodeKey, filterSelection } from "./episodeSelection";
+import { episodeKey, filterSelection, toRequestEpisodes } from "./episodeSelection";
 
 const EPISODE_CAP = 200;
 
@@ -17,6 +17,15 @@ export interface EpisodeListProps {
   /** Episodes and evaluated frames of the whole selection, for the footer. */
   summary: { episodes: number; frames: number };
   onSend?: (keys: string[]) => void;
+  /** The display order; "Show more" starts over when it changes. */
+  sortMode?: string;
+  /** Several axes exist: checkbox names then say the axis too. */
+  multipleAxes?: boolean;
+}
+
+/** The axis a key belongs to, compared exactly (an axis name may contain "|"). */
+function axisOf(key: string): string | undefined {
+  return toRequestEpisodes([key])[0]?.axis;
 }
 
 /** Number input text to a number, or null when empty or not a finite number. */
@@ -38,6 +47,8 @@ export function EpisodeList({
   onSeek,
   summary,
   onSend,
+  sortMode,
+  multipleAxes = false,
 }: EpisodeListProps) {
   const [shown, setShown] = useState(EPISODE_CAP);
   const [interiorOnly, setInteriorOnly] = useState(false);
@@ -45,15 +56,16 @@ export function EpisodeList({
   const [minConfidence, setMinConfidence] = useState("");
 
   const [lastAxis, setLastAxis] = useState(axisName);
-  if (lastAxis !== axisName) {
+  const [lastSort, setLastSort] = useState(sortMode);
+  if (lastAxis !== axisName || lastSort !== sortMode) {
     setLastAxis(axisName);
+    setLastSort(sortMode);
     setShown(EPISODE_CAP);
   }
 
-  const axisPrefix = `${axisName}|`;
   /** The selection with this axis's keys replaced by `keys`. */
   const replaceAxis = (keys: string[]) => {
-    const next = new Set([...selection].filter((k) => !k.startsWith(axisPrefix)));
+    const next = new Set([...selection].filter((k) => axisOf(k) !== axisName));
     for (const k of keys) next.add(k);
     onSelectionChange(next);
   };
@@ -145,7 +157,9 @@ export function EpisodeList({
                 >
                   <input
                     type="checkbox"
-                    aria-label={`Select episode at ${formatClock(e.start_ms)}`}
+                    aria-label={`Select episode at ${formatClock(e.start_ms)}: ${e.truth} to ${e.predicted}${
+                      multipleAxes ? ` (${axisName})` : ""
+                    }`}
                     className="mt-1 shrink-0"
                     checked={selection.has(key)}
                     onChange={() => toggle(key)}
@@ -175,7 +189,7 @@ export function EpisodeList({
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-800 pt-2 text-xs">
         <span className="text-gray-400">
-          {summary.episodes} {summary.episodes === 1 ? "episode" : "episodes"} selected
+          {summary.episodes} {summary.episodes === 1 ? "episode" : "episodes"} selected (all axes)
           {summary.episodes > 0 && `, ${summary.frames} ${summary.frames === 1 ? "frame" : "frames"}`}
         </span>
         <button

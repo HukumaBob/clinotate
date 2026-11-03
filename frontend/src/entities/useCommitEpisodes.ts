@@ -32,7 +32,14 @@ export function useCommitEpisodes(
           dry_run: vars.dryRun,
         },
       });
-      if (result.error) throw result.error;
+      if (result.error) {
+        // A 422 usually means a selected episode is stale or unknown: reload
+        // this run's evaluation so the panel shows the current episodes.
+        if (result.response?.status === 422) {
+          void queryClient.invalidateQueries({ queryKey: ["evaluation", runId] });
+        }
+        throw result.error;
+      }
       return result.data as CommitEpisodesRead;
     },
     onSuccess: (data, vars) => {
@@ -40,6 +47,9 @@ export function useCommitEpisodes(
       void queryClient.invalidateQueries({ queryKey: ["video-sent", videoId ?? null] });
       void queryClient.invalidateQueries({ queryKey: ["video-sequences", videoId ?? null] });
       void queryClient.invalidateQueries({ queryKey: ["sequences"] });
+      void queryClient.invalidateQueries({ queryKey: ["sequences-list"] });
+      void queryClient.invalidateQueries({ queryKey: ["sequences-stats"] });
+      void queryClient.invalidateQueries({ queryKey: ["media-library"] });
       options?.onSuccess?.(data);
     },
   });
