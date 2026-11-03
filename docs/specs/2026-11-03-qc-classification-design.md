@@ -1,6 +1,6 @@
 # QC screen: classification, sub-project 1 of 4
 
-Date: 2026-11-03. Status: draft, awaiting approval. Builds on
+Date: 2026-11-03. Status: implemented on master 2026-11-03, live-checked on one axis only (see ROADMAP). Builds on
 [inference runs](2026-10-06-qc-inference-runs-design.md),
 [inspection](2026-10-06-qc-inspection-design.md) and
 [frame classification labeling](../superpowers/specs/2026-08-13-sequence-grid-frame-classification-design.md).

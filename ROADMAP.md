@@ -1577,6 +1577,81 @@ flicker events is never empty; covered by a unit test).
 on #82 spans 47 s and 1416 frames), which is not "a clip" any more; consider capping the
 clip length or splitting long chains. Sub-project 5B and 5C as above.
 
+### Phase 3: QC screen, classification sub-project 1 (classification in QC runs) — DONE (2026-11-03, live-checked on one axis only)
+
+Design: [docs/specs/2026-11-03-qc-classification-design.md](docs/specs/2026-11-03-qc-classification-design.md).
+Plan: [docs/plans/2026-11-03-qc-classification.md](docs/plans/2026-11-03-qc-classification.md).
+Commits `f0c7511` (docs), `227c9e4`, `78a6d11`, `bcdacf1`, `97bbf87`, `6a885fc`, `4f0ce38`,
+`52b1f09`, `635d65e`, `876386d`, then the review fixes `712c8b9` and `5af33b7`. Not pushed.
+
+Sub-project 1 of 4 of "classification in QC", in order: (1) classification in QC runs
+(this one), (2) reference labeling (intervals on per-axis lanes, clean/compromised
+status), (3) evaluation against the reference, (4) dataset from error episodes. Parts
+2-4 are not started; part 1 stores probabilities and its lanes accept an optional
+reference so they can be added.
+
+**Built:** `InferenceRun.axes` (nullable JSON snapshot, migration `b2c3d4e5f6a7`; non-null
+means a classification run). `POST /inference/runs` accepts
+`classifiers: [{model_version_id, name?, category_id?}]` (exactly one of
+`model_version_id` / `classifiers`; 1 to 6 axes, unique stripped names, Ultralytics
+classification versions only, DINOv3 refused with 422). The axis name is inferred from
+the taxonomy (`backend/app/inference/axes.py`) as the category owning most of the model's
+class names, because the only real model mixes Anatomy classes with `outside_the_body`
+from Artifacts. Flags, commit and compare answer 409 for classification runs. The
+ml-worker `classification_adapter.py` decodes each frame once, runs every axis model on
+it and stores the top class, its confidence and rounded probabilities, inside the same
+`inference_run` Celery task. `/qc/:runId` is chosen by `RunRoute` (classification page vs
+the untouched detection page): one badge per axis over the video, one lane per axis
+(run-length segments, class time shares, change count), blip ticks, and `[` / `]` step
+through the merged blips of all axes; the blip window is the remembered `flickerN`.
+
+**Blip rule:** a stretch of at most N processed frames whose two neighbours carry the
+same other label (A B A). A B C is a transition. Stretches touching the video start or
+end are never blips.
+
+**Deviations from the spec (my calls):**
+- An axis is a name plus the model's class list, not forced to be a taxonomy Category.
+- The run form does not preview the inferred axis name (the spec said it would); it has
+  an optional name field instead.
+- `task_type` on `InferenceRunRead` is null for detection runs.
+- `ClassifierSpec.category_id` is stored unvalidated; validate it before sub-project 3
+  relies on it.
+- No per-axis frame stride (that belongs to the clinical application).
+- `isCoarseWindow` was extracted from `flicker.ts` and `usePredictions` made generic.
+
+**Review:** the final whole-branch review found one Important bug: selecting two
+classification runs and pressing Compare crashed the whole app, because
+`AbComparePage` used a cached classification document. Fixed with a `comparability()`
+refusal plus a guard in `AbComparePage` (`712c8b9`), together with the empty EventNav
+text, a stale blip highlight and axis-name stripping (`5af33b7`).
+
+**Live check (2026-11-03):** model `yolo11n-cls-run528` (anatomy + outside_the_body) on
+video `polyposis` (28 s), stride 1: 847 frames in about 19 s in the ml-worker container,
+run succeeded. The run page showed the badge, one lane ("79 changes", 25 blips at window
+2, class shares); `]` jumped to 9.2 s with the badge and active highlight updating; no
+console errors. The detection run page (#133) still renders with flags, reels and
+sliders. The test run was deleted afterwards (row, job and MinIO object).
+
+**Not verified live:** more than one axis (only one classification model exists; mode and
+quality models were never trained); GPU/VRAM with several axis models; a very long and
+noisy video (lanes render one element per segment/blip, unmeasured); `[` and lane-click
+seek and the A/B refusal in a real browser (unit tests only); a rebuilt image.
+
+**Things learned the hard way:** the running `ml-worker` container got the new code by
+`docker cp` of `ml-worker/app` plus a restart; the image was NOT rebuilt, so recreating
+the container loses the code until `docker compose build ml-worker`. A worker started
+before the code update fails classification jobs with `KeyError 'weights_key'` (the old
+detection-only task); run #164 on the dev DB is exactly that failed run (created
+2026-11-03 08:19 by the manualcheck login before the worker restart) and was left for
+the user to delete. The first task's migration was applied to the dev DB
+(`alembic upgrade head`). Known pre-existing failing test:
+`backend/tests/test_inference_api.py::test_deleting_a_video_that_has_qc_runs_is_refused`
+(message text "1 QC run" vs asserted "QC runs").
+
+**Deferred:** no mode-switch tests for the run form; EventNav/AbComparePage document
+typing (a cast instead of a discriminated union); `category_id` validation. Parts 2-4
+as above.
+
 ### Phase 2b: Train screen — DONE (2026-08-20)
 
 Brainstorming began on the Train screen and the `training` module. No spec

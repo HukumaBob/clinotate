@@ -8,6 +8,14 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 
 ## [Unreleased]
 
+### Added
+- QC classification runs: a QC run can use one to six Ultralytics classification models
+  (one axis each) instead of a detector. `/qc/:runId` then shows a badge per axis over the
+  video, one lane per axis (segments, class time shares, change count) and blip ticks
+  (a short A B A stretch), with `[` / `]` stepping through the blips. Flags, commit and
+  A/B compare are refused for these runs. `InferenceRun` gains a nullable `axes` column
+  (migration `b2c3d4e5f6a7`); `POST /inference/runs` accepts `classifiers`.
+
 ## [0.3.1] - 2026-11-03
 
 ### Fixed
