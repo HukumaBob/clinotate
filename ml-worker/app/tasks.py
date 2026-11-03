@@ -1056,6 +1056,7 @@ def _run_detection(job, storage, work: Path, video_path: Path, adapter, on_progr
             task_type=job.payload["task_type"],
             frame_stride=job.payload["frame_stride"],
             perturbation=job.payload.get("perturbation"),
+            crop_box=job.payload.get("crop_box"),
         ),
         on_progress=on_progress,
     )
@@ -1073,6 +1074,8 @@ def _run_detection(job, storage, work: Path, video_path: Path, adapter, on_progr
     }
     if result.timing is not None:
         document["timing"] = result.timing
+    if job.payload.get("crop_box") is not None:
+        document["crop_box"] = job.payload["crop_box"]
     return document
 
 
@@ -1094,10 +1097,11 @@ def _run_classification(
             axes=axes,
             frame_stride=job.payload["frame_stride"],
             perturbation=job.payload.get("perturbation"),
+            crop_box=job.payload.get("crop_box"),
         ),
         on_progress=on_progress,
     )
-    return {
+    document = {
         "task_type": "classification",
         "fps": result.fps,
         "frame_stride": job.payload["frame_stride"],
@@ -1105,6 +1109,9 @@ def _run_classification(
         "axes": result.axes,
         "frames": result.frames,
     }
+    if job.payload.get("crop_box") is not None:
+        document["crop_box"] = job.payload["crop_box"]
+    return document
 
 
 @celery_app.task(name="inference_run")

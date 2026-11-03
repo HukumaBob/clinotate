@@ -210,3 +210,65 @@ def test_the_perturbation_is_applied_before_the_model_sees_the_frame(tmp_path):
     request.perturbation = {"kind": "brightness", "strength": 50}
     _adapter(bright).infer(request, lambda done, total: None)
     assert all(b > p + 20 for b, p in zip(bright.means, plain.means))
+
+
+class _ShapeRecordingModel(_FakeModel):
+    def __init__(self, results_by_call=None):
+        super().__init__(results_by_call)
+        self.shapes = []
+
+    def __call__(self, image, conf, verbose):
+        self.shapes.append(image.shape)
+        return super().__call__(image, conf, verbose)
+
+
+def _crop_request(video, crop_box, task_type="detection"):
+    request = _request(video, 1, task_type)
+    request.crop_box = crop_box
+    return request
+
+
+def test_the_model_sees_the_cropped_frame_and_boxes_come_back_in_full_frame_coordinates(tmp_path):
+    video = _write_video(tmp_path / "v.avi", frames=1)  # 64x48
+    model = _ShapeRecordingModel(
+        {0: _Result(boxes=_Boxes([[0.0, 0.0, 1.0, 1.0]], [0.9], [0]))}
+    )
+    crop = {"left": 25, "right": 0, "top": 0, "bottom": 0}
+
+    result = _adapter(model).infer(_crop_request(video, crop), lambda done, total: None)
+
+    assert model.shapes[0][:2] == (48, 48)  # 64 wide minus 25 % = 48
+    assert result.frames["0"]["detections"][0]["bbox"] == pytest.approx([0.25, 0.0, 0.75, 1.0])
+
+
+def test_polygons_are_remapped_to_full_frame_coordinates(tmp_path):
+    video = _write_video(tmp_path / "v.avi", frames=1)
+    model = _ShapeRecordingModel(
+        {
+            0: _Result(
+                boxes=_Boxes([[0.0, 0.0, 1.0, 1.0]], [0.9], [0]),
+                masks=_Masks([[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]]]),
+            )
+        }
+    )
+    crop = {"left": 25, "right": 0, "top": 0, "bottom": 0}
+
+    result = _adapter(model).infer(
+        _crop_request(video, crop, "segmentation"), lambda done, total: None
+    )
+
+    polygon = result.frames["0"]["detections"][0]["polygon"]
+    assert [pytest.approx(point) for point in [[0.25, 0.0], [1.0, 0.0], [1.0, 1.0]]] == polygon
+
+
+@pytest.mark.parametrize("crop", [None, {"left": 0, "right": 0, "top": 0, "bottom": 0}])
+def test_no_crop_and_a_zero_crop_leave_frames_and_boxes_untouched(tmp_path, crop):
+    video = _write_video(tmp_path / "v.avi", frames=1)
+    model = _ShapeRecordingModel(
+        {0: _Result(boxes=_Boxes([[0.2, 0.4, 0.5, 0.9]], [0.9], [0]))}
+    )
+
+    result = _adapter(model).infer(_crop_request(video, crop), lambda done, total: None)
+
+    assert model.shapes[0][:2] == (48, 64)
+    assert result.frames["0"]["detections"][0]["bbox"] == pytest.approx([0.2, 0.4, 0.3, 0.5], abs=1e-4)

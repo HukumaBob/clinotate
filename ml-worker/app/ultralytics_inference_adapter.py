@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 import cv2
 
+from app.crop import crop_frame, crop_rect, remap_bbox, remap_point
 from app.inference_adapter import InferenceRequest, InferenceResult
 from app.inference_timing import summarize_timing
 from app.perturbation import apply_perturbation
@@ -53,6 +54,19 @@ def _detections_from(result: Any, task_type: str) -> list[dict]:
     return detections
 
 
+def _remap_detections(detections: list[dict], rect, width: int, height: int) -> None:
+    """Crop-normalised boxes and polygons to full-frame-normalised, in place."""
+    for detection in detections:
+        detection["bbox"] = [
+            round(value, _BOX_DIGITS) for value in remap_bbox(detection["bbox"], rect, width, height)
+        ]
+        if "polygon" in detection:
+            detection["polygon"] = [
+                [round(value, _BOX_DIGITS) for value in remap_point(x, y, rect, width, height)]
+                for x, y in detection["polygon"]
+            ]
+
+
 class UltralyticsInferenceAdapter:
     name = "ultralytics_yolo"
 
@@ -90,6 +104,9 @@ class UltralyticsInferenceAdapter:
                 if index % request.frame_stride == 0:
                     ok, image = capture.retrieve()
                     if ok:
+                        full_height, full_width = image.shape[:2]
+                        rect = crop_rect(full_width, full_height, request.crop_box)
+                        image = crop_frame(image, request.crop_box)
                         image = apply_perturbation(image, request.perturbation, seed=index)
                         position_ms = capture.get(cv2.CAP_PROP_POS_MSEC)
                         if position_ms and position_ms > 0:
@@ -102,9 +119,12 @@ class UltralyticsInferenceAdapter:
                             timing_samples.append(
                                 {stage: speed.get(stage) for stage in ("preprocess", "inference", "postprocess")}
                             )
+                        detections = _detections_from(results[0], request.task_type)
+                        if request.crop_box is not None:
+                            _remap_detections(detections, rect, full_width, full_height)
                         frames[str(index)] = {
                             "timestamp_ms": timestamp_ms,
-                            "detections": _detections_from(results[0], request.task_type),
+                            "detections": detections,
                         }
                         on_progress(len(frames), max(total, len(frames)))
                 index += 1

@@ -417,7 +417,9 @@ def make_inference_job(db_session):
 
     created: list[tuple[int, int, int]] = []
 
-    def _make(frame_stride: int = 2, perturbation: dict | None = None):
+    def _make(
+        frame_stride: int = 2, perturbation: dict | None = None, crop_box: dict | None = None
+    ):
         user_id = _existing_row_id(db_session, "users")
         video_id = db_session.execute(
             text(
@@ -452,6 +454,7 @@ def make_inference_job(db_session):
                 "task_type": "detection",
                 "frame_stride": frame_stride,
                 "perturbation": perturbation,
+                "crop_box": crop_box,
             },
             created_by_id=user_id,
         )

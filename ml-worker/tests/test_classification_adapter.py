@@ -35,9 +35,11 @@ class _FakeModel:
         self._probs = probs
         self.calls = 0
         self.means = []
+        self.shapes = []
 
     def __call__(self, image, verbose):
         self.calls += 1
+        self.shapes.append(image.shape)
         self.means.append(float(np.mean(image)))
         return [_Result(self._probs)]
 
@@ -60,12 +62,13 @@ def _models():
     }
 
 
-def _request(video, stride=1, perturbation=None):
+def _request(video, stride=1, perturbation=None, crop_box=None):
     return ClassificationRequest(
         video_path=video,
         axes=[AxisWeights("cleanliness", Path("a.pt")), AxisWeights("sharpness", Path("b.pt"))],
         frame_stride=stride,
         perturbation=perturbation,
+        crop_box=crop_box,
     )
 
 
@@ -135,3 +138,30 @@ def test_each_model_loaded_once(tmp_path):
     loader = _loader(_models())
     UltralyticsClassificationAdapter(model_loader=loader).infer(_request(video), lambda p, t: None)
     assert loader.loaded == ["a.pt", "b.pt"]
+
+
+def test_every_axis_model_sees_the_cropped_frame(tmp_path):
+    video = _write_video(tmp_path / "v.avi", frames=2)  # 64x48
+    models = _models()
+    crop = {"left": 25, "right": 0, "top": 0, "bottom": 0}
+
+    UltralyticsClassificationAdapter(model_loader=_loader(models)).infer(
+        _request(video, crop_box=crop), lambda p, t: None
+    )
+
+    for model in models.values():
+        assert [shape[:2] for shape in model.shapes] == [(48, 48), (48, 48)]
+
+
+def test_the_perturbation_is_applied_after_the_crop(tmp_path):
+    video = _write_video(tmp_path / "v.avi", frames=2)
+    models = _models()
+    crop = {"left": 25, "right": 0, "top": 0, "bottom": 0}
+
+    UltralyticsClassificationAdapter(model_loader=_loader(models)).infer(
+        _request(video, perturbation={"kind": "blur", "strength": 2}, crop_box=crop),
+        lambda p, t: None,
+    )
+
+    # A blur keeps the shape it is given, so the model sees the cropped size.
+    assert models["a.pt"].shapes[0][:2] == (48, 48)

@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 import cv2
 
+from app.crop import crop_frame
 from app.perturbation import apply_perturbation
 
 _PROB_DIGITS = 3
@@ -36,6 +37,8 @@ class ClassificationRequest:
     frame_stride: int
     # Stress test: {"kind", "strength"} applied to each frame before the models.
     perturbation: dict | None = None
+    # Working area cut from every frame before the models (see crop.py).
+    crop_box: dict | None = None
 
 
 @dataclass
@@ -92,6 +95,7 @@ class UltralyticsClassificationAdapter:
                 if index % request.frame_stride == 0:
                     ok, image = capture.retrieve()
                     if ok:
+                        image = crop_frame(image, request.crop_box)
                         image = apply_perturbation(image, request.perturbation, seed=index)
                         position_ms = capture.get(cv2.CAP_PROP_POS_MSEC)
                         if position_ms and position_ms > 0:

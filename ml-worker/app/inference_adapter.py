@@ -23,6 +23,10 @@ class InferenceRequest:
     confidence_floor: float = 0.05
     # Stress test: {"kind", "strength"} applied to each frame before the model.
     perturbation: dict | None = None
+    # Working area: percent insets cut from every frame before the model, as
+    # training frames were. Boxes and polygons in the result are mapped back
+    # to full-frame normalised coordinates. None = the whole frame.
+    crop_box: dict | None = None
 
 
 @dataclass

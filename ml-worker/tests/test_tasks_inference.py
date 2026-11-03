@@ -310,6 +310,7 @@ def _make_classification_job(make_inference_job, db_session, **kwargs):
         "model_name": "quality-and-prep",
         "frame_stride": job.payload["frame_stride"],
         "perturbation": job.payload.get("perturbation"),
+        "crop_box": job.payload.get("crop_box"),
         "axes": [
             {"name": "quality", "weights_key": "models/7/best.pt", "classes": ["bad", "good"]},
             {"name": "prep", "weights_key": "models/8/best.pt", "classes": ["clean", "dirty"]},
@@ -437,3 +438,49 @@ def test_the_default_adapter_follows_the_payload_task_type(
 
     assert chosen == ["classification"]
     assert run.status == InferenceRunStatus.SUCCEEDED
+
+
+WORKING_AREA = {"left": 25, "right": 0, "top": 0, "bottom": 0}
+
+
+def test_the_crop_box_reaches_the_detection_adapter_and_the_document(
+    db_session, make_inference_job, fake_storage
+):
+    from app.tasks import inference_run
+
+    job, run = make_inference_job(crop_box=WORKING_AREA)
+    adapter = _StubAdapter()
+
+    inference_run(job.id, adapter=adapter)
+
+    assert adapter.requests[0].crop_box == WORKING_AREA
+    document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
+    assert document["crop_box"] == WORKING_AREA
+
+
+def test_a_run_without_a_crop_box_writes_no_crop_key(db_session, make_inference_job, fake_storage):
+    from app.tasks import inference_run
+
+    job, run = make_inference_job()
+    adapter = _StubAdapter()
+
+    inference_run(job.id, adapter=adapter)
+
+    assert adapter.requests[0].crop_box is None
+    document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
+    assert "crop_box" not in document
+
+
+def test_the_crop_box_reaches_the_classification_adapter_and_the_document(
+    db_session, make_inference_job, fake_storage
+):
+    from app.tasks import inference_run
+
+    job, run = _make_classification_job(make_inference_job, db_session, crop_box=WORKING_AREA)
+    adapter = _StubClassifier()
+
+    inference_run(job.id, adapter=adapter)
+
+    assert adapter.requests[0].crop_box == WORKING_AREA
+    document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
+    assert document["crop_box"] == WORKING_AREA
