@@ -80,3 +80,47 @@ def test_labels_at_boundaries_and_axes():
     assert labels_at(3800, intervals) == [(1, 10)]
     assert labels_at(4200, intervals) == []
     assert labels_at(5, []) == []
+
+
+def test_grid_is_anchored_at_the_episode_start():
+    # margin 1000 is not a multiple of step 2000: the mistaken frame at 14000
+    # must still be sampled; 12000 and 16000 lie outside 13000..15000.
+    processed = every(500, 30000)
+    got = sample_frames([EpisodeSpan("A", 14000, 14000)], processed, 2000, 1000)
+    assert [f.ts_ms for f in got] == [14000]
+
+
+def test_anchored_grid_step_1000_margin_500():
+    processed = every(500, 30000)
+    got = sample_frames([EpisodeSpan("A", 14000, 16000)], processed, 1000, 500)
+    # window 13500..16500 -> 14000, 15000, 16000
+    assert [f.ts_ms for f in got] == [14000, 15000, 16000]
+
+
+def test_anchored_grid_margin_zero():
+    processed = every(100, 10000)
+    got = sample_frames([EpisodeSpan("A", 2300, 4700)], processed, 1000, 0)
+    assert [f.ts_ms for f in got] == [2300, 3300, 4300]
+
+
+def test_anchored_grid_long_episode():
+    processed = every(100, 60000)
+    got = sample_frames([EpisodeSpan("A", 10050, 40050)], processed, 5000, 2500)
+    # instants 10050 + k*5000 within 7550..42550: 10050 .. 40050 (7 instants);
+    # each lands on the nearest 100-ms frame, the tie at 50 going lower.
+    assert [f.ts_ms for f in got] == [10000, 15000, 20000, 25000, 30000, 35000, 40000]
+
+
+def test_anchored_grid_skips_instants_below_zero():
+    processed = every(100, 10000)
+    got = sample_frames([EpisodeSpan("A", 700, 700)], processed, 500, 1500)
+    # window -800..2200 anchored at 700: -300 skipped; 200, 700, 1200, 1700, 2200
+    assert [f.ts_ms for f in got] == [200, 700, 1200, 1700, 2200]
+
+
+def test_anchored_overlapping_episodes_still_collapse():
+    processed = every(100, 10000)
+    eps = [EpisodeSpan("A", 2000, 3000), EpisodeSpan("B", 2500, 3000)]
+    got = sample_frames(eps, processed, 1000, 500)
+    # A: 2000, 3000; B: 2500, 3500 (window 2000..3500); 2000/3000 appear once
+    assert [f.ts_ms for f in got] == [2000, 2500, 3000, 3500]

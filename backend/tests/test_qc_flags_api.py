@@ -594,7 +594,8 @@ def test_a_qc_sequence_cannot_be_recut_but_can_be_renamed(committed_inference_ro
     renamed = client.patch(f"/media/sequences/{sequence_id}", headers=headers, json={"name": "renamed"})
 
     assert recut.status_code == 409
-    assert "QC flags" in recut.json()["detail"]
+    assert "made from QC;" in recut.json()["detail"]
+    assert "QC flags" not in recut.json()["detail"]
     assert renamed.status_code == 200
     assert renamed.json()["name"] == "renamed"
     session = db_module.SessionLocal()

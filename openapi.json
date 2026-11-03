@@ -5406,6 +5406,16 @@
               }
             }
           },
+          "200": {
+            "description": "Dry run: counts only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitEpisodesRead"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {

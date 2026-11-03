@@ -120,6 +120,7 @@ def evaluate_run(
     "/runs/{run_id}/commit-episodes",
     response_model=CommitEpisodesRead,
     status_code=status.HTTP_201_CREATED,
+    responses={200: {"model": CommitEpisodesRead, "description": "Dry run: counts only"}},
 )
 def commit_episodes(
     run_id: int,

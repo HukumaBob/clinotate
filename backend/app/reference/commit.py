@@ -19,7 +19,9 @@ from app.reference.schemas import CommitEpisodesRead, CommitEpisodesRequest
 from app.storage import StorageService
 from app.taxonomy.models import Label
 
-MAX_COMMIT_FRAMES = 2000
+# Every cut frame's PNG is held in memory before upload (about 0.5-1 MB each),
+# in one synchronous request; streaming each frame to storage is the real fix.
+MAX_COMMIT_FRAMES = 500
 
 
 class InvalidSelection(Exception):
@@ -55,8 +57,10 @@ def sample_frames(
 ) -> list[ProcessedFrame]:
     """Pick the processed frames nearest to a regular grid around each episode.
 
-    For each episode the instants are ``start - margin + k * step`` while
-    ``t <= end + margin``; instants below 0 are skipped. Each instant takes the
+    The grid is anchored at the episode start, so its first frame (the
+    mistake itself) is always an instant: for each episode the instants are
+    ``start + k * step`` for every integer k (negative k included) with
+    ``start - margin <= t <= end + margin``; instants below 0 are skipped. Each instant takes the
     nearest processed frame (ties go to the lower timestamp) if it lies within
     ``step_ms / 2`` (inclusive), otherwise nothing. The result is deduplicated
     by frame and ascending by timestamp.
@@ -69,8 +73,9 @@ def sample_frames(
     stamps = [f.ts_ms for f in frames]
     picked: dict[int, ProcessedFrame] = {}
     for ep in episodes:
-        t = ep.start_ms - margin_ms
         last = ep.end_ms + margin_ms
+        # the smallest start + k * step that is >= start - margin (k <= 0)
+        t = ep.start_ms - (margin_ms // step_ms) * step_ms
         while t <= last:
             if t >= 0:
                 i = bisect_left(stamps, t)
@@ -117,11 +122,22 @@ def commit_episodes(
     if not request.episodes:
         raise InvalidSelection("No episodes selected")
 
-    by_axis = {axis.name: axis for axis in ctx.axes if axis.reference_axis is not None}
+    by_axis: dict = {}
+    ambiguous: set[str] = set()
+    for axis in ctx.axes:
+        if axis.reference_axis is None:
+            continue
+        if axis.name in by_axis:
+            ambiguous.add(axis.name)
+        by_axis[axis.name] = axis
     known: dict[str, dict[int, EpisodeSpan]] = {}
     spans: list[EpisodeSpan] = []
     selected: set[tuple[str, int]] = set()
     for key in request.episodes:
+        if key.axis in ambiguous:
+            raise InvalidSelection(
+                f"Axis name {key.axis!r} is ambiguous: several model axes share it"
+            )
         axis = by_axis.get(key.axis)
         if axis is None:
             raise InvalidSelection(f"Unknown or unmatched axis {key.axis!r}")
@@ -151,7 +167,7 @@ def commit_episodes(
         processed = [
             ProcessedFrame(index, frame.ts_ms)
             for index, frame in zip(axis.frame_indices, axis.frames)
-            if index is not None
+            if index is not None and index >= 0
         ]
         for frame in sample_frames(
             [s for s in spans if s.axis == name], processed, request.step_ms, request.margin_ms
@@ -159,10 +175,23 @@ def commit_episodes(
             picked[frame.frame_index] = frame
     sampled = sorted(picked.values(), key=lambda f: (f.frame_index, f.ts_ms))
 
+    # Abstract labels are never annotated: their intervals do not cover.
+    label_rows = {
+        label_id: (version, is_abstract)
+        for label_id, version, is_abstract in session.execute(
+            select(Label.id, Label.taxonomy_version, Label.is_abstract).where(
+                Label.id.in_({iv.label_id for iv in ctx.reference_intervals})
+            )
+        )
+    }
+    usable = [
+        iv for iv in ctx.reference_intervals
+        if iv.label_id in label_rows and not label_rows[iv.label_id][1]
+    ]
     kept: list[ProcessedFrame] = []
     covering: list[list[tuple[int, int]]] = []
     for frame in sampled:
-        labels = labels_at(frame.ts_ms, ctx.reference_intervals)
+        labels = labels_at(frame.ts_ms, usable)
         if labels:
             kept.append(frame)
             covering.append(labels)
@@ -187,17 +216,12 @@ def commit_episodes(
             annotations_by_axis=counts, sequence_id=None, sequence_name=None,
         )
 
-    label_ids = {label_id for labels in covering for _, label_id in labels}
-    versions = {
-        label_id: version
-        for label_id, version in session.execute(
-            select(Label.id, Label.taxonomy_version).where(Label.id.in_(label_ids))
-        )
-    }
+    versions = {label_id: version for label_id, (version, _) in label_rows.items()}
     video, run = ctx.video, ctx.run
-    first_ms, last_ms = kept[0].ts_ms, kept[-1].ts_ms
+    first_ms = min(f.ts_ms for f in kept)
+    last_ms = max(f.ts_ms for f in kept)
     start_time = first_ms // 1000
-    name = request.name or (
+    name = (request.name or "").strip() or (
         f"QC errors · {video.title} · run #{run.id} · {date.today().isoformat()}"
     )[:255]
     user_id = user.id

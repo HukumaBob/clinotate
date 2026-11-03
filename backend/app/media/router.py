@@ -719,7 +719,7 @@ def update_sequence(
     if sequence.origin_qc_run_id is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This sequence was made from QC flags; re-cutting it would replace the flagged frames",
+            detail="This sequence was made from QC; re-cutting it would replace its frames",
         )
     if sequence.video_id is None:
         raise HTTPException(

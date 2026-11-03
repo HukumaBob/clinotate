@@ -80,6 +80,17 @@ def scenario(world, predicted=SCENARIO_PRED, step_ms=500, status=InferenceRunSta
     return video_id, run_id, labels, qlabels
 
 
+def set_label(label_id, **fields):
+    session = db_module.SessionLocal()
+    try:
+        label = session.get(Label, label_id)
+        for key, value in fields.items():
+            setattr(label, key, value)
+        session.commit()
+    finally:
+        session.close()
+
+
 def post(run_id, **body):
     return client.post(f"/reference/runs/{run_id}/commit-episodes", headers=_headers(), json=body)
 
@@ -223,11 +234,11 @@ def test_cap_is_enforced_before_any_cut(world, store, monkeypatch):  # noqa: F81
     procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY})
     cat, labels = axes["Anatomy"]
     video_id = world.make_video(procedure_id, [(cat, labels["caecum"], 0, 400000)])
-    run_id = world.make_run(video_id, make_doc_every(100, ["rectum"] * 2600))
+    run_id = world.make_run(video_id, make_doc_every(100, ["rectum"] * 600))
     episode = {"axis": "Anatomy", "start_ms": 0}
     response = post(run_id, episodes=[episode], step_ms=100, margin_ms=0)
     assert response.status_code == 422
-    assert "2600" in response.json()["detail"] and "2000" in response.json()["detail"]
+    assert "600 frames" in response.json()["detail"] and "500" in response.json()["detail"]
     assert store.uploads == 0
 
 
@@ -240,7 +251,8 @@ def test_all_unlabeled_is_422(world, store):  # noqa: F811
     for key, ts in zip(("0", "1", "2"), (900, 1500, 4000)):
         doc["frames"][key]["timestamp_ms"] = ts
     run_id = world.make_run(video_id, doc)
-    # the one instant, 1200, is a tie between 900 and 1500: the lower, unlabeled frame
+    # the one instant is 1500 itself, covered only by an abstract label
+    set_label(labels["caecum"], is_abstract=True)
     response = post(run_id, episodes=[{"axis": "Anatomy", "start_ms": 1500}], margin_ms=300)
     assert response.status_code == 422
     assert "No frame left" in response.json()["detail"]
@@ -284,3 +296,113 @@ def test_sample_frames_rejects_a_non_positive_step():
     for step in (0, -100):
         with pytest.raises(ValueError):
             sample_frames([EpisodeSpan("a", 0, 10)], frames, step, 0)
+
+
+def test_abstract_labels_do_not_cover(world, store):  # noqa: F811
+    video_id, run_id, labels, qlabels = scenario(world)
+    # caecum abstract: only frames under good_quality (2500, 3000, 3500) stay
+    set_label(labels["caecum"], is_abstract=True)
+    body = post(run_id, episodes=[A, B], dry_run=True).json()
+    assert (body["frames"], body["dropped_unlabeled"]) == (3, 4)
+    assert body["annotations_by_axis"] == {"Quality": 3}
+    # good_quality abstract instead: the 6 frames keep only their caecum annotation
+    set_label(labels["caecum"], is_abstract=False)
+    set_label(qlabels["good_quality"], is_abstract=True)
+    response = post(run_id, episodes=[A, B])
+    assert response.status_code == 201, response.text
+    assert response.json()["annotations_by_axis"] == {"Anatomy": 6}
+    _, frames, anns = rows_of(video_id)
+    assert len(frames) == 6 and len(anns) == 6
+    assert {a.label_id for a in anns} == {labels["caecum"]}
+
+
+def test_taxonomy_version_is_the_labels_current_one(world, store):  # noqa: F811
+    video_id, run_id, labels, qlabels = scenario(world)
+    set_label(labels["caecum"], taxonomy_version=7)  # the interval itself says 1
+    assert post(run_id, episodes=[A, B]).status_code == 201
+    _, _, anns = rows_of(video_id)
+    caecum = [a for a in anns if a.label_id == labels["caecum"]]
+    assert len(caecum) == 6 and all(a.taxonomy_version == 7 for a in caecum)
+    assert all(a.taxonomy_version == 1 for a in anns if a.label_id != labels["caecum"])
+
+
+def test_orphaned_interval_never_labels_a_frame(world, store):  # noqa: F811
+    procedure_id, axes = world.make_procedure(
+        {"Anatomy": ANATOMY, "Quality": ["good_quality", "bad_quality"]}
+    )
+    cat, labels = axes["Anatomy"]
+    qcat, qlabels = axes["Quality"]
+    video_id = world.make_video(
+        procedure_id,
+        [
+            (cat, labels["caecum"], 0, 4200),
+            (qcat, qlabels["good_quality"], 2200, 3800),
+            (qcat, qlabels["bad_quality"], 4200, 5000),  # covers only 4500
+        ],
+    )
+    run_id = world.make_run(video_id, make_doc_every(500, SCENARIO_PRED))
+    assert post(run_id, episodes=[A, B], dry_run=True).json()["frames"] == 7
+    _, other = world.make_procedure({"Elsewhere": ["q"]})
+    set_label(qlabels["bad_quality"], category_id=other["Elsewhere"][0])  # orphaned
+    body = post(run_id, episodes=[A, B]).json()
+    assert (body["frames"], body["dropped_unlabeled"]) == (6, 1)
+    _, _, anns = rows_of(video_id)
+    assert qlabels["bad_quality"] not in {a.label_id for a in anns}
+
+
+def test_start_time_and_duration_use_the_earliest_and_latest_timestamp(world, store):  # noqa: F811
+    procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY})
+    cat, labels = axes["Anatomy"]
+    video_id = world.make_video(procedure_id, [(cat, labels["caecum"], 0, 4200)])
+    doc = make_doc_every(500, SCENARIO_PRED)
+    # frame numbers run backwards in time: frame order is not timestamp order
+    doc["frames"] = {str(20 - int(k)): v for k, v in doc["frames"].items()}
+    run_id = world.make_run(video_id, doc)
+    response = post(run_id, episodes=[A, B])
+    assert response.status_code == 201, response.text
+    (sequence,), _, _ = rows_of(video_id)
+    assert (sequence.start_time, sequence.duration) == (1, 3)
+
+
+def test_negative_frame_numbers_are_never_sampled(world, store):  # noqa: F811
+    procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY})
+    cat, labels = axes["Anatomy"]
+    video_id = world.make_video(procedure_id, [(cat, labels["caecum"], 0, 4200)])
+    doc = make_doc_every(500, SCENARIO_PRED)
+    doc["frames"]["-2"] = doc["frames"].pop("2")  # the frame at 1000 ms
+    run_id = world.make_run(video_id, doc)
+    response = post(run_id, episodes=[A, B])
+    assert response.status_code == 201, response.text
+    # instant 1000 falls back to the frame at 500 ms (tie to the lower one)
+    assert response.json()["frames"] == 6
+    _, frames, _ = rows_of(video_id)
+    assert len(frames) == 6
+
+
+def test_ambiguous_axis_name_is_422(world, store):  # noqa: F811
+    video_id, _, *_ = scenario(world)
+    doc = make_doc_every(500, SCENARIO_PRED)
+    doc["axes"] = [{"name": "Anatomy", "classes": ANATOMY}] * 2
+    for frame in doc["frames"].values():
+        frame["axes"] = frame["axes"] * 2
+    run_id = world.make_run(video_id, doc)
+    response = post(run_id, episodes=[A], dry_run=True)
+    assert response.status_code == 422
+    assert "ambiguous" in response.json()["detail"].lower()
+
+
+def test_blank_name_gets_the_default_and_a_name_is_stripped(world, store):  # noqa: F811
+    _, run_id, *_ = scenario(world)
+    body = post(run_id, episodes=[A], name="   ").json()
+    assert body["sequence_name"].startswith("QC errors · refeval · run #")
+    body = post(run_id, episodes=[B], name="  my errors  ").json()
+    assert body["sequence_name"] == "my errors"
+
+
+def test_openapi_declares_both_the_201_commit_and_the_200_dry_run():
+    responses = app.openapi()["paths"]["/reference/runs/{run_id}/commit-episodes"]["post"][
+        "responses"
+    ]
+    for code in ("200", "201"):
+        schema = responses[code]["content"]["application/json"]["schema"]
+        assert schema == {"$ref": "#/components/schemas/CommitEpisodesRead"}
