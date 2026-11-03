@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
   useCreateInferenceRun,
@@ -87,6 +87,11 @@ export function QcPage() {
               });
             }}
           />
+          {videoId !== null && (
+            <Link to={`/qc/reference/${videoId}`} className="self-start text-sm text-blue-400 hover:underline">
+              Label reference
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => setShowUpload((open) => !open)}

@@ -135,4 +135,9 @@ describe("RunsTable flags column", () => {
     expect(onToggleSelect).toHaveBeenCalledWith(3);
     expect(screen.getByLabelText("Select run 4 for comparison")).toBeDisabled();
   });
+
+  it("links each row to the reference labeling page of its video", () => {
+    renderTable([run({ video_id: 9 })]);
+    expect(screen.getByRole("link", { name: "Label reference" })).toHaveAttribute("href", "/qc/reference/9");
+  });
 });

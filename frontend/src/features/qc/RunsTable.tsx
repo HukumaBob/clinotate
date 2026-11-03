@@ -87,6 +87,12 @@ export function RunsTable({ runs, videoTitles, onDelete, selected, onToggleSelec
                     View
                   </button>
                 )}
+                <Link
+                  to={`/qc/reference/${run.video_id}`}
+                  className={`${BUTTON} mr-2 inline-block hover:text-gray-100`}
+                >
+                  Label reference
+                </Link>
                 {armed === run.id ? (
                   <>
                     {run.flags_pending > 0 && (
