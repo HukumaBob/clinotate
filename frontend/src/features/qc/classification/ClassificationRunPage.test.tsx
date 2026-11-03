@@ -377,6 +377,7 @@ describe("ClassificationRunPage", () => {
     referenceState = { data: labeledReference() };
     renderPage();
     fireEvent.change(screen.getByLabelText("Boundary tolerance (s)"), { target: { value: "0.5" } });
+    fireEvent.blur(screen.getByLabelText("Boundary tolerance (s)"));
     expect(useEvaluation).toHaveBeenLastCalledWith(5, 500, true);
     const last = useEvaluation.mock.calls.slice(-2);
     expect(last.every((call) => call[1] === 500)).toBe(true);
@@ -403,6 +404,22 @@ describe("ClassificationRunPage", () => {
     expect(useEvaluation.mock.calls.length).toBeGreaterThan(0);
     expect(useEvaluation.mock.calls.every((call) => call[2] === false)).toBe(true);
     expect(screen.queryByTestId(/^error-span-/)).toBeNull();
+  });
+
+  it("neither requests nor claims there is no reference while the reference loads", () => {
+    referenceState = { isPending: true };
+    renderPage();
+    expect(screen.queryByText("Label this video's reference to score the model")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Evaluation" })).getByText("Loading…")).toBeInTheDocument();
+    expect(useEvaluation.mock.calls.every((call) => call[2] === false)).toBe(true);
+  });
+
+  it("says the reference could not be loaded when it fails, requesting nothing", () => {
+    referenceState = { isPending: false, isError: true };
+    renderPage();
+    expect(screen.getByText("The reference could not be loaded.")).toBeInTheDocument();
+    expect(screen.queryByText("Label this video's reference to score the model")).toBeNull();
+    expect(useEvaluation.mock.calls.every((call) => call[2] === false)).toBe(true);
   });
 
   it("does not count orphaned intervals as reference labels", () => {

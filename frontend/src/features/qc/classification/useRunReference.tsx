@@ -9,6 +9,7 @@ import { ReferenceKeys } from "../../reference/ReferenceKeys";
 import { ReferenceLanes } from "../../reference/ReferenceLanes";
 import { ReferenceStatus } from "../../reference/ReferenceStatus";
 import { toRefAxes, useReferenceEditor } from "../../reference/useReferenceEditor";
+import type { ReferenceState } from "./EvaluationPanel";
 import type { ClassificationDocument } from "./types";
 
 interface RunReferenceArgs {
@@ -28,8 +29,10 @@ export interface RunReference {
   /** Per model axis, its editable reference lane (null: no matching axis);
    * undefined while the reference is loading or could not be loaded. */
   lanes: (ReactNode | null)[] | undefined;
-  /** The video's reference has at least one labeled (non-orphaned) interval;
-   * false while it loads or when it could not be loaded. */
+  /** Whether the reference is still loading, failed to load, or is ready. */
+  referenceState: ReferenceState;
+  /** The video's reference has at least one labeled (non-orphaned) interval.
+   * Only meaningful when `referenceState` is "ready" (false otherwise). */
   hasReference: boolean;
 }
 
@@ -68,7 +71,10 @@ export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: Ru
     durationMs: referenceDurationMs,
   });
 
-  if (!reference) return { banner: null, bar: null, lanes: undefined, hasReference: false };
+  if (!reference) {
+    const referenceState: ReferenceState = query.isError ? "error" : "loading";
+    return { banner: null, bar: null, lanes: undefined, referenceState, hasReference: false };
+  }
   const hasReference = reference.intervals.some((interval) => !interval.orphaned);
 
   const matchedAxes = matchedIndexes.map((i) => refAxes[i]);
@@ -135,5 +141,5 @@ export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: Ru
     ),
   );
 
-  return { banner, bar, lanes, hasReference };
+  return { banner, bar, lanes, referenceState: "ready", hasReference };
 }

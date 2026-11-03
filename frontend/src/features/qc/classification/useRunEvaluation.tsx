@@ -3,7 +3,7 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useEvaluation } from "../../../entities/useEvaluation";
 import type { AxisIndex } from "./axisIndex";
 import type { ErrorSpan } from "./AxisLanes";
-import { EvaluationPanel } from "./EvaluationPanel";
+import { EvaluationPanel, type ReferenceState } from "./EvaluationPanel";
 import { episodeSpans, processedStepMs } from "./evaluationLogic";
 import type { ClassificationDocument } from "./types";
 
@@ -14,7 +14,9 @@ interface RunEvaluationArgs {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   runId: number | null;
   videoId: number | null;
-  /** The video's reference has at least one labeled interval: nothing is
+  /** Whether the video's reference has loaded: nothing is requested until it has. */
+  referenceState: ReferenceState;
+  /** The loaded reference has at least one labeled interval: nothing is
    * requested otherwise. */
   hasReference: boolean;
   /** The model's axes; undefined until the predictions load. */
@@ -40,14 +42,16 @@ export function useRunEvaluation({
   videoRef,
   runId,
   videoId,
+  referenceState,
   hasReference,
   modelAxes,
   indexes,
   seekTo,
 }: RunEvaluationArgs): RunEvaluation {
   const [boundaryMs, setBoundaryMs] = useState(DEFAULT_BOUNDARY_MS);
-  const query = useEvaluation(runId, boundaryMs, hasReference);
-  const evaluation = hasReference ? query.data : undefined;
+  const scoring = referenceState === "ready" && hasReference;
+  const query = useEvaluation(runId, boundaryMs, scoring);
+  const evaluation = scoring ? query.data : undefined;
 
   const errorSpans = useMemo(() => {
     if (!evaluation || !modelAxes) return undefined;
@@ -76,6 +80,7 @@ export function useRunEvaluation({
       <EvaluationPanel
         runId={runId}
         videoId={videoId}
+        referenceState={referenceState}
         hasReference={hasReference}
         onSeek={seekPaused}
         onBoundaryChange={setBoundaryMs}

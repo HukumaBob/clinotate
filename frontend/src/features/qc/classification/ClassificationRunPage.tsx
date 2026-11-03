@@ -89,6 +89,7 @@ export function ClassificationRunPage() {
     videoRef,
     runId,
     videoId: run?.video_id ?? null,
+    referenceState: runReference.referenceState,
     hasReference: runReference.hasReference,
     modelAxes: document?.axes,
     indexes,

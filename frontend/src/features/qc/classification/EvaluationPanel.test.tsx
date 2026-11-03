@@ -1,12 +1,18 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EvaluationRead } from "../../../entities/useEvaluation";
 import { EvaluationPanel } from "./EvaluationPanel";
 
-let evalState: { data?: EvaluationRead; isPending?: boolean; isError?: boolean; error?: unknown };
+let evalState: {
+  data?: EvaluationRead;
+  isPending?: boolean;
+  isError?: boolean;
+  error?: unknown;
+  isPlaceholderData?: boolean;
+};
 const useEvaluation = vi.fn();
 
 vi.mock("../../../entities/useEvaluation", () => ({
@@ -51,7 +57,7 @@ function renderPanel(props: Partial<Parameters<typeof EvaluationPanel>[0]> = {})
   const onSeek = vi.fn();
   render(
     <MemoryRouter>
-      <EvaluationPanel runId={7} videoId={9} hasReference onSeek={onSeek} {...props} />
+      <EvaluationPanel runId={7} videoId={9} referenceState="ready" hasReference onSeek={onSeek} {...props} />
     </MemoryRouter>,
   );
   return onSeek;
@@ -119,19 +125,40 @@ describe("EvaluationPanel", () => {
     renderPanel({ hasReference: false });
     expect(screen.getByText("Label this video's reference to score the model")).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute("href", "/qc/reference/9");
-    expect(useEvaluation).toHaveBeenCalledWith(7, 0, false);
+    expect(useEvaluation).toHaveBeenCalledWith(7, 2000, false);
+  });
+
+  it("shows nothing misleading while the reference loads and requests nothing", () => {
+    evalState = {};
+    renderPanel({ referenceState: "loading", hasReference: false });
+    expect(screen.queryByText("Label this video's reference to score the model")).toBeNull();
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(useEvaluation.mock.calls.every((call) => call[2] === false)).toBe(true);
+  });
+
+  it("says when the reference could not be loaded and requests nothing", () => {
+    evalState = {};
+    renderPanel({ referenceState: "error", hasReference: false });
+    expect(screen.getByText("The reference could not be loaded.")).toBeInTheDocument();
+    expect(screen.queryByText("Label this video's reference to score the model")).toBeNull();
+    expect(useEvaluation.mock.calls.every((call) => call[2] === false)).toBe(true);
+  });
+
+  it("does not request while loading even if told there is a reference", () => {
+    renderPanel({ referenceState: "loading", hasReference: true });
+    expect(useEvaluation.mock.calls.every((call) => call[2] === false)).toBe(true);
   });
 
   it("shows loading and error states", () => {
     evalState = { isPending: true };
     const { unmount } = render(
-      <MemoryRouter><EvaluationPanel runId={7} videoId={9} hasReference onSeek={vi.fn()} /></MemoryRouter>,
+      <MemoryRouter><EvaluationPanel runId={7} videoId={9} referenceState="ready" hasReference onSeek={vi.fn()} /></MemoryRouter>,
     );
     expect(screen.getByText("Scoring…")).toBeInTheDocument();
     unmount();
     evalState = { isError: true, error: { detail: "Run not found" } };
     const second = render(
-      <MemoryRouter><EvaluationPanel runId={7} videoId={9} hasReference onSeek={vi.fn()} /></MemoryRouter>,
+      <MemoryRouter><EvaluationPanel runId={7} videoId={9} referenceState="ready" hasReference onSeek={vi.fn()} /></MemoryRouter>,
     );
     expect(screen.getByText("Run not found")).toBeInTheDocument();
     second.unmount();
@@ -140,10 +167,102 @@ describe("EvaluationPanel", () => {
     expect(screen.getByText("Could not score this run.")).toBeInTheDocument();
   });
 
-  it("converts the tolerance from seconds to milliseconds", () => {
+  it("starts at the spec's 2 s tolerance", () => {
     renderPanel();
-    fireEvent.change(screen.getByLabelText("Boundary tolerance (s)"), { target: { value: "2.5" } });
-    expect(useEvaluation).toHaveBeenLastCalledWith(7, 2500, true);
+    expect(screen.getByLabelText("Boundary tolerance (s)")).toHaveValue(2);
+    expect(useEvaluation).toHaveBeenLastCalledWith(7, 2000, true);
+  });
+
+  it("keeps the previous scores while a new tolerance loads", () => {
+    evalState = { data: makeEval(), isPending: false, isPlaceholderData: true };
+    renderPanel();
+    expect(screen.getByText("62.5%")).toBeInTheDocument();
+    expect(screen.queryByText("Scoring…")).toBeNull();
+  });
+
+  it("notes a matched axis with nothing evaluated", () => {
+    evalState = { data: makeEval([makeAxis({ frames_evaluated: 0, frames_excluded: 12 })]) };
+    renderPanel();
+    expect(screen.getByText("No reference intervals on this axis.")).toBeInTheDocument();
+  });
+
+  it("does not note a matched axis with evaluated frames, nor an unmatched one", () => {
+    evalState = { data: makeEval([makeAxis({ matched: false, frames_evaluated: 0 })]) };
+    renderPanel();
+    expect(screen.queryByText("No reference intervals on this axis.")).toBeNull();
+  });
+
+  it("scrolls the class table sideways instead of the panel", () => {
+    renderPanel();
+    const table = screen.getByRole("row", { name: /Polyp 5/ }).closest("table")!;
+    expect(table.parentElement).toHaveClass("overflow-x-auto");
+  });
+
+  it("lists identical episodes without a duplicate-key warning", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    evalState = { data: makeEval([makeAxis({ episodes: [ep(1000, 1, 0.5), ep(1000, 1, 0.5)] })]) };
+    renderPanel();
+    expect(screen.getAllByRole("button", { name: /Polyp → Fold/ })).toHaveLength(2);
+    expect(error.mock.calls.some((c) => String(c[0]).includes("same key"))).toBe(false);
+    error.mockRestore();
+  });
+
+  describe("tolerance input", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+    const input = () => screen.getByLabelText("Boundary tolerance (s)");
+
+    it("commits a quickly typed value once, after the pause", () => {
+      const onBoundaryChange = vi.fn();
+      renderPanel({ onBoundaryChange });
+      fireEvent.change(input(), { target: { value: "2" } });
+      fireEvent.change(input(), { target: { value: "2.5" } });
+      act(() => vi.advanceTimersByTime(499));
+      expect(onBoundaryChange).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(1));
+      expect(onBoundaryChange).toHaveBeenCalledTimes(1);
+      expect(onBoundaryChange).toHaveBeenCalledWith(2500);
+      expect(useEvaluation).toHaveBeenLastCalledWith(7, 2500, true);
+      expect(useEvaluation.mock.calls.filter((call) => ![2000, 2500].includes(call[1] as number))).toEqual([]);
+    });
+
+    it("commits at once on blur, and only once", () => {
+      const onBoundaryChange = vi.fn();
+      renderPanel({ onBoundaryChange });
+      fireEvent.change(input(), { target: { value: "3" } });
+      fireEvent.blur(input());
+      expect(onBoundaryChange).toHaveBeenCalledWith(3000);
+      act(() => vi.advanceTimersByTime(1000));
+      expect(onBoundaryChange).toHaveBeenCalledTimes(1);
+    });
+
+    it("commits on Enter", () => {
+      const onBoundaryChange = vi.fn();
+      renderPanel({ onBoundaryChange });
+      fireEvent.change(input(), { target: { value: "4" } });
+      fireEvent.keyDown(input(), { key: "Enter" });
+      expect(onBoundaryChange).toHaveBeenCalledWith(4000);
+      expect(useEvaluation).toHaveBeenLastCalledWith(7, 4000, true);
+    });
+
+    it.each(["", "61", "-1"])("never commits %j and reverts it on blur", (value) => {
+      const onBoundaryChange = vi.fn();
+      renderPanel({ onBoundaryChange });
+      fireEvent.change(input(), { target: { value } });
+      act(() => vi.advanceTimersByTime(1000));
+      fireEvent.blur(input());
+      expect(onBoundaryChange).not.toHaveBeenCalled();
+      expect(input()).toHaveValue(2);
+      expect(useEvaluation.mock.calls.every((call) => call[1] === 2000)).toBe(true);
+    });
+
+    it("accepts the 60 s maximum", () => {
+      const onBoundaryChange = vi.fn();
+      renderPanel({ onBoundaryChange });
+      fireEvent.change(input(), { target: { value: "60" } });
+      fireEvent.blur(input());
+      expect(onBoundaryChange).toHaveBeenCalledWith(60000);
+    });
   });
 
   it("switches axes", async () => {
