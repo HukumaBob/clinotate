@@ -1751,6 +1751,94 @@ ReferencePage test mocks the editor; the host re-renders per frame while an inte
 grows; the pagehide flush has no `keepalive`; `ClassifierSpec.category_id` is still
 unvalidated (from sub-project 1). Parts 3-4 as above.
 
+### Phase 3: QC screen, classification sub-project 3 (evaluation against the reference) — DONE (2026-11-03, live-checked on one axis)
+
+Design: [docs/specs/2026-11-03-qc-reference-evaluation-design.md](docs/specs/2026-11-03-qc-reference-evaluation-design.md).
+Plan: [docs/plans/2026-11-03-qc-reference-evaluation.md](docs/plans/2026-11-03-qc-reference-evaluation.md).
+Commits `34fbe65`, `35fec91` (docs); backend `9324fc8`, `b3c3923`, `b47a5d5`; frontend
+`891e571`, `a2d7830`, `4d8d796`; final fix wave `fbf1222`, `f10950e`, `f333d27`. Not pushed.
+No migration, nothing stored.
+
+Sub-project 3 of 4 of "classification in QC". Parts 1 (classification in QC runs) and 2
+(reference labeling) are done; 4 (dataset from error episodes) is not started. Evaluation is
+per run only; a cross-video summary is a non-goal (the user's choice).
+
+**Built (backend):** pure scoring functions in `backend/app/reference/evaluation.py`
+(`score_frames`, `evaluate_axis`) and `evaluate_run` + `match_axes` in
+`backend/app/reference/service.py`. Endpoint `GET /reference/runs/{run_id}/evaluation?boundary_ms=2000`
+(0..60000, 422 outside; 404 unknown run or video; 409 when the run is not a finished
+classification run, its video has no non-orphaned reference intervals, or its stored
+predictions are gone). Per model axis, matched to a reference axis by class names (ties to
+the lower category id): evaluated and excluded frame counts (a frame is evaluated when it
+lies in a labeled reference interval, end exclusive; gaps and unmatched axes are excluded),
+accuracy, per-class tp/fp/fn/support/precision/recall/F1 (null on a zero denominator), macro
+F1 over classes with support, a confusion matrix over the union of model and reference
+classes, error episodes (runs of consecutive wrong evaluated frames with the same truth and
+wrong prediction, broken by any excluded frame) with mean/max confidence, boundary versus
+interior errors (default tolerance 2 s), switching delay at touching reference transitions
+(median and never-switched count), and model switches versus reference transitions (excess).
+
+**Built (frontend):** `useEvaluation` (keepPreviousData, no retry, 5 s stale time), pure
+helpers (`sortEpisodes` longest/most-confident, `formatRatio`, `episodeSpans`,
+`processedStepMs`) and `EvaluationPanel` in the run page sidebar: axis selector, summary,
+class table, confusion matrix, tolerance input (committed on blur, Enter or a 500 ms
+debounce), compromised and unmatched notes, and an episode list with sort buttons, a 200-row
+cap with Show more, and click to pause and seek. Error episodes are hatched red on the
+model lane (memoised with the lane segments). Reference edits refresh the evaluation
+debounced to 1.5 s after the last save; the page tracks reference loading as a tri-state.
+
+**Deviations from the spec (my calls):**
+- Boundary tolerance defaults to 2 s; an episode counts as boundary only if all its frames are.
+- Sorting is on the screen; the API returns episodes in time order.
+- Evaluation is computed per request (no caching or storage).
+- Detection and segmentation runs are not evaluable.
+
+**Review:** per-task reviews and a final whole-branch review found and fixed: a request storm
+(each reference save invalidated the evaluation, re-scoring the whole predictions document
+about once a second), the tolerance input flickering the panel and firing a request per
+keystroke, the panel's own default tolerance (0 instead of 2 s), a misleading "label the
+reference" message while the reference was still loading, a 500 on a malformed predictions
+document and misreported missing objects.
+
+**Live check (2026-11-03)** on video `polyposis` (28 s, colonoscopy), reference of three
+intervals (caecum 2000-13855, colon_left 13855-20752 ms, good_quality 5000-8001) and a new
+classification run (model `yolo11n-cls-run528`, 847 frames): the endpoint reported 563
+evaluated and 284 excluded frames and accuracy 59.5%. An independent Python recount of the
+stored predictions gave the same evaluated count, the same accuracy and every confusion
+matrix cell (caecum row 269/81/5/1, colon_left row 36/66/8/7/90). It also reported 66 model
+switches against 1 reference transition (a flickery model) and a median lag of 78 ms. The
+run page showed the panel and red hatching only inside labeled spans of the model lane;
+dragging the reference edge re-scored the run (563 to 506 evaluated) with exactly one new
+evaluation request; typing the tolerance "0.5" sent exactly one request (`boundary_ms=500`)
+and moved the split to 16 boundary / 178 interior errors; clicking an episode (0:09 caecum to
+ileum, 27 frames, interior) paused and seeked the video; no console errors. All rows created
+for the check were removed (3 intervals, the empty `video_references` row, the run and its
+MinIO object); unrelated rows the user made on video 3054 meanwhile were not touched. On that
+video the reference was immediately marked compromised by training run 528 because the video
+was already in that run's dataset, which is the first-interval lookup from the reference
+labeling fix working on real data.
+
+**Not verified live:** the compromised note and the unmatched-axis note in the panel; the
+"label this video's reference" message in a browser; evaluation of two model axes (only one
+classification model exists); a long video with a very noisy model (thousands of episodes); a
+MinIO outage (the server maps any error while reading the predictions object to a 409 "no
+longer stored").
+
+**Things learned the hard way:** plain `npx tsc --noEmit` checks nothing in this repo; the
+real check is `-p tsconfig.app.json`, and the final review found no errors in non-test files
+of this feature. Known pre-existing failing backend tests:
+`tests/test_inference_api.py::test_deleting_a_video_that_has_qc_runs_is_refused` and
+`tests/test_jobs.py::test_enqueue_sam3_predict_creates_pending_job`.
+
+**Deferred:** the debounced refresh can be swallowed by an in-flight evaluation fetch (re-arm
+the timer while fetching); the catch-all around the predictions download should map only
+not-found errors to 409 and let infrastructure failures be 5xx; `retry: false` also removes
+retries for transient 5xx; old numbers stay next to an error banner after a failed background
+refetch; `useRestoreClean` leaves the debounce timer pending; `RunRoute` keys the page by video
+id, not run id; `json.loads` of a corrupt predictions document still gives a 500; the error
+hatching draws one element per episode (thousands on a very noisy model); the evaluation
+request is made twice on first page load. Part 4 as above.
+
 ### Phase 2b: Train screen — DONE (2026-08-20)
 
 Brainstorming began on the Train screen and the `training` module. No spec

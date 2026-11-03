@@ -1,6 +1,6 @@
 # QC screen: evaluation against the reference, sub-project 3 of 4
 
-Date: 2026-11-03. Status: draft, awaiting approval. Builds on
+Date: 2026-11-03. Status: implemented on master 2026-11-03 and live-checked (see ROADMAP). Builds on
 [QC classification](2026-11-03-qc-classification-design.md) (sub-project 1) and
 [reference labeling](2026-11-03-qc-reference-labeling-design.md) (sub-project 2),
 both done.

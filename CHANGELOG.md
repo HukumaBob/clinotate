@@ -25,6 +25,14 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   API under `/reference`. A video with intervals cannot be deleted, and deleting a label
   used by a reference is refused with the videos named.
 
+- QC reference evaluation: the classification run page scores each model axis against the
+  video's hand-labeled reference over the labeled intervals only: accuracy, per-class
+  precision/recall/F1, macro F1, a confusion matrix, error episodes (hatched red on the model
+  lane, listed with sort and click-to-seek), boundary versus interior errors with an
+  adjustable tolerance (default 2 s), switching delay and model switches versus reference
+  transitions. New endpoint `GET /reference/runs/{run_id}/evaluation`; computed per request,
+  nothing is stored and there is no migration.
+
 ## [0.3.1] - 2026-11-03
 
 ### Fixed
