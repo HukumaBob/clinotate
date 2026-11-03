@@ -1,5 +1,8 @@
 import { useState } from "react";
 
+import { ZERO_CROP, type Crop } from "../media/CropFields";
+import { CropPicker } from "./CropPicker";
+
 export interface ModelOption {
   id: number;
   name: string;
@@ -41,12 +44,14 @@ export type RunFormValues =
       videoId: number;
       frameStride: number;
       perturbation: PerturbationValue | null;
+      crop: Crop | null;
     }
   | {
       classifiers: { modelVersionId: number; name?: string }[];
       videoId: number;
       frameStride: number;
       perturbation: PerturbationValue | null;
+      crop: Crop | null;
     };
 
 interface RunFormProps {
@@ -79,6 +84,7 @@ export function RunForm({
   const [stride, setStride] = useState(1);
   const [kind, setKind] = useState<PerturbationKind | "">("");
   const [strength, setStrength] = useState(0);
+  const [crop, setCrop] = useState<Crop>(ZERO_CROP);
 
   const spec = kind ? PERTURBATIONS[kind] : null;
   const strengthProblem =
@@ -108,6 +114,7 @@ export function RunForm({
       videoId,
       frameStride: stride,
       perturbation: kind ? { kind, strength } : null,
+      crop: Object.values(crop).some((value) => value > 0) ? crop : null,
     };
     if (mode === "classify") {
       if (!modelReady) return;
@@ -253,6 +260,10 @@ export function RunForm({
           ))}
         </select>
       </label>
+
+      {videoId !== null && (
+        <CropPicker key={videoId} videoId={videoId} crop={crop} onChange={setCrop} />
+      )}
 
       <div className="flex flex-col gap-1">
         <label className="flex flex-col gap-1 text-sm text-gray-300">

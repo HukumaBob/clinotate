@@ -16,6 +16,13 @@ vi.mock("../../entities/useVideos", () => ({
 }));
 vi.mock("../media/VideoUploadFlow", () => ({ VideoUploadFlow: () => null }));
 vi.mock("./RunStatus", () => ({ RunStatus: () => null }));
+vi.mock("./CropPicker", () => ({
+  CropPicker: ({ onChange }: { onChange: (crop: unknown) => void }) => (
+    <button type="button" onClick={() => onChange({ left: 10, right: 5, top: 0, bottom: 0 })}>
+      mock-crop
+    </button>
+  ),
+}));
 
 describe("QcPage reference entry point", () => {
   it("shows the Label reference link only once a video is chosen", async () => {

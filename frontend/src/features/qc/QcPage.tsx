@@ -71,6 +71,7 @@ export function QcPage() {
                 video_id: values.videoId,
                 frame_stride: values.frameStride,
                 perturbation: values.perturbation,
+                ...(values.crop ? { crop: values.crop } : {}),
               };
               const body =
                 "classifiers" in values

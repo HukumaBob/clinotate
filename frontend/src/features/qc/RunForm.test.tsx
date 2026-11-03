@@ -4,6 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { RunForm } from "./RunForm";
 
+vi.mock("./CropPicker", () => ({
+  CropPicker: ({ onChange }: { onChange: (crop: unknown) => void }) => (
+    <button type="button" onClick={() => onChange({ left: 10, right: 5, top: 0, bottom: 0 })}>
+      mock-crop
+    </button>
+  ),
+}));
+
 const models = [
   { id: 4, name: "yolo11n-run7", task_type: "detection" },
   { id: 5, name: "yolo11n-seg-run8", task_type: "segmentation" },
@@ -48,6 +56,7 @@ describe("RunForm", () => {
       videoId: 9,
       frameStride: 5,
       perturbation: null,
+      crop: null,
     });
   });
 
@@ -78,6 +87,7 @@ describe("RunForm", () => {
       videoId: 9,
       frameStride: 1,
       perturbation: { kind: "blur", strength: 2 },
+      crop: null,
     });
   });
 
@@ -119,6 +129,7 @@ describe("RunForm", () => {
         videoId: 9,
         frameStride: 1,
         perturbation: null,
+        crop: null,
       });
     });
 
@@ -168,5 +179,23 @@ describe("RunForm", () => {
       await toClassify({ classifyModels: [] });
       expect(screen.getByText("Train a classification model first.")).toBeInTheDocument();
     });
+  });
+});
+
+describe("RunForm working area", () => {
+  it("shows the crop picker only once a video is chosen", () => {
+    setup();
+    expect(screen.queryByRole("button", { name: "mock-crop" })).toBeNull();
+  });
+
+  it("submits the edited crop", async () => {
+    const user = userEvent.setup();
+    const props = setup({ videoId: 9 });
+    await user.selectOptions(screen.getByLabelText("Model"), "4");
+    await user.click(screen.getByRole("button", { name: "mock-crop" }));
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ crop: { left: 10, right: 5, top: 0, bottom: 0 } }),
+    );
   });
 });

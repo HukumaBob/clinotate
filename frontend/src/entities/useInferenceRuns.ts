@@ -52,6 +52,7 @@ export function useCreateInferenceRun() {
           kind: "gaussian_noise" | "blur" | "brightness" | "jpeg";
           strength: number;
         } | null;
+        crop?: { left: number; right: number; top: number; bottom: number } | null;
       } & (
         | { model_version_id: number }
         | { classifiers: { model_version_id: number; name?: string }[] }

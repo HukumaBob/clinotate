@@ -6,14 +6,10 @@ import { useCreateSequenceFromVideo, useUpdateSequence } from "../../entities/us
 import { useSuggestSequenceName } from "../../entities/useSuggestSequenceName";
 import type { components } from "../../shared/api/generated/schema";
 import { CropFields, ZERO_CROP, type Crop } from "./CropFields";
+import { mostRecentCrop } from "./mostRecentCrop";
 import { SequenceStatsPanel } from "./SequenceStatsPanel";
 
 type SequenceRead = components["schemas"]["SequenceRead"];
-
-function mostRecentCrop(sequences: SequenceRead[]): Crop {
-  const mostRecent = [...sequences].sort((a, b) => b.id - a.id)[0];
-  return (mostRecent?.crop_box as Crop | null | undefined) ?? ZERO_CROP;
-}
 
 export function SequenceForm({
   sequence,
