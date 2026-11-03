@@ -44,3 +44,12 @@ describe("prevEvent", () => {
     expect(prevEvent([], 5000)).toBeNull();
   });
 });
+
+describe("nextEvent/prevEvent with another element type", () => {
+  const items = [{ startMs: 100, tag: "a" }, { startMs: 200, tag: "b" }];
+  it("keeps the element type", () => {
+    expect(nextEvent(items, 0)?.tag).toBe("a");
+    expect(prevEvent(items, 500)?.tag).toBe("b");
+    expect(prevEvent(items, 50)).toBeNull();
+  });
+});
