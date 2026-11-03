@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 
+from botocore.exceptions import ClientError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -463,17 +464,24 @@ def evaluate_document(
         # excluded frames: counted, never scored.
         invalid = 0
         for frame in doc_frames:
-            entries = frame["axes"]
-            class_id = entries[i]["class_id"] if i < len(entries) else None
-            if class_id is None or not 0 <= class_id < len(classes):
-                invalid += 1
-                continue
-            frames.append(
-                EvalFrame(
-                    ts_ms=frame["timestamp_ms"], predicted=classes[class_id],
-                    confidence=entries[i]["confidence"],
+            try:
+                entries = frame["axes"]
+                class_id = entries[i]["class_id"] if i < len(entries) else None
+                if (
+                    not isinstance(class_id, int)
+                    or isinstance(class_id, bool)
+                    or not 0 <= class_id < len(classes)
+                ):
+                    invalid += 1
+                    continue
+                frames.append(
+                    EvalFrame(
+                        ts_ms=frame["timestamp_ms"], predicted=classes[class_id],
+                        confidence=entries[i]["confidence"],
+                    )
                 )
-            )
+            except (KeyError, TypeError, IndexError):
+                invalid += 1
         if matches[i] is None:
             results.append(_unmatched(model_axis["name"], len(frames) + invalid))
             continue
@@ -496,6 +504,22 @@ def evaluate_document(
     )
 
 
+_NOT_FOUND_CODES = {"NoSuchKey", "404", "NotFound"}
+
+
+def _is_valid_document(document) -> bool:
+    """The skeleton evaluate_document relies on; single frames are checked there."""
+    if not isinstance(document, dict):
+        return False
+    axes, frames = document.get("axes"), document.get("frames")
+    if not isinstance(axes, list) or not isinstance(frames, dict):
+        return False
+    return all(
+        isinstance(a, dict) and isinstance(a.get("name"), str) and isinstance(a.get("classes"), list)
+        for a in axes
+    )
+
+
 def evaluate_run(
     session: Session, storage: StorageService, run_id: int, boundary_ms: int
 ) -> EvaluationRead:
@@ -513,7 +537,18 @@ def evaluate_run(
         raise RunNotEvaluable("The video has no reference intervals to score against")
     try:
         raw = storage.download(run.predictions_key)
-    except Exception as exc:
+    except ClientError as exc:
+        # Only a missing object is a 409; anything else (outage, credentials,
+        # timeout) is an infrastructure failure and propagates as a 5xx.
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code not in _NOT_FOUND_CODES:
+            raise
         raise RunNotEvaluable(f"Predictions of run {run_id} are no longer stored") from exc
-    document = json.loads(raw)
+    invalid = RunNotEvaluable(f"Predictions of run {run_id} are not a valid document")
+    try:
+        document = json.loads(raw)
+    except ValueError as exc:  # includes UnicodeDecodeError
+        raise invalid from exc
+    if not _is_valid_document(document):
+        raise invalid
     return evaluate_document(run, document, reference, boundary_ms)

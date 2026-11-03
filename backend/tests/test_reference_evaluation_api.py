@@ -2,6 +2,7 @@ import json
 import time
 
 import pytest
+from botocore.exceptions import ClientError
 import app.db as db_module
 import app.main  # noqa: F401 -- registers every model on Base.metadata
 from fastapi.testclient import TestClient
@@ -61,7 +62,14 @@ class _Storage:
         self.docs = docs
 
     def download(self, key):
-        return json.dumps(self.docs[key]).encode()
+        if key not in self.docs:
+            raise ClientError({"Error": {"Code": "NoSuchKey", "Message": "gone"}}, "GetObject")
+        doc = self.docs[key]
+        if isinstance(doc, Exception):
+            raise doc
+        if isinstance(doc, bytes):
+            return doc
+        return json.dumps(doc).encode()
 
 
 @pytest.fixture
@@ -482,3 +490,78 @@ def test_missing_video_of_the_reference_is_404(world, monkeypatch):
     monkeypatch.setattr(reference_service, "get_reference", missing)
     response = _evaluate(run_id)
     assert response.status_code == 404
+
+
+def _stored_key(world):
+    return list(world.docs)[-1]
+
+
+def _single_run(world, doc=None):
+    procedure_id, axes = world.make_procedure({"Anatomy": ANATOMY})
+    cat, labels = axes["Anatomy"]
+    video_id = world.make_video(procedure_id, [(cat, labels["caecum"], 0, 5000)])
+    doc = doc or make_doc([("Anatomy", ANATOMY, [("caecum", 0.9)] * 3)])
+    return world.make_run(video_id, doc)
+
+
+@pytest.mark.parametrize("code", ["NoSuchKey", "404", "NotFound"])
+def test_not_found_error_codes_are_409(world, code):
+    run_id = _single_run(world)
+    world.docs[_stored_key(world)] = ClientError({"Error": {"Code": code}}, "GetObject")
+    response = _evaluate(run_id)
+    assert response.status_code == 409
+    assert response.json()["detail"] == f"Predictions of run {run_id} are no longer stored"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [RuntimeError("boom"), ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject")],
+)
+def test_other_storage_failures_propagate(world, error):
+    run_id = _single_run(world)
+    world.docs[_stored_key(world)] = error
+    quiet = TestClient(app, raise_server_exceptions=False)
+    response = quiet.get(f"/reference/runs/{run_id}/evaluation", headers=_headers())
+    assert response.status_code == 500
+
+
+def test_corrupt_json_is_409(world):
+    run_id = _single_run(world)
+    world.docs[_stored_key(world)] = b"{not json"
+    response = _evaluate(run_id)
+    assert response.status_code == 409
+    assert response.json()["detail"] == f"Predictions of run {run_id} are not a valid document"
+
+
+@pytest.mark.parametrize("broken", ["no_frames", "no_axes", "list_doc", "frames_list", "axes_str"])
+def test_structurally_invalid_document_is_409(world, broken):
+    run_id = _single_run(world)
+    doc = make_doc([("Anatomy", ANATOMY, [("caecum", 0.9)] * 3)])
+    if broken == "no_frames":
+        del doc["frames"]
+    elif broken == "no_axes":
+        del doc["axes"]
+    elif broken == "frames_list":
+        doc["frames"] = []
+    elif broken == "axes_str":
+        doc["axes"] = "x"
+    else:
+        doc = [1, 2]
+    world.docs[_stored_key(world)] = doc
+    response = _evaluate(run_id)
+    assert response.status_code == 409
+    assert response.json()["detail"] == f"Predictions of run {run_id} are not a valid document"
+
+
+@pytest.mark.parametrize("bad", ["missing", "text", None, 1.5, True])
+def test_bad_class_id_is_an_excluded_frame(world, bad):
+    doc = make_doc([("Anatomy", ANATOMY, [("caecum", 0.9)] * 3)])
+    if bad == "missing":
+        del doc["frames"]["1"]["axes"][0]["class_id"]
+    else:
+        doc["frames"]["1"]["axes"][0]["class_id"] = bad
+    run_id = _single_run(world, doc)
+    response = _evaluate(run_id)
+    assert response.status_code == 200
+    axis = response.json()["axes"][0]
+    assert (axis["frames_total"], axis["frames_evaluated"], axis["frames_excluded"]) == (3, 2, 1)
