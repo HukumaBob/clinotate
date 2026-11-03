@@ -54,3 +54,9 @@ class IntervalUpdate(BaseModel):
         if not self.model_fields_set & {"label_id", "start_ms", "end_ms"}:
             raise ValueError("at least one of label_id, start_ms, end_ms is required")
         return self
+
+
+class ExposureVideoRead(BaseModel):
+    video_id: int
+    title: str
+    frames: int

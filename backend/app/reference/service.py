@@ -1,10 +1,14 @@
-from sqlalchemy import select
+from datetime import datetime, timezone
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
-from app.media.models import Video
+from app.datasets.models import Dataset, DatasetItem, TaskType
+from app.media.models import Frame, Sequence, Video
 from app.reference.models import ReferenceInterval, VideoReference
 from app.reference.schemas import (
+    ExposureVideoRead,
     IntervalCreate,
     IntervalUpdate,
     ReferenceAxisRead,
@@ -21,6 +25,10 @@ DIGIT_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
 
 
 class VideoNotFound(Exception):
+    pass
+
+
+class NoReference(Exception):
     pass
 
 
@@ -235,3 +243,92 @@ def delete_interval(session: Session, video_id: int, interval_id: int) -> None:
     except Exception:
         session.rollback()
         raise
+
+
+def _frames_per_video(session: Session, *conditions) -> dict[int, int]:
+    """Frame counts per video, over videos that have reference intervals."""
+    rows = session.execute(
+        select(Sequence.video_id, func.count(Frame.id))
+        .select_from(Frame)
+        .join(Sequence, Sequence.id == Frame.sequence_id)
+        .where(Sequence.video_id.is_not(None), *conditions)
+        .group_by(Sequence.video_id)
+    ).all()
+    return dict(rows)
+
+
+def _clean_reference_exposure(session: Session, counts: dict[int, int]) -> list[ExposureVideoRead]:
+    if not counts:
+        return []
+    rows = session.execute(
+        select(Video.id, Video.title)
+        .join(VideoReference, VideoReference.video_id == Video.id)
+        .where(
+            Video.id.in_(counts),
+            VideoReference.compromised_at.is_(None),
+            select(ReferenceInterval.id)
+            .where(ReferenceInterval.video_id == Video.id)
+            .exists(),
+        )
+        .order_by(Video.id)
+    ).all()
+    return [ExposureVideoRead(video_id=vid, title=title, frames=counts[vid]) for vid, title in rows]
+
+
+def exposure_for_sequences(
+    session: Session, sequence_ids: list[int], task_type: TaskType
+) -> list[ExposureVideoRead]:
+    if task_type != TaskType.CLASSIFICATION or not sequence_ids:
+        return []
+    return _clean_reference_exposure(
+        session, _frames_per_video(session, Frame.sequence_id.in_(sequence_ids))
+    )
+
+
+def exposure_for_dataset(session: Session, dataset_id: int) -> list[ExposureVideoRead]:
+    dataset = session.get(Dataset, dataset_id)
+    if dataset is None or dataset.task_type != TaskType.CLASSIFICATION:
+        return []
+    item_frames = select(DatasetItem.frame_id).where(DatasetItem.dataset_id == dataset_id)
+    return _clean_reference_exposure(session, _frames_per_video(session, Frame.id.in_(item_frames)))
+
+
+def mark_compromised(session: Session, dataset_id: int, run_id: int) -> list[int]:
+    """Flag clean reference videos whose frames a classification run trains on."""
+    from app.training.models import TrainingRun
+
+    run = session.get(TrainingRun, run_id)
+    if run is None or run.task_type != TaskType.CLASSIFICATION:
+        return []
+    item_frames = select(DatasetItem.frame_id).where(DatasetItem.dataset_id == dataset_id)
+    video_ids = list(_frames_per_video(session, Frame.id.in_(item_frames)))
+    if not video_ids:
+        return []
+    references = session.scalars(
+        select(VideoReference)
+        .where(
+            VideoReference.video_id.in_(video_ids),
+            VideoReference.compromised_at.is_(None),
+            select(ReferenceInterval.id)
+            .where(ReferenceInterval.video_id == VideoReference.video_id)
+            .exists(),
+        )
+        .with_for_update()
+    ).all()
+    now = datetime.now(timezone.utc)
+    for reference in references:
+        reference.compromised_at = now
+        reference.compromised_by_training_run_id = run_id
+    session.commit()
+    return sorted(r.video_id for r in references)
+
+
+def restore_clean(session: Session, video_id: int) -> None:
+    if session.get(Video, video_id) is None:
+        raise VideoNotFound(f"Video {video_id} not found")
+    reference = session.get(VideoReference, video_id)
+    if reference is None:
+        raise NoReference(f"Video {video_id} has no reference")
+    reference.compromised_at = None
+    reference.compromised_by_training_run_id = None
+    session.commit()

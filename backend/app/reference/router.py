@@ -6,6 +6,7 @@ from app.db import get_session
 from app.reference import service
 from app.auth.models import User
 from app.reference.schemas import (
+    ExposureVideoRead,
     IntervalCreate,
     IntervalUpdate,
     ReferenceIntervalRead,
@@ -38,6 +39,7 @@ _ERRORS = (
     service.IntervalNotFound,
     service.InvalidInterval,
     service.IntervalOverlap,
+    service.NoReference,
 )
 
 
@@ -75,6 +77,20 @@ def update_interval(
 def delete_interval(video_id: int, interval_id: int, session: Session = Depends(get_session)):
     try:
         service.delete_interval(session, video_id, interval_id)
+    except _ERRORS as exc:
+        raise _translate(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/datasets/{dataset_id}/exposure", response_model=list[ExposureVideoRead])
+def dataset_exposure(dataset_id: int, session: Session = Depends(get_session)):
+    return service.exposure_for_dataset(session, dataset_id)
+
+
+@router.post("/videos/{video_id}/restore-clean", status_code=status.HTTP_204_NO_CONTENT)
+def restore_clean(video_id: int, session: Session = Depends(get_session)):
+    try:
+        service.restore_clean(session, video_id)
     except _ERRORS as exc:
         raise _translate(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

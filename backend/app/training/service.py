@@ -250,6 +250,15 @@ def create_training_run(
     session.commit()
     session.refresh(run)
 
+    # Reference-labeling bookkeeping must never fail or undo the run itself.
+    try:
+        from app.reference import service as reference_service
+
+        reference_service.mark_compromised(session, dataset_id, run.id)
+    except Exception as exc:
+        session.rollback()
+        logger.warning("Could not mark reference videos compromised for run %s: %s", run.id, exc)
+
     job = Job(
         job_type=JobType.MODEL_TRAIN,
         status=JobStatus.PENDING,
