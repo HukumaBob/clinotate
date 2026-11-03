@@ -213,3 +213,24 @@ def test_intervals_ordered_and_moved_label_is_orphaned(world):
 
 def test_unknown_video_is_404():
     assert _get(999999).status_code == 404
+
+
+def test_label_whose_evaluation_type_changed_is_orphaned(world):
+    procedure_id, labels = world.make_procedure("ref-orphan-eval", {"Anatomy": 2})
+    video_id = world.make_video(procedure_id)
+    _headers("ref-read@example.com")
+    uid = _user_id()
+    session = world.session
+    cat, first, second = labels["Anatomy"]
+    for lab, start in ((first, 0), (second, 1000)):
+        session.add(ReferenceInterval(
+            video_id=video_id, category_id=cat, label_id=lab, taxonomy_version=1,
+            start_ms=start, end_ms=start + 200, created_by_id=uid,
+        ))
+    session.commit()
+    other = session.query(EvaluationType).filter(EvaluationType.name == "ref-other-eval").one()
+    session.query(Label).filter(Label.id == first).update({"evaluation_type_id": other.id})
+    session.commit()
+    body = _get(video_id).json()
+    assert [a["category_id"] for a in body["axes"]] == [cat]
+    assert [i["orphaned"] for i in body["intervals"]] == [True, False]

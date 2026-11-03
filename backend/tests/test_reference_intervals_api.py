@@ -181,3 +181,22 @@ def test_concurrent_overlapping_creates_yield_one_winner(setup):
     for t in threads:
         t.join()
     assert sorted(results) == ["ok", "overlap"]
+
+
+def test_patch_of_orphaned_interval_reports_orphaned(setup):
+    world, video_id, labels, headers = setup
+    a_cat, a_lab = labels["Anatomy"][0], labels["Anatomy"][1]
+    q_cat = labels["Quality"][0]
+    created = _post(video_id, headers, a_lab, 0, 500).json()
+    session = world.session
+    session.query(Label).filter(Label.id == a_lab).update({"category_id": q_cat})
+    session.commit()
+    r = client.patch(
+        f"/reference/videos/{video_id}/intervals/{created['id']}",
+        json={"end_ms": 600},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["orphaned"] is True
+    session.query(Label).filter(Label.id == a_lab).update({"category_id": a_cat})
+    session.commit()

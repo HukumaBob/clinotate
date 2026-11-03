@@ -61,7 +61,8 @@ def test_video_with_reference_cannot_be_deleted_until_intervals_are(setup):
     response = client.delete(f"/media/videos/{video_id}", headers=headers)
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "This video still has a reference: delete its intervals first"
+        "This video still has a reference: delete its intervals first "
+        "(open it in QC > Label reference)"
     )
 
     done = client.delete(f"/reference/videos/{video_id}/intervals/{interval_id}", headers=headers)
@@ -79,7 +80,10 @@ def test_label_with_reference_interval_cannot_be_deleted(setup):
     response = client.delete(f"/taxonomy/labels/{labels['Anatomy'][1]}", headers=headers)
     assert response.status_code == 409
     detail = response.json()["detail"]
-    assert "reference" in detail.lower()
+    assert detail == (
+        f"Label is used by 1 reference interval on video ref (#{video_id}): "
+        "delete them first in the video's reference"
+    )
     assert "annotations referencing" not in detail
 
     free = client.delete(f"/taxonomy/labels/{labels['Anatomy'][2]}", headers=headers)
@@ -120,3 +124,18 @@ def test_balance_reports_reference_exposure_for_classification_only(setup):
     )
     assert det.status_code == 200
     assert det.json()["reference_exposure"] == []
+
+
+def test_label_delete_409_caps_the_video_list_at_five(setup):
+    world, procedure_id, labels, headers = setup
+    video_ids = [world.make_video(procedure_id) for _ in range(7)]
+    for video_id in video_ids:
+        _add_interval(world, video_id, labels)
+
+    response = client.delete(f"/taxonomy/labels/{labels['Anatomy'][1]}", headers=headers)
+    assert response.status_code == 409
+    shown = ", ".join(f"ref (#{v})" for v in video_ids[:5])
+    assert response.json()["detail"] == (
+        f"Label is used by 7 reference intervals on videos {shown} and 2 more: "
+        "delete them first in the video's reference"
+    )

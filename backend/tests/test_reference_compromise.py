@@ -228,3 +228,39 @@ def test_restore_clean_without_reference_is_409_and_unknown_video_404(env):
     assert client.post(
         "/reference/videos/99999999/restore-clean", headers=env.headers
     ).status_code == 404
+
+
+def _first_interval(env, video_id):
+    return client.post(
+        f"/reference/videos/{video_id}/intervals",
+        json={"label_id": env.labels["Anatomy"][1], "start_ms": 0, "end_ms": 500},
+        headers=env.headers,
+    )
+
+
+def test_first_interval_on_already_trained_video_is_compromised(env):
+    video_id, _, frames = env.make_video(False)
+    ds = env.make_dataset(TaskType.CLASSIFICATION, frames)
+    env.train(ds)
+    latest = env.train(ds)
+    assert _first_interval(env, video_id).status_code == 201
+    body = client.get(f"/reference/videos/{video_id}", headers=env.headers).json()
+    assert body["status"] == "compromised"
+    assert body["compromised_at"] is not None
+    assert body["compromised_by_training_run_id"] == latest.id
+
+
+def test_first_interval_after_detection_run_stays_clean(env):
+    video_id, _, frames = env.make_video(False)
+    env.train(env.make_dataset(TaskType.DETECTION, frames))
+    assert _first_interval(env, video_id).status_code == 201
+    body = client.get(f"/reference/videos/{video_id}", headers=env.headers).json()
+    assert body["status"] == "clean"
+    assert body["compromised_by_training_run_id"] is None
+
+
+def test_first_interval_on_video_in_no_dataset_stays_clean(env):
+    video_id, _, _ = env.make_video(False)
+    assert _first_interval(env, video_id).status_code == 201
+    body = client.get(f"/reference/videos/{video_id}", headers=env.headers).json()
+    assert body["status"] == "clean"

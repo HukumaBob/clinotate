@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.annotation.models import Annotation
 from app.auth.dependencies import get_current_user
 from app.db import get_session
+from app.media.models import Video
 from app.reference.models import ReferenceInterval
 from app.taxonomy.hierarchy import HierarchyError, validate_label_edges, validate_parent_assignment
 from app.taxonomy.models import Category, EvaluationType, Label, Procedure
@@ -236,11 +237,26 @@ def delete_label(label_id: int, session: Session = Depends(get_session)) -> None
         session.query(ReferenceInterval).filter(ReferenceInterval.label_id == label_id).count()
     )
     if interval_count > 0:
+        videos = (
+            session.query(Video.id, Video.title)
+            .filter(
+                Video.id.in_(
+                    session.query(ReferenceInterval.video_id).filter(
+                        ReferenceInterval.label_id == label_id
+                    )
+                )
+            )
+            .order_by(Video.id)
+            .all()
+        )
+        shown = ", ".join(f"{title or 'video'} (#{vid})" for vid, title in videos[:5])
+        more = f" and {len(videos) - 5} more" if len(videos) > 5 else ""
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"Label is used by {interval_count} reference "
-                f"{'interval' if interval_count == 1 else 'intervals'}: "
+                f"{'interval' if interval_count == 1 else 'intervals'} on "
+                f"{'video' if len(videos) == 1 else 'videos'} {shown}{more}: "
                 "delete them first in the video's reference"
             ),
         )

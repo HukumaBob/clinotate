@@ -76,12 +76,6 @@ def get_reference(session: Session, video_id: int) -> ReferenceRead:
         .where(ReferenceInterval.video_id == video_id)
         .order_by(ReferenceInterval.category_id, ReferenceInterval.start_ms, ReferenceInterval.id)
     ).all()
-    label_categories = {}
-    label_ids = {i.label_id for i in intervals}
-    if label_ids:
-        label_categories = dict(
-            session.execute(select(Label.id, Label.category_id).where(Label.id.in_(label_ids))).all()
-        )
     reference = session.get(VideoReference, video_id)
     compromised_at = reference.compromised_at if reference else None
     if compromised_at is not None:
@@ -109,14 +103,18 @@ def get_reference(session: Session, video_id: int) -> ReferenceRead:
                 taxonomy_version=i.taxonomy_version,
                 start_ms=i.start_ms,
                 end_ms=i.end_ms,
-                orphaned=(
-                    label_categories.get(i.label_id) != i.category_id
-                    or i.category_id not in axis_labels
-                ),
+                orphaned=_is_orphaned(axis_labels, i),
             )
             for i in intervals
         ],
     )
+
+
+def _is_orphaned(axis_labels: dict[int, set[int]], interval: ReferenceInterval) -> bool:
+    """An interval no longer on its axis: the category is not an axis of the
+    video's procedure, or the label is not among that axis's classes (moved to
+    another category, or no longer a frame-classification label)."""
+    return interval.label_id not in axis_labels.get(interval.category_id, set())
 
 
 def _lock_video(session: Session, video_id: int) -> Video:
@@ -161,7 +159,11 @@ def _check_overlap(
         raise IntervalOverlap("The interval overlaps another interval of the same category")
 
 
-def _to_read(interval: ReferenceInterval) -> ReferenceIntervalRead:
+def _to_read(session: Session, video: Video, interval: ReferenceInterval) -> ReferenceIntervalRead:
+    axis_labels = {
+        axis.category_id: {c.label_id for c in axis.classes}
+        for axis in build_axes(session, video.procedure_id)
+    }
     return ReferenceIntervalRead(
         id=interval.id,
         video_id=interval.video_id,
@@ -170,7 +172,41 @@ def _to_read(interval: ReferenceInterval) -> ReferenceIntervalRead:
         taxonomy_version=interval.taxonomy_version,
         start_ms=interval.start_ms,
         end_ms=interval.end_ms,
-        orphaned=False,
+        orphaned=_is_orphaned(axis_labels, interval),
+    )
+
+
+def _dataset_holds_video(video_id: int, dataset_id):
+    """EXISTS: the dataset holds a frame of the video (DatasetItem -> Frame -> Sequence)."""
+    return (
+        select(DatasetItem.id)
+        .join(Frame, Frame.id == DatasetItem.frame_id)
+        .join(Sequence, Sequence.id == Frame.sequence_id)
+        .where(DatasetItem.dataset_id == dataset_id, Sequence.video_id == video_id)
+        .exists()
+    )
+
+
+def _new_reference(session: Session, video_id: int) -> VideoReference:
+    """A first reference row, compromised from the start when a classification
+    run already trained on frames of the video (latest such run wins)."""
+    from app.training.models import TrainingRun
+
+    run_id = session.scalars(
+        select(TrainingRun.id)
+        .where(
+            TrainingRun.task_type == TaskType.CLASSIFICATION,
+            _dataset_holds_video(video_id, TrainingRun.dataset_id),
+        )
+        .order_by(TrainingRun.id.desc())
+        .limit(1)
+    ).first()
+    if run_id is None:
+        return VideoReference(video_id=video_id)
+    return VideoReference(
+        video_id=video_id,
+        compromised_at=datetime.now(timezone.utc),
+        compromised_by_training_run_id=run_id,
     )
 
 
@@ -184,7 +220,7 @@ def create_interval(
         _check_overlap(session, video_id, category_id, payload.start_ms, payload.end_ms)
         label = session.get(Label, payload.label_id)
         if session.get(VideoReference, video_id) is None:
-            session.add(VideoReference(video_id=video_id))
+            session.add(_new_reference(session, video_id))
         interval = ReferenceInterval(
             video_id=video_id,
             category_id=category_id,
@@ -199,7 +235,7 @@ def create_interval(
     except Exception:
         session.rollback()
         raise
-    return _to_read(interval)
+    return _to_read(session, video, interval)
 
 
 def _get_interval(session: Session, video_id: int, interval_id: int) -> ReferenceInterval:
@@ -232,7 +268,7 @@ def update_interval(
     except Exception:
         session.rollback()
         raise
-    return _to_read(interval)
+    return _to_read(session, video, interval)
 
 
 def delete_interval(session: Session, video_id: int, interval_id: int) -> None:

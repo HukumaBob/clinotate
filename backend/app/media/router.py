@@ -817,7 +817,10 @@ def delete_video(video_id: int, session: Session = Depends(get_session)) -> None
     if session.query(ReferenceInterval).filter(ReferenceInterval.video_id == video_id).count() > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This video still has a reference: delete its intervals first",
+            detail=(
+                "This video still has a reference: delete its intervals first "
+                "(open it in QC > Label reference)"
+            ),
         )
 
     # The state row (RESTRICT FK) outlives its last interval; drop it with the video.
