@@ -28,6 +28,17 @@ function nextStart(intervals: RefInterval[], categoryId: number, selfId: number 
   return next;
 }
 
+/** Free room after a start: up to the next interval of the axis or the video end. */
+function roomAfter(
+  intervals: RefInterval[],
+  categoryId: number,
+  selfId: number | null,
+  startMs: number,
+  durationMs: number,
+): number {
+  return Math.min(nextStart(intervals, categoryId, selfId, startMs), durationMs) - startMs;
+}
+
 /** Limits an end so it never passes the next interval of the axis or the video
  * end, and never falls below startMs + MIN_INTERVAL_MS (the minimum wins). */
 export function clampEnd(
@@ -65,6 +76,7 @@ export function moveEdge(
   }
   const lower = self.startMs + MIN_INTERVAL_MS;
   const upper = Math.min(nextStart(intervals, self.categoryId, id, self.endMs), durationMs);
+  if (upper < lower) return { ...self };
   return { ...self, endMs: Math.max(lower, Math.min(ms, upper)) };
 }
 
@@ -79,7 +91,10 @@ export function decideKey(
   if (growing) {
     const endMs = clampEnd(state.intervals, categoryId, growing.id, growing.startMs, tMs, durationMs);
     if (growing.labelId === labelId) return { kind: "close", id: growing.id, endMs };
-    return { kind: "switch", closeId: growing.id, closeEndMs: endMs, startMs: tMs };
+    if (roomAfter(state.intervals, categoryId, growing.id, endMs, durationMs) < MIN_INTERVAL_MS) {
+      return { kind: "close", id: growing.id, endMs };
+    }
+    return { kind: "switch", closeId: growing.id, closeEndMs: endMs, startMs: endMs };
   }
   const selected =
     state.selectedId === null
@@ -88,7 +103,9 @@ export function decideKey(
   if (selected) return { kind: "relabel", id: selected.id };
   const inside = state.intervals.some((iv) => iv.categoryId === categoryId && iv.startMs < tMs && tMs < iv.endMs);
   if (inside) return { kind: "none" };
-  return { kind: "start", startMs: snapStart(state.intervals, categoryId, tMs) };
+  const startMs = snapStart(state.intervals, categoryId, tMs);
+  if (roomAfter(state.intervals, categoryId, null, startMs, durationMs) < MIN_INTERVAL_MS) return { kind: "none" };
+  return { kind: "start", startMs };
 }
 
 /** Fraction (0..1) of the video covered by the axis's intervals. */
@@ -96,7 +113,7 @@ export function coverage(intervals: RefInterval[], categoryId: number, durationM
   if (durationMs <= 0) return 0;
   let covered = 0;
   for (const iv of intervals) {
-    if (iv.categoryId === categoryId) covered += Math.max(0, iv.endMs - iv.startMs);
+    if (iv.categoryId === categoryId) covered += Math.max(0, Math.min(iv.endMs, durationMs) - Math.max(iv.startMs, 0));
   }
   return Math.min(1, covered / durationMs);
 }

@@ -107,8 +107,8 @@ describe("decideKey", () => {
   it("is none strictly inside an interval of the axis", () => {
     expect(decideKey(base, target, 1500, 10000)).toEqual({ kind: "none" });
   });
-  it("starts at the start boundary and at the end boundary", () => {
-    expect(decideKey(base, target, 1000, 10000)).toEqual({ kind: "start", startMs: 1000 });
+  it("is none at the start boundary (no room) and starts at the end boundary", () => {
+    expect(decideKey(base, target, 1000, 10000)).toEqual({ kind: "none" });
     expect(decideKey(base, target, 2000, 10000)).toEqual({ kind: "start", startMs: 2000 });
   });
   it("relabels the selected interval of the axis", () => {
@@ -174,7 +174,91 @@ describe("decideKey", () => {
   });
 });
 
+describe("decideKey room and switch boundaries", () => {
+  const target = { categoryId: 1, labelId: 10 };
+  it("is none when a neighbour starts exactly at the start (zero room)", () => {
+    const intervals = [iv(1, 1, 11, 1000, 2000)];
+    expect(decideKey({ growing: {}, selectedId: null, intervals }, target, 1000, 10000)).toEqual({ kind: "none" });
+  });
+  it("is none with 99 ms of room and starts with exactly 100 ms", () => {
+    const at = (s: number) => [iv(1, 1, 11, s, s + 500)];
+    expect(decideKey({ growing: {}, selectedId: null, intervals: at(1099) }, target, 1000, 10000)).toEqual({ kind: "none" });
+    expect(decideKey({ growing: {}, selectedId: null, intervals: at(1100) }, target, 1000, 10000)).toEqual({
+      kind: "start",
+      startMs: 1000,
+    });
+  });
+  it("is none with too little room before the video end", () => {
+    expect(decideKey({ growing: {}, selectedId: null, intervals: [] }, target, 9950, 10000)).toEqual({ kind: "none" });
+  });
+  it("switch starts at the clamped close time, past the next interval", () => {
+    const g = iv(7, 1, 11, 100, 100);
+    const next = iv(8, 1, 12, 2000, 5000);
+    expect(decideKey({ growing: { 1: g }, selectedId: null, intervals: [next] }, target, 3000, 10000)).toEqual({
+      kind: "close",
+      id: 7,
+      endMs: 2000,
+    });
+  });
+  it("switch starts at the clamped close time when tMs is under the minimum", () => {
+    const g = iv(7, 1, 11, 1000, 1000);
+    expect(decideKey({ growing: { 1: g }, selectedId: null, intervals: [] }, target, 1050, 10000)).toEqual({
+      kind: "switch",
+      closeId: 7,
+      closeEndMs: 1100,
+      startMs: 1100,
+    });
+  });
+  it("switch with 99 ms of room only closes; with 100 ms it switches", () => {
+    const g = iv(7, 1, 11, 100, 100);
+    const next = (s: number) => iv(8, 1, 12, s, s + 500);
+    expect(decideKey({ growing: { 1: g }, selectedId: null, intervals: [next(1099)] }, target, 1000, 10000)).toEqual({
+      kind: "close",
+      id: 7,
+      endMs: 1000,
+    });
+    expect(decideKey({ growing: { 1: g }, selectedId: null, intervals: [next(1100)] }, target, 1000, 10000)).toEqual({
+      kind: "switch",
+      closeId: 7,
+      closeEndMs: 1000,
+      startMs: 1000,
+    });
+  });
+  it("growing wins over a selected interval on the same axis", () => {
+    const g = iv(7, 1, 10, 3000, 3000);
+    const sel = iv(1, 1, 11, 0, 1000);
+    expect(decideKey({ growing: { 1: g }, selectedId: 1, intervals: [sel] }, target, 4000, 10000)).toEqual({
+      kind: "close",
+      id: 7,
+      endMs: 4000,
+    });
+  });
+  it("does not snap at SNAP_MS + 1", () => {
+    expect(snapStart([iv(1, 1, 10, 0, 5000)], 1, 6001)).toBe(6001);
+  });
+});
+
+describe("moveEdge end without room", () => {
+  it("returns the interval unchanged when the room cannot hold the minimum", () => {
+    const list = [iv(1, 1, 10, 1000, 1050)];
+    const r = moveEdge(list, 1, "end", 1800, 1099);
+    expect(r).toEqual(list[0]);
+    expect(r).not.toBe(list[0]);
+  });
+  it("moves normally with exactly the minimum room", () => {
+    const list = [iv(1, 1, 10, 1000, 1500), iv(2, 1, 11, 1600, 2000)];
+    expect(moveEdge(list, 1, "end", 1800, 5000)?.endMs).toBe(1600);
+  });
+  it("is unchanged when the video end leaves no room", () => {
+    const list = [iv(1, 1, 10, 1000, 1050)];
+    expect(moveEdge(list, 1, "end", 1800, 1050)).toEqual(list[0]);
+  });
+});
+
 describe("coverage", () => {
+  it("clips an interval overhanging the video end", () => {
+    expect(coverage([iv(1, 1, 10, 500, 2000)], 1, 1000)).toBe(0.5);
+  });
   it("is covered ms over duration with a gap", () => {
     const l = [iv(1, 1, 10, 0, 1000), iv(2, 1, 10, 3000, 4000), iv(3, 2, 20, 0, 4000)];
     expect(coverage(l, 1, 4000)).toBe(0.5);
