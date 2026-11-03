@@ -20,7 +20,8 @@ export function useInferenceRuns() {
       return result.data ?? [];
     },
     // Poll only while something is still running; an idle screen stays quiet.
-    refetchInterval: (query) => ((query.state.data ?? []).some(isActive) ? POLL_INTERVAL_MS : false),
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some(isActive) ? POLL_INTERVAL_MS : false,
   });
 }
 
@@ -43,12 +44,19 @@ export function useInferenceRun(runId: number | null) {
 export function useCreateInferenceRun() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: {
-      video_id: number;
-      model_version_id: number;
-      frame_stride: number;
-      perturbation?: { kind: "gaussian_noise" | "blur" | "brightness" | "jpeg"; strength: number } | null;
-    }) => {
+    mutationFn: async (
+      body: {
+        video_id: number;
+        frame_stride: number;
+        perturbation?: {
+          kind: "gaussian_noise" | "blur" | "brightness" | "jpeg";
+          strength: number;
+        } | null;
+      } & (
+        | { model_version_id: number }
+        | { classifiers: { model_version_id: number; name?: string }[] }
+      ),
+    ) => {
       const result = await apiClient.POST("/inference/runs", { body });
       if (result.error) throw result.error;
       return result.data;
@@ -62,7 +70,10 @@ export function useDeleteInferenceRun() {
   return useMutation({
     mutationFn: async ({ runId, force = false }: { runId: number; force?: boolean }) => {
       const result = await apiClient.DELETE("/inference/runs/{run_id}", {
-        params: { path: { run_id: runId }, ...(force ? { query: { force: true } } : {}) },
+        params: {
+          path: { run_id: runId },
+          ...(force ? { query: { force: true } } : {}),
+        },
       });
       if (result.error) throw result.error;
     },

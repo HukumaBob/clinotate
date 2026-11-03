@@ -10,3 +10,9 @@ export function runnableModels<T extends { task_type: string; adapter: string }>
 ): T[] {
   return models.filter((m) => RUNNABLE_TASKS.has(m.task_type) && m.adapter === RUNNABLE_ADAPTER);
 }
+
+export function classificationModels<T extends { task_type: string; adapter: string }>(
+  models: T[],
+): T[] {
+  return models.filter((m) => m.task_type === "classification" && m.adapter === RUNNABLE_ADAPTER);
+}

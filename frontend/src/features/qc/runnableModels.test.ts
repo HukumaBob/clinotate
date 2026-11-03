@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { runnableModels } from "./runnableModels";
+import { classificationModels, runnableModels } from "./runnableModels";
 
 describe("runnableModels", () => {
   it("offers YOLO detection and segmentation versions only", () => {
@@ -11,5 +11,16 @@ describe("runnableModels", () => {
       { id: 4, task_type: "classification", adapter: "ultralytics_yolo" },
     ];
     expect(runnableModels(models).map((m) => m.id)).toEqual([1, 2]);
+  });
+});
+
+describe("classificationModels", () => {
+  it("offers YOLO classification versions only", () => {
+    const models = [
+      { id: 1, task_type: "detection", adapter: "ultralytics_yolo" },
+      { id: 2, task_type: "classification", adapter: "ultralytics_yolo" },
+      { id: 3, task_type: "classification", adapter: "dinov3_classifier" },
+    ];
+    expect(classificationModels(models).map((m) => m.id)).toEqual([2]);
   });
 });

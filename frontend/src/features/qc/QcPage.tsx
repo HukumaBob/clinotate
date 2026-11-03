@@ -11,7 +11,7 @@ import { useVideos } from "../../entities/useVideos";
 import { VideoUploadFlow } from "../media/VideoUploadFlow";
 import { comparability } from "./compareLogic";
 import { errorMessage } from "./errorMessage";
-import { runnableModels } from "./runnableModels";
+import { classificationModels, runnableModels } from "./runnableModels";
 import { RunForm } from "./RunForm";
 import { RunStatus } from "./RunStatus";
 import { RunsTable } from "./RunsTable";
@@ -32,6 +32,7 @@ export function QcPage() {
   const runs = runsQuery.data ?? [];
   const videos = videosQuery.data ?? [];
   const models = runnableModels(modelsQuery.data ?? []);
+  const classifyModels = classificationModels(modelsQuery.data ?? []);
   const videoTitles = Object.fromEntries(videos.map((v) => [v.id, v.title]));
   const shownRun =
     runs.find((run) => run.id === selectedRunId) ??
@@ -49,7 +50,9 @@ export function QcPage() {
     runs.find((run) => run.id === selected[1]),
   );
 
-  const submitError = createRun.error ? errorMessage(createRun.error, "Could not start the run") : null;
+  const submitError = createRun.error
+    ? errorMessage(createRun.error, "Could not start the run")
+    : null;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -57,22 +60,32 @@ export function QcPage() {
         <div className="flex flex-col gap-3">
           <RunForm
             models={models}
+            classifyModels={classifyModels}
             videos={videos}
             videoId={videoId}
             onVideoChange={setVideoId}
             submitting={createRun.isPending}
             error={submitError}
-            onSubmit={({ modelVersionId, videoId: vid, frameStride, perturbation }) =>
-              createRun.mutate(
-                {
-                  model_version_id: modelVersionId,
-                  video_id: vid,
-                  frame_stride: frameStride,
-                  perturbation,
-                },
-                { onSuccess: (run) => run && setSelectedRunId(run.id) },
-              )
-            }
+            onSubmit={(values) => {
+              const common = {
+                video_id: values.videoId,
+                frame_stride: values.frameStride,
+                perturbation: values.perturbation,
+              };
+              const body =
+                "classifiers" in values
+                  ? {
+                      ...common,
+                      classifiers: values.classifiers.map((c) => ({
+                        model_version_id: c.modelVersionId,
+                        ...(c.name ? { name: c.name } : {}),
+                      })),
+                    }
+                  : { ...common, model_version_id: values.modelVersionId };
+              createRun.mutate(body, {
+                onSuccess: (run) => run && setSelectedRunId(run.id),
+              });
+            }}
           />
           <button
             type="button"
