@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.db import get_session
 from app.reference import service
+from app.storage import StorageService, get_storage_service
 from app.auth.models import User
 from app.reference.schemas import (
+    EvaluationRead,
     ExposureVideoRead,
     IntervalCreate,
     IntervalUpdate,
@@ -94,3 +96,18 @@ def restore_clean(video_id: int, session: Session = Depends(get_session)):
     except _ERRORS as exc:
         raise _translate(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/runs/{run_id}/evaluation", response_model=EvaluationRead, response_model_by_alias=True)
+def evaluate_run(
+    run_id: int,
+    boundary_ms: int = Query(2000, ge=0, le=60000),
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+):
+    try:
+        return service.evaluate_run(session, storage, run_id, boundary_ms)
+    except service.RunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except service.RunNotEvaluable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

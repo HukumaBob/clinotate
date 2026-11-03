@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -6,8 +7,17 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.datasets.models import Dataset, DatasetItem, TaskType
 from app.media.models import Frame, Sequence, Video
+from app.reference.evaluation import AxisEvaluation, EvalFrame, EvalInterval, evaluate_axis
 from app.reference.models import ReferenceInterval, VideoReference
 from app.reference.schemas import (
+    AxisEvaluationRead,
+    EvalClassRead,
+    EvalConfusionRead,
+    EvalEpisodeRead,
+    EvalErrorsRead,
+    EvalLagRead,
+    EvalTransitionsRead,
+    EvaluationRead,
     ExposureVideoRead,
     IntervalCreate,
     IntervalUpdate,
@@ -16,6 +26,8 @@ from app.reference.schemas import (
     ReferenceIntervalRead,
     ReferenceRead,
 )
+from app.inference.models import InferenceRun, InferenceRunStatus
+from app.storage import StorageService
 from app.taxonomy.models import Category, EvaluationType, Label
 
 MIN_INTERVAL_MS = 100
@@ -368,3 +380,127 @@ def restore_clean(session: Session, video_id: int) -> None:
     reference.compromised_at = None
     reference.compromised_by_training_run_id = None
     session.commit()
+
+
+class RunNotFound(Exception):
+    pass
+
+
+class RunNotEvaluable(Exception):
+    pass
+
+
+def match_axes(model_axes: list[dict], reference_axes: list[ReferenceAxisRead]) -> list[int | None]:
+    """For each model axis, the index of the reference axis sharing the most
+    class names (ties to the earlier one, i.e. the lower category id); None
+    when no class name is shared."""
+    matched: list[int | None] = []
+    for model in model_axes:
+        names = set(model["classes"])
+        best: int | None = None
+        best_shared = 0
+        for i, ref in enumerate(reference_axes):
+            shared = len({c.name for c in ref.classes} & names)
+            if shared > best_shared:
+                best, best_shared = i, shared
+        matched.append(best)
+    return matched
+
+
+def _unmatched(name: str, frames_total: int) -> AxisEvaluationRead:
+    return AxisEvaluationRead(
+        name=name, matched=False, reference_category_id=None, reference_axis_name=None,
+        frames_total=frames_total, frames_evaluated=0, frames_excluded=frames_total,
+        accuracy=None, macro_f1=None, classes=[],
+        confusion=EvalConfusionRead(labels=[], matrix=[]),
+        errors=EvalErrorsRead(boundary_frames=0, interior_frames=0),
+        transitions=EvalTransitionsRead(
+            reference=0, model_switches=0, excess_switches=0, median_lag_ms=None,
+            never_switched=0, lags=[],
+        ),
+        episodes=[],
+    )
+
+
+def _axis_read(
+    name: str, axis: ReferenceAxisRead, result: AxisEvaluation
+) -> AxisEvaluationRead:
+    t = result.transitions
+    return AxisEvaluationRead(
+        name=name, matched=True, reference_category_id=axis.category_id,
+        reference_axis_name=axis.name, frames_total=result.frames_total,
+        frames_evaluated=result.frames_evaluated, frames_excluded=result.frames_excluded,
+        accuracy=result.accuracy, macro_f1=result.macro_f1,
+        classes=[EvalClassRead(**vars(c)) for c in result.classes],
+        confusion=EvalConfusionRead(labels=result.labels, matrix=result.matrix),
+        errors=EvalErrorsRead(**vars(result.errors)),
+        transitions=EvalTransitionsRead(
+            reference=t.reference, model_switches=t.model_switches,
+            excess_switches=t.excess_switches, median_lag_ms=t.median_lag_ms,
+            never_switched=t.never_switched,
+            lags=[
+                EvalLagRead(at_ms=lag.at_ms, from_=lag.from_label, to=lag.to_label,
+                            lag_ms=lag.lag_ms)
+                for lag in t.lags
+            ],
+        ),
+        episodes=[EvalEpisodeRead(**vars(e)) for e in result.episodes],
+    )
+
+
+def evaluate_document(
+    run: InferenceRun, document: dict, reference: ReferenceRead, boundary_ms: int
+) -> EvaluationRead:
+    """Score every axis of a classification predictions document in memory."""
+    model_axes = document["axes"]
+    matches = match_axes(model_axes, reference.axes)
+    doc_frames = list(document["frames"].values())
+    results: list[AxisEvaluationRead] = []
+    for i, model_axis in enumerate(model_axes):
+        classes = model_axis["classes"]
+        frames: list[EvalFrame] = []
+        for frame in doc_frames:
+            entry = frame["axes"][i]
+            class_id = entry["class_id"]
+            if 0 <= class_id < len(classes):
+                frames.append(
+                    EvalFrame(
+                        ts_ms=frame["timestamp_ms"], predicted=classes[class_id],
+                        confidence=entry["confidence"],
+                    )
+                )
+        if matches[i] is None:
+            results.append(_unmatched(model_axis["name"], len(frames)))
+            continue
+        ref_axis = reference.axes[matches[i]]
+        label_names = {c.label_id: c.name for c in ref_axis.classes}
+        intervals = [
+            EvalInterval(iv.start_ms, iv.end_ms, label_names[iv.label_id])
+            for iv in reference.intervals
+            if not iv.orphaned and iv.category_id == ref_axis.category_id
+        ]
+        result = evaluate_axis(
+            frames, intervals, classes, [c.name for c in ref_axis.classes], boundary_ms
+        )
+        results.append(_axis_read(model_axis["name"], ref_axis, result))
+    return EvaluationRead(
+        run_id=run.id, video_id=run.video_id, reference_status=reference.status,
+        boundary_ms=boundary_ms, axes=results,
+    )
+
+
+def evaluate_run(
+    session: Session, storage: StorageService, run_id: int, boundary_ms: int
+) -> EvaluationRead:
+    run = session.get(InferenceRun, run_id)
+    if run is None:
+        raise RunNotFound(f"Inference run {run_id} not found")
+    if run.status != InferenceRunStatus.SUCCEEDED or not run.predictions_key:
+        raise RunNotEvaluable(f"Run {run_id} is {run.status.value}, not finished")
+    if run.axes is None:
+        raise RunNotEvaluable(f"Run {run_id} is not a classification run")
+    reference = get_reference(session, run.video_id)
+    if not any(not iv.orphaned for iv in reference.intervals):
+        raise RunNotEvaluable("The video has no reference intervals to score against")
+    document = json.loads(storage.download(run.predictions_key))
+    return evaluate_document(run, document, reference, boundary_ms)

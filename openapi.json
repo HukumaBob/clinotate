@@ -5303,6 +5303,65 @@
         }
       }
     },
+    "/reference/runs/{run_id}/evaluation": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Evaluate Run",
+        "operationId": "evaluate_run_reference_runs__run_id__evaluation_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "boundary_ms",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 60000,
+              "minimum": 0,
+              "default": 2000,
+              "title": "Boundary Ms"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -5506,6 +5565,115 @@
         ],
         "title": "ArtifactRead",
         "description": "One trainer-written file, addressed by index rather than by key so\na storage key never travels in a URL."
+      },
+      "AxisEvaluationRead": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "matched": {
+            "type": "boolean",
+            "title": "Matched"
+          },
+          "reference_category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Category Id"
+          },
+          "reference_axis_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Axis Name"
+          },
+          "frames_total": {
+            "type": "integer",
+            "title": "Frames Total"
+          },
+          "frames_evaluated": {
+            "type": "integer",
+            "title": "Frames Evaluated"
+          },
+          "frames_excluded": {
+            "type": "integer",
+            "title": "Frames Excluded"
+          },
+          "accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
+          "macro_f1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Macro F1"
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/EvalClassRead"
+            },
+            "type": "array",
+            "title": "Classes"
+          },
+          "confusion": {
+            "$ref": "#/components/schemas/EvalConfusionRead"
+          },
+          "errors": {
+            "$ref": "#/components/schemas/EvalErrorsRead"
+          },
+          "transitions": {
+            "$ref": "#/components/schemas/EvalTransitionsRead"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/EvalEpisodeRead"
+            },
+            "type": "array",
+            "title": "Episodes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "matched",
+          "reference_category_id",
+          "reference_axis_name",
+          "frames_total",
+          "frames_evaluated",
+          "frames_excluded",
+          "accuracy",
+          "macro_f1",
+          "classes",
+          "confusion",
+          "errors",
+          "transitions",
+          "episodes"
+        ],
+        "title": "AxisEvaluationRead"
       },
       "AxisRead": {
         "properties": {
@@ -6277,6 +6445,296 @@
           "split_counts"
         ],
         "title": "DatasetRead"
+      },
+      "EvalClassRead": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "support": {
+            "type": "integer",
+            "title": "Support"
+          },
+          "tp": {
+            "type": "integer",
+            "title": "Tp"
+          },
+          "fp": {
+            "type": "integer",
+            "title": "Fp"
+          },
+          "fn": {
+            "type": "integer",
+            "title": "Fn"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "recall": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recall"
+          },
+          "f1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "F1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "support",
+          "tp",
+          "fp",
+          "fn",
+          "precision",
+          "recall",
+          "f1"
+        ],
+        "title": "EvalClassRead"
+      },
+      "EvalConfusionRead": {
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Labels"
+          },
+          "matrix": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Matrix"
+          }
+        },
+        "type": "object",
+        "required": [
+          "labels",
+          "matrix"
+        ],
+        "title": "EvalConfusionRead"
+      },
+      "EvalEpisodeRead": {
+        "properties": {
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          },
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          },
+          "truth": {
+            "type": "string",
+            "title": "Truth"
+          },
+          "predicted": {
+            "type": "string",
+            "title": "Predicted"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "boundary",
+              "interior"
+            ],
+            "title": "Kind"
+          },
+          "mean_confidence": {
+            "type": "number",
+            "title": "Mean Confidence"
+          },
+          "max_confidence": {
+            "type": "number",
+            "title": "Max Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_ms",
+          "end_ms",
+          "frames",
+          "truth",
+          "predicted",
+          "kind",
+          "mean_confidence",
+          "max_confidence"
+        ],
+        "title": "EvalEpisodeRead"
+      },
+      "EvalErrorsRead": {
+        "properties": {
+          "boundary_frames": {
+            "type": "integer",
+            "title": "Boundary Frames"
+          },
+          "interior_frames": {
+            "type": "integer",
+            "title": "Interior Frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "boundary_frames",
+          "interior_frames"
+        ],
+        "title": "EvalErrorsRead"
+      },
+      "EvalLagRead": {
+        "properties": {
+          "at_ms": {
+            "type": "integer",
+            "title": "At Ms"
+          },
+          "from": {
+            "type": "string",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "title": "To"
+          },
+          "lag_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at_ms",
+          "from",
+          "to",
+          "lag_ms"
+        ],
+        "title": "EvalLagRead"
+      },
+      "EvalTransitionsRead": {
+        "properties": {
+          "reference": {
+            "type": "integer",
+            "title": "Reference"
+          },
+          "model_switches": {
+            "type": "integer",
+            "title": "Model Switches"
+          },
+          "excess_switches": {
+            "type": "integer",
+            "title": "Excess Switches"
+          },
+          "median_lag_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Lag Ms"
+          },
+          "never_switched": {
+            "type": "integer",
+            "title": "Never Switched"
+          },
+          "lags": {
+            "items": {
+              "$ref": "#/components/schemas/EvalLagRead"
+            },
+            "type": "array",
+            "title": "Lags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reference",
+          "model_switches",
+          "excess_switches",
+          "median_lag_ms",
+          "never_switched",
+          "lags"
+        ],
+        "title": "EvalTransitionsRead"
+      },
+      "EvaluationRead": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "video_id": {
+            "type": "integer",
+            "title": "Video Id"
+          },
+          "reference_status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "clean",
+              "compromised"
+            ],
+            "title": "Reference Status"
+          },
+          "boundary_ms": {
+            "type": "integer",
+            "title": "Boundary Ms"
+          },
+          "axes": {
+            "items": {
+              "$ref": "#/components/schemas/AxisEvaluationRead"
+            },
+            "type": "array",
+            "title": "Axes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "video_id",
+          "reference_status",
+          "boundary_ms",
+          "axes"
+        ],
+        "title": "EvaluationRead"
       },
       "EvaluationTypeCreate": {
         "properties": {
