@@ -299,3 +299,141 @@ def test_a_run_without_perturbation_records_none(db_session, make_inference_job,
     assert adapter.requests[0].perturbation is None
     document = json.loads(fake_storage.uploaded[f"inference/{run.id}/predictions.json"])
     assert document["perturbation"] is None
+
+
+def _make_classification_job(make_inference_job, db_session, **kwargs):
+    job, run = make_inference_job(**kwargs)
+    job.payload = {
+        "inference_run_id": run.id,
+        "video_id": job.payload["video_id"],
+        "task_type": "classification",
+        "model_name": "quality-and-prep",
+        "frame_stride": job.payload["frame_stride"],
+        "perturbation": job.payload.get("perturbation"),
+        "axes": [
+            {"name": "quality", "weights_key": "models/7/best.pt", "classes": ["bad", "good"]},
+            {"name": "prep", "weights_key": "models/8/best.pt", "classes": ["clean", "dirty"]},
+        ],
+    }
+    db_session.commit()
+    return job, run
+
+
+class _StubClassifier:
+    def __init__(self):
+        self.requests = []
+
+    def infer(self, request, on_progress):
+        from app.classification_adapter import ClassificationResult
+
+        self.requests.append(request)
+        on_progress(2, 2)
+        return ClassificationResult(
+            fps=10.0,
+            axes=[
+                {"name": "quality", "classes": ["bad", "good"]},
+                {"name": "prep", "classes": ["clean", "dirty"]},
+            ],
+            frames={
+                "0": {
+                    "timestamp_ms": 0,
+                    "axes": [
+                        {"class_id": 1, "confidence": 0.8, "probs": [0.2, 0.8]},
+                        {"class_id": 0, "confidence": 0.6, "probs": [0.6, 0.4]},
+                    ],
+                },
+                "2": {
+                    "timestamp_ms": 200,
+                    "axes": [
+                        {"class_id": 0, "confidence": 0.7, "probs": [0.7, 0.3]},
+                        {"class_id": 1, "confidence": 0.9, "probs": [0.1, 0.9]},
+                    ],
+                },
+            },
+        )
+
+
+def test_a_classification_run_stores_the_classification_document(
+    db_session, make_inference_job, fake_storage
+):
+    from app.tasks import inference_run
+
+    spec = {"kind": "blur", "strength": 3.0}
+    job, run = _make_classification_job(
+        make_inference_job, db_session, frame_stride=2, perturbation=spec
+    )
+    adapter = _StubClassifier()
+
+    inference_run(job.id, adapter=adapter)
+    db_session.refresh(run)
+    db_session.refresh(job)
+
+    key = f"inference/{run.id}/predictions.json"
+    assert run.status == InferenceRunStatus.SUCCEEDED
+    assert run.predictions_key == key
+    assert run.frames_total == run.frames_processed == 2
+    assert job.status == JobStatus.SUCCEEDED
+    assert job.result_ref == key
+
+    document = json.loads(fake_storage.uploaded[key])
+    assert document["task_type"] == "classification"
+    assert document["fps"] == 10.0
+    assert document["frame_stride"] == 2
+    assert document["perturbation"] == spec
+    assert document["axes"] == [
+        {"name": "quality", "classes": ["bad", "good"]},
+        {"name": "prep", "classes": ["clean", "dirty"]},
+    ]
+    assert document["frames"]["2"]["axes"][1]["probs"] == [0.1, 0.9]
+    assert "model" not in document and "classes" not in document
+
+    request = adapter.requests[0]
+    assert [a.name for a in request.axes] == ["quality", "prep"]
+    assert all(a.weights_path.name.endswith(".pt") for a in request.axes)
+    assert request.axes[0].weights_path != request.axes[1].weights_path
+    assert request.frame_stride == 2
+    assert request.perturbation == spec
+
+
+def test_a_classification_adapter_failure_marks_the_run_failed(
+    db_session, make_inference_job, fake_storage
+):
+    from app.tasks import inference_run
+
+    class _Failing:
+        def infer(self, request, on_progress):
+            raise ValueError("axis model could not load")
+
+    job, run = _make_classification_job(make_inference_job, db_session)
+
+    inference_run(job.id, adapter=_Failing())
+    db_session.refresh(run)
+    db_session.refresh(job)
+
+    assert run.status == InferenceRunStatus.FAILED
+    assert run.error == "axis model could not load"
+    assert job.status == JobStatus.FAILED
+    assert fake_storage.uploaded == {}
+
+
+def test_the_default_adapter_follows_the_payload_task_type(
+    db_session, make_inference_job, fake_storage, monkeypatch
+):
+    import app.classification_adapter as mod
+    from app.tasks import inference_run
+
+    chosen = []
+
+    class _Recording(_StubClassifier):
+        def __init__(self):
+            super().__init__()
+            chosen.append("classification")
+
+    monkeypatch.setattr(mod, "UltralyticsClassificationAdapter", _Recording)
+    job, run = _make_classification_job(make_inference_job, db_session)
+
+    inference_run(job.id)
+    db_session.refresh(run)
+
+    assert chosen == ["classification"]
+    assert run.status == InferenceRunStatus.SUCCEEDED

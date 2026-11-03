@@ -1045,9 +1045,71 @@ def model_train(job_id: int, adapter=None) -> None:
 INFERENCE_PROGRESS_SECONDS = 2.0
 
 
+def _run_detection(job, storage, work: Path, video_path: Path, adapter, on_progress) -> dict:
+    """Single-model detection/segmentation: build the predictions document."""
+    weights_path = work / "weights.pt"
+    weights_path.write_bytes(storage.download(job.payload["weights_key"]))
+    result = adapter.infer(
+        InferenceRequest(
+            video_path=video_path,
+            weights_path=weights_path,
+            task_type=job.payload["task_type"],
+            frame_stride=job.payload["frame_stride"],
+            perturbation=job.payload.get("perturbation"),
+        ),
+        on_progress=on_progress,
+    )
+    document = {
+        "task_type": result.task_type,
+        "model": {
+            "name": job.payload["model_name"],
+            "version_id": job.payload.get("model_version_id"),
+        },
+        "fps": result.fps,
+        "frame_stride": job.payload["frame_stride"],
+        "perturbation": job.payload.get("perturbation"),
+        "classes": result.classes,
+        "frames": result.frames,
+    }
+    if result.timing is not None:
+        document["timing"] = result.timing
+    return document
+
+
+def _run_classification(
+    job, storage, work: Path, video_path: Path, adapter, on_progress
+) -> dict:
+    """One classifier per axis; the document's axes/classes come from the
+    loaded models (the adapter result), not from the payload."""
+    from app.classification_adapter import AxisWeights, ClassificationRequest
+
+    axes = []
+    for index, axis in enumerate(job.payload["axes"]):
+        weights_path = work / f"axis-{index}.pt"
+        weights_path.write_bytes(storage.download(axis["weights_key"]))
+        axes.append(AxisWeights(name=axis["name"], weights_path=weights_path))
+    result = adapter.infer(
+        ClassificationRequest(
+            video_path=video_path,
+            axes=axes,
+            frame_stride=job.payload["frame_stride"],
+            perturbation=job.payload.get("perturbation"),
+        ),
+        on_progress=on_progress,
+    )
+    return {
+        "task_type": "classification",
+        "fps": result.fps,
+        "frame_stride": job.payload["frame_stride"],
+        "perturbation": job.payload.get("perturbation"),
+        "axes": result.axes,
+        "frames": result.frames,
+    }
+
+
 @celery_app.task(name="inference_run")
 def inference_run(job_id: int, adapter=None) -> None:
-    """Run a detection or segmentation model over a stored video.
+    """Run a detection, segmentation or classification model over a stored video.
 
     Writes one predictions document to object storage. Progress is
     flushed on a cadence rather than per frame: a 90k-frame video would
@@ -1095,10 +1157,16 @@ def inference_run(job_id: int, adapter=None) -> None:
 
     try:
         # Inside the try so an import/CUDA failure ends FAILED, not pending.
+        is_classification = job.payload["task_type"] == "classification"
         if adapter is None:
-            from app.ultralytics_inference_adapter import UltralyticsInferenceAdapter
+            if is_classification:
+                from app.classification_adapter import UltralyticsClassificationAdapter
 
-            adapter = UltralyticsInferenceAdapter()
+                adapter = UltralyticsClassificationAdapter()
+            else:
+                from app.ultralytics_inference_adapter import UltralyticsInferenceAdapter
+
+                adapter = UltralyticsInferenceAdapter()
 
         # Resolved here, not at enqueue: a transcode between the two
         # replaces videos.storage_key and deletes the old object.
@@ -1113,39 +1181,15 @@ def inference_run(job_id: int, adapter=None) -> None:
             work = Path(workdir)
             video_path = work / "input.mp4"
             video_path.write_bytes(storage.download(video_key))
-            weights_path = work / "weights.pt"
-            weights_path.write_bytes(storage.download(job.payload["weights_key"]))
 
-            result = adapter.infer(
-                InferenceRequest(
-                    video_path=video_path,
-                    weights_path=weights_path,
-                    task_type=job.payload["task_type"],
-                    frame_stride=job.payload["frame_stride"],
-                    perturbation=job.payload.get("perturbation"),
-                ),
-                on_progress=_on_progress,
-            )
+            build = _run_classification if is_classification else _run_detection
+            document = build(job, storage, work, video_path, adapter, _on_progress)
 
-        document = {
-            "task_type": result.task_type,
-            "model": {
-                "name": job.payload["model_name"],
-                "version_id": job.payload.get("model_version_id"),
-            },
-            "fps": result.fps,
-            "frame_stride": job.payload["frame_stride"],
-            "perturbation": job.payload.get("perturbation"),
-            "classes": result.classes,
-            "frames": result.frames,
-        }
-        if result.timing is not None:
-            document["timing"] = result.timing
         predictions_key = f"inference/{run.id}/predictions.json"
         storage.upload(predictions_key, json.dumps(document).encode(), "application/json")
 
         run.predictions_key = predictions_key
-        run.frames_processed = run.frames_total = len(result.frames)
+        run.frames_processed = run.frames_total = len(document["frames"])
         run.status = InferenceRunStatus.SUCCEEDED
         run.finished_at = datetime.now(timezone.utc)
         job.status = JobStatus.SUCCEEDED
