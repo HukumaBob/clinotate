@@ -28,7 +28,14 @@ function parseSeconds(text: string, min: number, max: number): number | null {
 
 function errorText(error: unknown, fallback: string): string {
   const detail = (error as { detail?: unknown } | null)?.detail;
-  return typeof detail === "string" ? detail : fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d as { msg?: unknown } | null)?.msg)
+      .filter((m): m is string => typeof m === "string");
+    if (msgs.length > 0) return msgs.join("; ");
+  }
+  return fallback;
 }
 
 const field = "w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-right text-gray-100";
@@ -47,12 +54,19 @@ export function EpisodeCommitDialog({
   const [preview, setPreview] = useState<CommitEpisodesRead | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [commitError, setCommitError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<CommitEpisodesRead | null>(null);
 
   const nameRef = useRef<HTMLInputElement>(null);
+  // Separate mutations: a preview request must never replace the commit's observer.
   const { mutate } = useCommitEpisodes(runId, videoId);
+  const committedRef = useRef(onCommitted);
+  committedRef.current = onCommitted;
+  const commit = useCommitEpisodes(runId, videoId, { onSuccess: () => committedRef.current?.() });
+  const submitting = commit.isPending;
+  const created = commit.data ?? null;
+  // Read by the preview effect without re-running it when a commit starts or fails.
+  const locked = useRef(false);
+  locked.current = submitting || created !== null;
+  const commitError = commit.error ? errorText(commit.error, "Could not send the frames.") : null;
   const sent = useVideoSent(videoId).data;
 
   const stepMs = parseSeconds(step, 0.1, 60);
@@ -78,6 +92,7 @@ export function EpisodeCommitDialog({
   const latest = useRef(0);
   useEffect(() => {
     const id = ++latest.current;
+    if (locked.current) return;
     setPreview(null);
     setPreviewError(null);
     if (stepMs === null || marginMs === null) {
@@ -116,28 +131,13 @@ export function EpisodeCommitDialog({
 
   const send = () => {
     if (!canSend || stepMs === null || marginMs === null) return;
-    setSubmitting(true);
-    setCommitError(null);
-    mutate(
-      {
-        episodes: toRequestEpisodes(keys),
-        stepMs,
-        marginMs,
-        name: name.trim() === "" ? null : name.trim(),
-        dryRun: false,
-      },
-      {
-        onSuccess: (data) => {
-          setSubmitting(false);
-          setCreated(data);
-          onCommitted?.();
-        },
-        onError: (error) => {
-          setSubmitting(false);
-          setCommitError(errorText(error, "Could not send the frames."));
-        },
-      },
-    );
+    commit.mutate({
+      episodes: toRequestEpisodes(keys),
+      stepMs,
+      marginMs,
+      name: name.trim() === "" ? null : name.trim(),
+      dryRun: false,
+    });
   };
 
   const axes = preview ? Object.entries(preview.annotations_by_axis) : [];
@@ -187,7 +187,8 @@ export function EpisodeCommitDialog({
               type="text"
               maxLength={255}
               value={name}
-              placeholder={`QC errors · <video> · run #${runId} · <date>`}
+              placeholder="Default name (server-generated)"
+              disabled={submitting}
               onChange={(e) => setName(e.target.value)}
               className="mb-3 w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-100"
             />
@@ -202,6 +203,7 @@ export function EpisodeCommitDialog({
                   max={60}
                   step={0.1}
                   value={step}
+                  disabled={submitting}
                   onChange={(e) => setStep(e.target.value)}
                   className={field}
                 />
@@ -215,6 +217,7 @@ export function EpisodeCommitDialog({
                   max={60}
                   step={0.5}
                   value={margin}
+                  disabled={submitting}
                   onChange={(e) => setMargin(e.target.value)}
                   className={field}
                 />

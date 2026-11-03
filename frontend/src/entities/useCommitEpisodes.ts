@@ -14,7 +14,11 @@ export type CommitEpisodesVariables = {
 };
 
 /** Sends (or, with dryRun, only counts) frames around chosen error episodes. */
-export function useCommitEpisodes(runId: number | null, videoId?: number | null) {
+export function useCommitEpisodes(
+  runId: number | null,
+  videoId?: number | null,
+  options?: { /** Runs for a real commit only, even after the caller unmounted. */ onSuccess?: (data: CommitEpisodesRead) => void },
+) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (vars: CommitEpisodesVariables): Promise<CommitEpisodesRead> => {
@@ -31,11 +35,12 @@ export function useCommitEpisodes(runId: number | null, videoId?: number | null)
       if (result.error) throw result.error;
       return result.data as CommitEpisodesRead;
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       if (vars.dryRun) return;
       void queryClient.invalidateQueries({ queryKey: ["video-sent", videoId ?? null] });
       void queryClient.invalidateQueries({ queryKey: ["video-sequences", videoId ?? null] });
       void queryClient.invalidateQueries({ queryKey: ["sequences"] });
+      options?.onSuccess?.(data);
     },
   });
 }

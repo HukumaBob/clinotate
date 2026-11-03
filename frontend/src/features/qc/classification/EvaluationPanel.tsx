@@ -22,9 +22,6 @@ export interface EvaluationPanelProps {
   onBoundaryChange?: (ms: number) => void;
   /** The boundary tolerance the panel starts with, in milliseconds (default 2000). */
   initialBoundaryMs?: number;
-  /** Called with the selected episode keys (`axis|start_ms`, all axes) when
-   * "Send to training…" is pressed. The button is disabled with nothing selected. */
-  onSend?: (keys: string[]) => void;
 }
 
 export type ReferenceState = "loading" | "error" | "ready";
@@ -54,7 +51,6 @@ export function EvaluationPanel({
   onSeek,
   onBoundaryChange,
   initialBoundaryMs = 2000,
-  onSend,
 }: EvaluationPanelProps) {
   const [boundaryMs, setBoundaryMs] = useState(initialBoundaryMs);
   const [draft, setDraft] = useState(String(initialBoundaryMs / 1000));
@@ -290,10 +286,7 @@ export function EvaluationPanel({
             onSelectionChange={setSelection}
             onSeek={onSeek}
             summary={summary}
-            onSend={(keys) => {
-              setSendKeys(keys);
-              onSend?.(keys);
-            }}
+            onSend={setSendKeys}
           />
         </div>
       )}

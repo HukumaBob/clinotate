@@ -15,6 +15,16 @@ let evalState: {
 };
 const useEvaluation = vi.fn();
 
+vi.mock("./EpisodeCommitDialog", () => ({
+  EpisodeCommitDialog: (props: { keys: string[]; referenceStatus?: string | null; onClose: () => void; onCommitted?: () => void }) => (
+    <div role="dialog" aria-label="Send frames to training">
+      <span>{props.keys.join(",")}|{props.referenceStatus}</span>
+      <button onClick={props.onCommitted}>committed</button>
+      <button onClick={props.onClose}>Close</button>
+    </div>
+  ),
+}));
+
 vi.mock("../../../entities/useEvaluation", () => ({
   useEvaluation: (...args: unknown[]) => {
     useEvaluation(...args);
@@ -341,14 +351,13 @@ describe("EvaluationPanel", () => {
       count(0);
     });
 
-    it("disables Send at zero and sends the keys otherwise", async () => {
-      const onSend = vi.fn();
-      renderPanel({ onSend });
+    it("disables Send at zero and opens the dialog otherwise", async () => {
+      renderPanel();
       expect(send()).toBeDisabled();
       await userEvent.click(box("0:05"));
       expect(send()).toBeEnabled();
       await userEvent.click(send());
-      expect(onSend).toHaveBeenCalledWith(["Finding|5000"]);
+      expect(screen.getByRole("dialog", { name: "Send frames to training" })).toBeInTheDocument();
     });
 
     it("Interior only replaces the selection and hides nothing", async () => {
@@ -445,26 +454,14 @@ describe("EvaluationPanel", () => {
   });
 });
 
-vi.mock("../../../entities/useCommitEpisodes", () => ({
-  useCommitEpisodes: () => ({ mutate: commitMutate, isPending: false }),
-}));
-vi.mock("../../../entities/useQcFlags", () => ({ useVideoSent: () => ({ data: undefined }) }));
-const commitMutate = vi.fn();
-
 describe("EvaluationPanel commit dialog", () => {
-  it("opens the dialog from the footer and clears the selection after a commit", async () => {
-    commitMutate.mockReset();
+  it("opens the dialog with the selection and clears it after a commit", () => {
     renderPanel();
     fireEvent.click(screen.getAllByRole("checkbox", { name: /Select episode at/ })[0]);
     fireEvent.click(screen.getByRole("button", { name: "Send to training…" }));
-    expect(screen.getByRole("dialog", { name: "Send frames to training" })).toBeInTheDocument();
-    // Dry runs fire after the debounce; answer none, go straight to a real commit.
-    const ok = { dry_run: false, episodes: 1, frames: 4, dropped_unlabeled: 0, annotations_by_axis: {}, sequence_id: 5, sequence_name: "S" };
-    await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
-    act(() => commitMutate.mock.calls[0][1].onSuccess({ ...ok, dry_run: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    const real = commitMutate.mock.calls.find(([v]) => v.dryRun === false)!;
-    act(() => real[1].onSuccess(ok));
+    expect(screen.getByRole("dialog", { name: "Send frames to training" })).toHaveTextContent(/\|5000|1000|65000/);
+    expect(screen.getByRole("dialog")).toHaveTextContent("|clean");
+    fireEvent.click(screen.getByRole("button", { name: "committed" }));
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("0 episodes selected")).toBeInTheDocument();
