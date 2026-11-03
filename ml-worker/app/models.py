@@ -274,6 +274,7 @@ class InferenceRun(Base):
     model_name: Mapped[str] = mapped_column(String(200))
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
     frame_stride: Mapped[int] = mapped_column(Integer, default=1)
+    axes: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[InferenceRunStatus] = mapped_column(
         Enum(InferenceRunStatus), default=InferenceRunStatus.PENDING
     )

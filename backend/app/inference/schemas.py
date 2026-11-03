@@ -2,7 +2,7 @@ import math
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.inference.models import InferenceRunStatus, QcFlagKind
 
@@ -39,6 +39,14 @@ class InferenceRunCreate(BaseModel):
     perturbation: PerturbationSpec | None = None
 
 
+class AxisRead(BaseModel):
+    model_version_id: int | None
+    model_name: str
+    name: str
+    category_id: int | None
+    classes: list[str]
+
+
 class InferenceRunRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,6 +57,7 @@ class InferenceRunRead(BaseModel):
     job_id: int | None
     frame_stride: int
     perturbation: dict | None = None
+    axes: list[AxisRead] | None = None
     status: InferenceRunStatus
     frames_total: int
     frames_processed: int
@@ -58,6 +67,12 @@ class InferenceRunRead(BaseModel):
     finished_at: datetime | None
     flags_pending: int = 0
     flags_committed: int = 0
+
+    @computed_field
+    @property
+    def task_type(self) -> Literal["detection", "segmentation", "classification"] | None:
+        # Detection/segmentation runs carry no task column; only axes mark a classifier.
+        return "classification" if self.axes else None
 
 
 class PredictionsRead(BaseModel):

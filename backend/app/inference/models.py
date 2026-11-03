@@ -36,6 +36,9 @@ class InferenceRun(Base):
     frame_stride: Mapped[int] = mapped_column(Integer, default=1)
     # Stress test: {"kind", "strength"} applied to each frame before the model.
     perturbation: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Classification runs only: one entry per axis (see AxisRead), each
+    # {"model_version_id", "model_name", "name", "category_id", "classes"}.
+    axes: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[InferenceRunStatus] = mapped_column(
         Enum(InferenceRunStatus), default=InferenceRunStatus.PENDING
     )
