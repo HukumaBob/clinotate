@@ -133,6 +133,17 @@ export function BalancePanel({
         </div>
       )}
 
+      {(report.reference_exposure ?? []).length > 0 && (
+        <div
+          data-testid="reference-exposure-warning"
+          className="rounded border border-amber-700 bg-amber-950 px-3 py-2 text-xs text-amber-200"
+        >
+          These clean reference videos will become compromised if you train a classifier on this
+          selection:{" "}
+          {(report.reference_exposure ?? []).map((v) => `${v.title} (${v.frames} frames)`).join(", ")}
+        </div>
+      )}
+
       <div className="flex gap-4 text-xs text-gray-400">
         <span data-testid="total-frames">Frames: {report.total_frames}</span>
         <span data-testid="negative-frames">Negatives: {report.negative_frames}</span>

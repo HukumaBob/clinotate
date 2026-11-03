@@ -312,3 +312,24 @@ describe("BalancePanel", () => {
     expect(props.onChangeLimit).toHaveBeenCalledWith(1, null);
   });
 });
+
+describe("BalancePanel reference exposure warning", () => {
+  it("lists the videos that would become compromised", () => {
+    renderPanel({
+      report: { ...REPORT, reference_exposure: [{ video_id: 3, title: "Clean A", frames: 12 }] },
+    });
+    expect(screen.getByTestId("reference-exposure-warning")).toHaveTextContent(
+      "These clean reference videos will become compromised if you train a classifier on this selection: Clean A (12 frames)",
+    );
+  });
+
+  it("shows nothing for an empty or missing field", () => {
+    renderPanel({ report: { ...REPORT, reference_exposure: [] } });
+    expect(screen.queryByTestId("reference-exposure-warning")).toBeNull();
+  });
+
+  it("shows nothing when the field is missing", () => {
+    renderPanel();
+    expect(screen.queryByTestId("reference-exposure-warning")).toBeNull();
+  });
+});

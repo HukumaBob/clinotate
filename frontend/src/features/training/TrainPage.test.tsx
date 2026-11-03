@@ -6,6 +6,10 @@ import { deferred } from "./testDeferred";
 import { settingsSchemaFixture } from "./testFixtures";
 import { TrainPage } from "./TrainPage";
 
+vi.mock("../../entities/useReference", () => ({
+  useReferenceExposure: () => ({ data: [] }),
+}));
+
 vi.mock("../../shared/api/client", () => ({
   apiClient: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
 }));

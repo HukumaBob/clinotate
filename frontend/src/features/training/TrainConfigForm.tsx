@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useReferenceExposure } from "../../entities/useReference";
 import type { components } from "../../shared/api/generated/schema";
 import type { DatasetOption } from "./DatasetSummary";
 import { RunSummary } from "./RunSummary";
@@ -95,6 +96,10 @@ export function TrainConfigForm({
   prefill = null,
   clearTextSignal,
 }: TrainConfigFormProps) {
+  const exposure = useReferenceExposure(
+    dataset?.taskType === "classification" ? dataset.id : null,
+  );
+  const exposedVideos = dataset?.taskType === "classification" ? (exposure.data ?? []) : [];
   const [baseKey, setBaseKey] = useState("");
   // The list changes with the dataset; a selection that is no longer offered
   // falls back to the first pretrained model.
@@ -298,6 +303,16 @@ export function TrainConfigForm({
           )}
         </div>
       </div>
+
+      {exposedVideos.length > 0 && (
+        <div
+          data-testid="reference-exposure-warning"
+          className="rounded border border-amber-700 bg-amber-950 px-3 py-2 text-xs text-amber-200"
+        >
+          These clean reference videos will become compromised if you train a classifier on this
+          selection: {exposedVideos.map((v) => `${v.title} (${v.frames} frames)`).join(", ")}
+        </div>
+      )}
 
       <div className="sticky bottom-0 -mx-6 flex items-center gap-4 border-t border-gray-800 bg-gray-900 px-6 py-3">
         {settingsSchema && <RunSummary changes={changes} />}

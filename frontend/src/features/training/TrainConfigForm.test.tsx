@@ -7,6 +7,14 @@ import { TrainConfigForm } from "./TrainConfigForm";
 import { defaultValues } from "./settingsLogic";
 import { settingsSchemaFixture } from "./testFixtures";
 
+const exposureMock = vi.hoisted(() => ({ data: [] as unknown[], ids: [] as unknown[] }));
+vi.mock("../../entities/useReference", () => ({
+  useReferenceExposure: (id: number | null) => {
+    exposureMock.ids.push(id);
+    return { data: id === null ? undefined : exposureMock.data };
+  },
+}));
+
 type BaseModelOption = components["schemas"]["BaseModelOption"];
 
 const pretrained = (size: string, note: string | null = null): BaseModelOption => ({
@@ -558,5 +566,39 @@ describe("TrainConfigForm", () => {
     const list = screen.getByText("1 change").closest("details")!.querySelector("ul")!;
     expect(list.className).toContain("max-h-[40vh]");
     expect(list.className).toContain("overflow-y-auto");
+  });
+
+  describe("reference exposure warning", () => {
+    const exposure = [{ video_id: 3, title: "Clean A", frames: 12 }];
+    const renderWith = (taskType: string) => {
+      exposureMock.ids = [];
+      render(
+        <TrainConfigForm dataset={{ ...dataset(1, "cls", true), taskType }} disabled={false}
+          onSubmit={vi.fn()} baseModels={baseModels} settingsSchema={settingsSchemaFixture} />,
+      );
+    };
+
+    it("warns for a classification dataset with exposure and keeps Start enabled", () => {
+      exposureMock.data = exposure;
+      renderWith("classification");
+      const warning = screen.getByTestId("reference-exposure-warning");
+      expect(warning).toHaveTextContent(
+        "These clean reference videos will become compromised if you train a classifier on this selection: Clean A (12 frames)",
+      );
+      expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled();
+    });
+
+    it("shows nothing for an empty list", () => {
+      exposureMock.data = [];
+      renderWith("classification");
+      expect(screen.queryByTestId("reference-exposure-warning")).toBeNull();
+    });
+
+    it("does not query or warn for a non-classification dataset", () => {
+      exposureMock.data = exposure;
+      renderWith("detection");
+      expect(screen.queryByTestId("reference-exposure-warning")).toBeNull();
+      expect(exposureMock.ids.every((id) => id === null)).toBe(true);
+    });
   });
 });
