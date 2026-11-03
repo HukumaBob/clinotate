@@ -203,6 +203,9 @@ describe("useRestoreClean", () => {
     expect(invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toContain(
       JSON.stringify(["reference", 5]),
     );
+    expect(invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toContain(
+      JSON.stringify(["evaluation"]),
+    );
   });
 });
 
@@ -476,6 +479,20 @@ describe("delete and restore failures", () => {
     });
     expect(invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toContain(
       JSON.stringify(["reference", 5]),
+    );
+  });
+});
+
+describe("evaluation invalidation", () => {
+  it("invalidates evaluations when a reference mutation settles", async () => {
+    vi.mocked(apiClient.DELETE).mockResolvedValue({} as never);
+    const { wrapper, invalidate } = setup();
+    const { result } = renderHook(() => useDeleteInterval(5), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync(1);
+    });
+    expect(invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toContain(
+      JSON.stringify(["evaluation"]),
     );
   });
 });

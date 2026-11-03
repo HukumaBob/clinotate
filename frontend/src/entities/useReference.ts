@@ -58,6 +58,7 @@ function patchCache(
 function settle(queryClient: QueryClient, videoId: number | null) {
   if (queryClient.isMutating({ mutationKey: mutationKey(videoId) }) <= 1) {
     void queryClient.invalidateQueries({ queryKey: ["reference", videoId] });
+    void queryClient.invalidateQueries({ queryKey: ["evaluation"] });
   }
 }
 
@@ -229,7 +230,10 @@ export function useRestoreClean(videoId: number | null) {
       });
       if (result.error) throw result.error;
     },
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["reference", videoId] }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reference", videoId] });
+      void queryClient.invalidateQueries({ queryKey: ["evaluation"] });
+    },
   });
 }
 
