@@ -1,9 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.models import User
 from app.media.models import Video
 from app.reference.models import ReferenceInterval, VideoReference
 from app.reference.schemas import (
+    IntervalCreate,
+    IntervalUpdate,
     ReferenceAxisRead,
     ReferenceClassRead,
     ReferenceIntervalRead,
@@ -18,6 +21,18 @@ DIGIT_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
 
 
 class VideoNotFound(Exception):
+    pass
+
+
+class IntervalNotFound(Exception):
+    pass
+
+
+class InvalidInterval(Exception):
+    pass
+
+
+class IntervalOverlap(Exception):
     pass
 
 
@@ -94,3 +109,129 @@ def get_reference(session: Session, video_id: int) -> ReferenceRead:
             for i in intervals
         ],
     )
+
+
+def _lock_video(session: Session, video_id: int) -> Video:
+    """Lock the video row so concurrent interval writes on it serialize."""
+    video = session.get(Video, video_id, with_for_update=True)
+    if video is None:
+        raise VideoNotFound(f"Video {video_id} not found")
+    return video
+
+
+def _category_of(session: Session, video: Video, label_id: int) -> int:
+    for axis in build_axes(session, video.procedure_id):
+        if any(c.label_id == label_id for c in axis.classes):
+            return axis.category_id
+    raise InvalidInterval(
+        f"Label {label_id} is not a frame-classification label of this video's procedure"
+    )
+
+
+def _check_span(video: Video, start_ms: int, end_ms: int) -> None:
+    if end_ms <= start_ms:
+        raise InvalidInterval("end_ms must be greater than start_ms")
+    if end_ms - start_ms < MIN_INTERVAL_MS:
+        raise InvalidInterval(f"An interval must be at least {MIN_INTERVAL_MS} ms long")
+    if start_ms < 0 or end_ms > round(video.duration_seconds * 1000):
+        raise InvalidInterval("An interval must lie within the video")
+
+
+def _check_overlap(
+    session: Session, video_id: int, category_id: int, start_ms: int, end_ms: int,
+    exclude_id: int | None = None,
+) -> None:
+    query = select(ReferenceInterval.id).where(
+        ReferenceInterval.video_id == video_id,
+        ReferenceInterval.category_id == category_id,
+        ReferenceInterval.start_ms < end_ms,
+        ReferenceInterval.end_ms > start_ms,
+    )
+    if exclude_id is not None:
+        query = query.where(ReferenceInterval.id != exclude_id)
+    if session.scalars(query.limit(1)).first() is not None:
+        raise IntervalOverlap("The interval overlaps another interval of the same category")
+
+
+def _to_read(interval: ReferenceInterval) -> ReferenceIntervalRead:
+    return ReferenceIntervalRead(
+        id=interval.id,
+        video_id=interval.video_id,
+        category_id=interval.category_id,
+        label_id=interval.label_id,
+        taxonomy_version=interval.taxonomy_version,
+        start_ms=interval.start_ms,
+        end_ms=interval.end_ms,
+        orphaned=False,
+    )
+
+
+def create_interval(
+    session: Session, video_id: int, payload: IntervalCreate, created_by: User
+) -> ReferenceIntervalRead:
+    video = _lock_video(session, video_id)
+    try:
+        category_id = _category_of(session, video, payload.label_id)
+        _check_span(video, payload.start_ms, payload.end_ms)
+        _check_overlap(session, video_id, category_id, payload.start_ms, payload.end_ms)
+        label = session.get(Label, payload.label_id)
+        if session.get(VideoReference, video_id) is None:
+            session.add(VideoReference(video_id=video_id))
+        interval = ReferenceInterval(
+            video_id=video_id,
+            category_id=category_id,
+            label_id=label.id,
+            taxonomy_version=label.taxonomy_version,
+            start_ms=payload.start_ms,
+            end_ms=payload.end_ms,
+            created_by_id=created_by.id,
+        )
+        session.add(interval)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return _to_read(interval)
+
+
+def _get_interval(session: Session, video_id: int, interval_id: int) -> ReferenceInterval:
+    interval = session.get(ReferenceInterval, interval_id)
+    if interval is None or interval.video_id != video_id:
+        raise IntervalNotFound(f"Interval {interval_id} not found")
+    return interval
+
+
+def update_interval(
+    session: Session, video_id: int, interval_id: int, payload: IntervalUpdate
+) -> ReferenceIntervalRead:
+    video = _lock_video(session, video_id)
+    try:
+        interval = _get_interval(session, video_id, interval_id)
+        label_id = payload.label_id if payload.label_id is not None else interval.label_id
+        start_ms = payload.start_ms if payload.start_ms is not None else interval.start_ms
+        end_ms = payload.end_ms if payload.end_ms is not None else interval.end_ms
+        if label_id != interval.label_id:
+            if _category_of(session, video, label_id) != interval.category_id:
+                raise InvalidInterval("A relabel must stay within the interval's category")
+            label = session.get(Label, label_id)
+            interval.label_id = label.id
+            interval.taxonomy_version = label.taxonomy_version
+        _check_span(video, start_ms, end_ms)
+        _check_overlap(session, video_id, interval.category_id, start_ms, end_ms, interval.id)
+        interval.start_ms = start_ms
+        interval.end_ms = end_ms
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return _to_read(interval)
+
+
+def delete_interval(session: Session, video_id: int, interval_id: int) -> None:
+    _lock_video(session, video_id)
+    try:
+        session.delete(_get_interval(session, video_id, interval_id))
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise

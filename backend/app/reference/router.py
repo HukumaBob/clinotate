@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.db import get_session
 from app.reference import service
-from app.reference.schemas import ReferenceRead
+from app.auth.models import User
+from app.reference.schemas import (
+    IntervalCreate,
+    IntervalUpdate,
+    ReferenceIntervalRead,
+    ReferenceRead,
+)
 
 router = APIRouter(
     prefix="/reference", tags=["reference"], dependencies=[Depends(get_current_user)]
@@ -17,3 +23,58 @@ def read_reference(video_id: int, session: Session = Depends(get_session)):
         return service.get_reference(session, video_id)
     except service.VideoNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+def _translate(exc: Exception) -> HTTPException:
+    if isinstance(exc, (service.VideoNotFound, service.IntervalNotFound)):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, service.InvalidInterval):
+        return HTTPException(status_code=422, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+_ERRORS = (
+    service.VideoNotFound,
+    service.IntervalNotFound,
+    service.InvalidInterval,
+    service.IntervalOverlap,
+)
+
+
+@router.post(
+    "/videos/{video_id}/intervals",
+    response_model=ReferenceIntervalRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_interval(
+    video_id: int,
+    payload: IntervalCreate,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    try:
+        return service.create_interval(session, video_id, payload, user)
+    except _ERRORS as exc:
+        raise _translate(exc)
+
+
+@router.patch("/videos/{video_id}/intervals/{interval_id}", response_model=ReferenceIntervalRead)
+def update_interval(
+    video_id: int,
+    interval_id: int,
+    payload: IntervalUpdate,
+    session: Session = Depends(get_session),
+):
+    try:
+        return service.update_interval(session, video_id, interval_id, payload)
+    except _ERRORS as exc:
+        raise _translate(exc)
+
+
+@router.delete("/videos/{video_id}/intervals/{interval_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_interval(video_id: int, interval_id: int, session: Session = Depends(get_session)):
+    try:
+        service.delete_interval(session, video_id, interval_id)
+    except _ERRORS as exc:
+        raise _translate(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
