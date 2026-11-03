@@ -63,3 +63,18 @@ def test_a_decoder_error_becomes_a_value_error(monkeypatch):
     monkeypatch.setattr(media_service.cv2, "imencode", boom)
     with pytest.raises(ValueError):
         extract_frames_at(make_video(), [3])
+
+
+def test_a_crop_cuts_every_frame_and_keeps_its_content():
+    from app.media.schemas import CropBox
+
+    frames = extract_frames_at(make_video(), [3], crop=CropBox(left=25))
+
+    _, png, width, height = frames[0]
+    assert (width, height) == (48, 48)
+    assert gray_of(png) == pytest.approx(30, abs=6)
+
+
+def test_no_crop_keeps_the_whole_frame():
+    _, _, width, height = extract_frames_at(make_video(), [3])[0]
+    assert (width, height) == (64, 48)

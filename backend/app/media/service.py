@@ -175,7 +175,7 @@ class FramesOutOfRange(Exception):
 
 
 def extract_frames_at(
-    video_bytes: bytes, frame_indices: list[int]
+    video_bytes: bytes, frame_indices: list[int], crop: "CropBox | None" = None
 ) -> list[tuple[int, bytes, int, int]]:
     """Cut exact frames by number in ONE sequential pass over the video.
 
@@ -184,6 +184,8 @@ def extract_frames_at(
     inference adapter does, so a frame number addresses the very frame the
     model saw. Seeking (CAP_PROP_POS_FRAMES) is not used: on some codecs it
     lands on the wrong frame, and these frames become training data.
+
+    `crop` is applied to every frame, as in `extract_frames`.
     """
     wanted = sorted(set(frame_indices))
     if not wanted:
@@ -205,6 +207,7 @@ def extract_frames_at(
                     success, frame = capture.retrieve()
                     if not success:
                         raise ValueError(f"Could not decode video frame {index}")
+                    frame = _apply_crop(frame, crop)
                     encoded, buffer = cv2.imencode(".png", frame)
                     if not encoded:
                         raise ValueError(f"Could not encode video frame {index}")

@@ -406,3 +406,22 @@ def test_openapi_declares_both_the_201_commit_and_the_200_dry_run():
     for code in ("200", "201"):
         schema = responses[code]["content"]["application/json"]["schema"]
         assert schema == {"$ref": "#/components/schemas/CommitEpisodesRead"}
+
+
+def test_episode_frames_are_cut_with_the_runs_working_area(world, store):  # noqa: F811
+    from app.inference.models import InferenceRun
+
+    video_id, run_id, _labels, _qlabels = scenario(world)
+    crop = {"left": 25, "right": 0, "top": 0, "bottom": 0}
+    session = db_module.SessionLocal()
+    try:
+        session.get(InferenceRun, run_id).crop_box = crop
+        session.commit()
+    finally:
+        session.close()
+
+    assert post(run_id, episodes=[A, B]).status_code == 201
+
+    (sequence,), frames, _ = rows_of(video_id)
+    assert sequence.crop_box == crop
+    assert {(f.width, f.height) for f in frames} == {(48, 48)}

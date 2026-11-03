@@ -24,6 +24,7 @@ from app.inference.models import InferenceRun, InferenceRunStatus, QcFlag, QcFla
 from app.inference.schemas import ClassifierSpec, InferenceRunRead
 from app.jobs.models import Job, JobStatus, JobType
 from app.media.models import Frame, Sequence, Video
+from app.media.schemas import CropBox
 from app.media.service import FramesOutOfRange, extract_frames_at
 from app.storage import StorageService
 from app.training import service as training_service
@@ -578,6 +579,7 @@ def commit_flags(
         origin_qc_run_id=run.id,
         frame_numbers=[flag.frame_index for flag in flags],
         on_frame=on_frame,
+        crop=CropBox(**run.crop_box) if run.crop_box else None,
     )
 
 
@@ -592,10 +594,14 @@ def store_frames_as_sequence(
     origin_qc_run_id: int | None,
     frame_numbers: list[int],
     on_frame: Callable[[int, Frame], None],
+    crop: CropBox | None = None,
 ) -> Sequence:
     """Cut `frame_numbers` out of `video` and store them as one new Sequence.
 
     All or nothing, and it always ends the caller's transaction:
+
+    `crop`, when given, is applied to every frame and stored as the new
+    Sequence's `crop_box`, like a sequence cut from the video form.
 
     `frame_numbers` must be distinct and ascending (what `extract_frames_at`
     returns); anything else is refused with the mismatch `RuntimeError`.
@@ -621,7 +627,9 @@ def store_frames_as_sequence(
     even if the rollback itself fails) and is re-raised unchanged.
     """
     try:
-        extracted = extract_frames_at(storage.download(video.storage_key), frame_numbers)
+        extracted = extract_frames_at(
+            storage.download(video.storage_key), frame_numbers, crop=crop
+        )
     except FramesOutOfRange as exc:
         session.rollback()
         raise FramesPastEnd(exc.indices) from exc
@@ -643,6 +651,7 @@ def store_frames_as_sequence(
             start_time=start_time,
             duration=duration,
             origin_qc_run_id=origin_qc_run_id,
+            crop_box=crop.model_dump() if crop else None,
         )
         session.add(sequence)
         session.flush()

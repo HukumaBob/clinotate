@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.annotation.models import Annotation, AnnotationType
 from app.auth.models import User
 from app.inference.service import store_frames_as_sequence
+from app.media.schemas import CropBox
 from app.reference.schemas import CommitEpisodesRead, CommitEpisodesRequest
 from app.storage import StorageService
 from app.taxonomy.models import Label
@@ -243,7 +244,7 @@ def commit_episodes(
         session, storage, video=video, name=name, start_time=start_time,
         duration=max(1, math.ceil(last_ms / 1000) - start_time),
         origin_qc_run_id=run.id, frame_numbers=[f.frame_index for f in kept],
-        on_frame=on_frame,
+        on_frame=on_frame, crop=CropBox(**run.crop_box) if run.crop_box else None,
     )
     return CommitEpisodesRead(
         dry_run=False, episodes=len(spans), frames=len(kept), dropped_unlabeled=dropped,

@@ -20,7 +20,9 @@ def _register_and_login(email: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
-def _make_run(rows, *, status=InferenceRunStatus.SUCCEEDED, frame_stride=5, video_id=None) -> int:
+def _make_run(
+    rows, *, status=InferenceRunStatus.SUCCEEDED, frame_stride=5, video_id=None, crop_box=None
+) -> int:
     session = db_module.SessionLocal()
     try:
         run = InferenceRun(
@@ -29,6 +31,7 @@ def _make_run(rows, *, status=InferenceRunStatus.SUCCEEDED, frame_stride=5, vide
             model_name="seed-detection",
             frame_stride=frame_stride,
             status=status,
+            crop_box=crop_box,
             created_by_id=rows.user_id,
         )
         session.add(run)
@@ -320,6 +323,37 @@ def test_commit_creates_a_sequence_with_the_flagged_frames(committed_inference_r
         assert seq_row.duration == 3  # 0 ms to 2500 ms, rounded up
     finally:
         session.close()
+
+
+def test_commit_cuts_the_frames_with_the_runs_working_area(committed_inference_rows, fake_storage):
+    headers = _register_and_login("commit-crop@example.com")
+    crop = {"left": 25, "right": 0, "top": 0, "bottom": 0}
+    run_id = _make_run(committed_inference_rows, crop_box=crop)
+    _flag_three(headers, run_id)
+
+    response = _commit(headers, run_id)
+
+    assert response.status_code == 201
+    assert response.json()["crop_box"] == crop
+    session = db_module.SessionLocal()
+    try:
+        assert session.get(Sequence, response.json()["id"]).crop_box == crop
+        frames = session.query(Frame).filter_by(sequence_id=response.json()["id"]).all()
+        assert {(f.width, f.height) for f in frames} == {(48, 48)}  # 64 wide minus 25 %
+    finally:
+        session.close()
+
+
+def test_commit_without_a_working_area_keeps_whole_frames_and_no_crop_box(
+    committed_inference_rows, fake_storage
+):
+    headers = _register_and_login("commit-nocrop@example.com")
+    run_id = _make_run(committed_inference_rows)
+    _flag_three(headers, run_id)
+
+    sequence = _commit(headers, run_id).json()
+
+    assert sequence["crop_box"] is None
 
 
 def test_the_flag_list_then_points_at_the_sequence(committed_inference_rows, fake_storage):
