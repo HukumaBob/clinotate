@@ -153,7 +153,12 @@ export function EvaluationPanel({
         />
       </div>
       {query.isPending && <p className="text-xs text-gray-400">Scoring…</p>}
-      {query.isError && (
+      {query.isError && query.data && (
+        <p role="alert" className="text-xs text-red-300">
+          Could not refresh the scores.
+        </p>
+      )}
+      {query.isError && !query.data && (
         <p role="alert" className="rounded border border-red-700 bg-red-950 px-2 py-1 text-xs text-red-200">
           {errorMessage(query.error)}
         </p>
@@ -164,7 +169,12 @@ export function EvaluationPanel({
         </p>
       )}
       {query.data && axis && t && (
-        <>
+        <div
+          aria-busy={Boolean(query.isPlaceholderData)}
+          className={`flex flex-col gap-3 ${
+            query.isPlaceholderData || query.isError ? "opacity-60" : ""
+          }`}
+        >
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="qc-eval-axis">Axis</label>
             <select
@@ -274,7 +284,7 @@ export function EvaluationPanel({
               Show more
             </button>
           )}
-        </>
+        </div>
       )}
     </section>
   );

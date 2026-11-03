@@ -180,6 +180,30 @@ describe("EvaluationPanel", () => {
     expect(screen.queryByText("Scoring…")).toBeNull();
   });
 
+  it("dims the numbers and marks them busy while a new tolerance loads", () => {
+    evalState = { data: makeEval(), isPending: false, isPlaceholderData: true };
+    renderPanel();
+    const body = screen.getByText("62.5%").closest("[aria-busy]")!;
+    expect(body).toHaveAttribute("aria-busy", "true");
+    expect(body).toHaveClass("opacity-60");
+  });
+
+  it("does not dim settled scores", () => {
+    evalState = { data: makeEval(), isPending: false, isPlaceholderData: false };
+    renderPanel();
+    const body = screen.getByText("62.5%").closest("[aria-busy]")!;
+    expect(body).toHaveAttribute("aria-busy", "false");
+    expect(body).not.toHaveClass("opacity-60");
+  });
+
+  it("keeps old scores dimmed with a refresh error when a refetch failed", () => {
+    evalState = { data: makeEval(), isPending: false, isError: true, error: { detail: "x" } };
+    renderPanel();
+    expect(screen.getByText("Could not refresh the scores.")).toBeInTheDocument();
+    expect(screen.getByText("62.5%").closest("[aria-busy]")).toHaveClass("opacity-60");
+    expect(screen.queryByText("x")).toBeNull();
+  });
+
   it("notes a matched axis with nothing evaluated", () => {
     evalState = { data: makeEval([makeAxis({ frames_evaluated: 0, frames_excluded: 12 })]) };
     renderPanel();

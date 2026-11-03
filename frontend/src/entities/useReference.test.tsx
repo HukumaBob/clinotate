@@ -509,6 +509,44 @@ describe("evaluation invalidation", () => {
     expect(evaluationCalls(invalidate)).toHaveLength(2);
   });
 
+  it("re-arms while an evaluation fetch is in flight instead of joining it", () => {
+    vi.useFakeTimers();
+    const { queryClient, invalidate } = setup();
+    const fetching = vi.spyOn(queryClient, "isFetching").mockReturnValue(1);
+    scheduleEvaluationRefresh(queryClient);
+    vi.advanceTimersByTime(EVALUATION_REFRESH_MS);
+    expect(fetching).toHaveBeenCalledWith({ queryKey: ["evaluation"] });
+    vi.advanceTimersByTime(EVALUATION_REFRESH_MS);
+    expect(evaluationCalls(invalidate)).toHaveLength(0);
+    fetching.mockReturnValue(0);
+    vi.advanceTimersByTime(EVALUATION_REFRESH_MS);
+    expect(evaluationCalls(invalidate)).toHaveLength(1);
+  });
+
+  it("invalidates at once when no evaluation fetch is in flight", () => {
+    vi.useFakeTimers();
+    const { queryClient, invalidate } = setup();
+    vi.spyOn(queryClient, "isFetching").mockReturnValue(0);
+    scheduleEvaluationRefresh(queryClient);
+    vi.advanceTimersByTime(EVALUATION_REFRESH_MS);
+    expect(evaluationCalls(invalidate)).toHaveLength(1);
+  });
+
+  it("restore-clean invalidates now and drops the pending debounced refresh", async () => {
+    vi.useFakeTimers();
+    vi.mocked(apiClient.POST).mockResolvedValue({} as never);
+    const { wrapper, invalidate, queryClient } = setup();
+    vi.spyOn(queryClient, "isFetching").mockReturnValue(0);
+    scheduleEvaluationRefresh(queryClient);
+    const { result } = renderHook(() => useRestoreClean(5), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+    expect(evaluationCalls(invalidate)).toHaveLength(1);
+    vi.advanceTimersByTime(EVALUATION_REFRESH_MS * 2);
+    expect(evaluationCalls(invalidate)).toHaveLength(1);
+  });
+
   it("a reference mutation refreshes the reference at once and evaluations later", async () => {
     vi.mocked(apiClient.DELETE).mockResolvedValue({} as never);
     const { wrapper, invalidate } = setup();

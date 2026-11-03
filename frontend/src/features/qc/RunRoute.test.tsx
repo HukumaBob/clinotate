@@ -14,7 +14,7 @@ vi.mock("./RunViewPage", () => ({ RunViewPage: () => <p>Detection page</p> }));
 let mounts = 0;
 vi.mock("./classification/ClassificationRunPage", () => ({
   ClassificationRunPage: () => {
-    // Counts mounts: a run of another video must get a fresh page (and editor).
+    // Counts mounts: another run must get a fresh page (and editor).
     useState(() => ++mounts);
     return <p>Classification page</p>;
   },
@@ -56,7 +56,7 @@ describe("RunRoute", () => {
     expect(screen.queryByText("Classification page")).toBeNull();
     expect(screen.getByText("Loading run…")).toBeInTheDocument();
   });
-  it("remounts the classification page for a run of another video", () => {
+  it("remounts the classification page for another run, even of the same video", () => {
     mounts = 0;
     runState = { data: { id: 5, video_id: 9, axes: [{ name: "Anatomy" }] }, isPending: false };
     const { rerender } = renderRoute();
@@ -68,7 +68,7 @@ describe("RunRoute", () => {
       </MemoryRouter>,
     );
     expect(mounts).toBe(1);
-    runState = { data: { id: 5, video_id: 10, axes: [{ name: "Anatomy" }] }, isPending: false };
+    runState = { data: { id: 6, video_id: 9, axes: [{ name: "Anatomy" }] }, isPending: false };
     rerender(
       <MemoryRouter initialEntries={["/qc/5"]}>
         <Routes>

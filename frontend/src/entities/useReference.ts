@@ -65,8 +65,19 @@ export function scheduleEvaluationRefresh(queryClient: QueryClient) {
   if (evaluationTimer !== null) clearTimeout(evaluationTimer);
   evaluationTimer = setTimeout(() => {
     evaluationTimer = null;
+    // An invalidation that joins a fetch already in flight would miss the
+    // latest edit: wait for that fetch to finish, then refresh.
+    if (queryClient.isFetching({ queryKey: ["evaluation"] }) > 0) {
+      scheduleEvaluationRefresh(queryClient);
+      return;
+    }
     void queryClient.invalidateQueries({ queryKey: ["evaluation"] }, { cancelRefetch: false });
   }, EVALUATION_REFRESH_MS);
+}
+
+function cancelEvaluationRefresh() {
+  if (evaluationTimer !== null) clearTimeout(evaluationTimer);
+  evaluationTimer = null;
 }
 
 /** Refetch only when the last in-flight reference mutation of this video
@@ -249,6 +260,7 @@ export function useRestoreClean(videoId: number | null) {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["reference", videoId] });
+      cancelEvaluationRefresh();
       void queryClient.invalidateQueries({ queryKey: ["evaluation"] });
     },
   });

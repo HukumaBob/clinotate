@@ -15,7 +15,8 @@ export function RunRoute() {
   if (runQuery.isPending && runId !== null) {
     return <p className="p-6 text-sm text-gray-500">Loading run…</p>;
   }
-  // Keyed by video: a run of another video gets a fresh reference editor.
-  if (runQuery.data?.axes) return <ClassificationRunPage key={runQuery.data.video_id} />;
+  // Keyed by run: another run (hence possibly another video) gets a fresh page
+  // and reference editor, and never shows the previous run's scores.
+  if (runQuery.data?.axes) return <ClassificationRunPage key={runQuery.data.id} />;
   return <RunViewPage />;
 }
