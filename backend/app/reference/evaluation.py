@@ -5,6 +5,7 @@ Pure functions over plain data: no database, no storage, no I/O.
 
 from bisect import bisect_right
 from dataclasses import dataclass, field
+from typing import Literal
 
 
 @dataclass
@@ -133,4 +134,161 @@ def score_frames(
         classes=classes,
         labels=labels,
         matrix=matrix,
+    )
+
+
+@dataclass
+class Episode:
+    start_ms: int
+    end_ms: int
+    frames: int
+    truth: str
+    predicted: str
+    kind: Literal["boundary", "interior"]
+    mean_confidence: float
+    max_confidence: float
+
+
+@dataclass
+class Lag:
+    at_ms: int
+    from_label: str
+    to_label: str
+    lag_ms: int | None
+
+
+@dataclass
+class Transitions:
+    reference: int
+    model_switches: int
+    excess_switches: int
+    median_lag_ms: float | None
+    never_switched: int
+    lags: list[Lag] = field(default_factory=list)
+
+
+@dataclass
+class ErrorCounts:
+    boundary_frames: int
+    interior_frames: int
+
+
+@dataclass
+class AxisEvaluation(AxisCore):
+    episodes: list[Episode] = field(default_factory=list)
+    errors: ErrorCounts = field(default_factory=lambda: ErrorCounts(0, 0))
+    transitions: Transitions = field(default_factory=lambda: Transitions(0, 0, 0, None, 0))
+
+
+def _median(values: list[int]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return float(ordered[mid])
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def evaluate_axis(
+    frames: list[EvalFrame],
+    intervals: list[EvalInterval],
+    model_classes: list[str],
+    reference_classes: list[str],
+    boundary_ms: int,
+) -> AxisEvaluation:
+    """`score_frames` plus error episodes, the boundary/interior split, switch
+    counts and switch lags. Episodes are in time order."""
+    core = score_frames(frames, intervals, model_classes, reference_classes)
+    ordered_intervals = sorted(intervals, key=lambda iv: iv.start_ms)
+    starts = [iv.start_ms for iv in ordered_intervals]
+
+    # Open episode: [start, end, count, conf_sum, conf_max, truth, predicted, all_boundary]
+    episodes: list[Episode] = []
+    open_ep: list | None = None
+    boundary_frames = interior_frames = 0
+    model_switches = 0
+    first_hit: dict[tuple[int, str], int] = {}  # (interval index, label) -> first ts
+
+    def close() -> None:
+        nonlocal open_ep
+        if open_ep is not None:
+            start, end, count, total, top, truth, pred, all_boundary = open_ep
+            episodes.append(
+                Episode(
+                    start_ms=start, end_ms=end, frames=count, truth=truth,
+                    predicted=pred, kind="boundary" if all_boundary else "interior",
+                    mean_confidence=total / count, max_confidence=top,
+                )
+            )
+            open_ep = None
+
+    previous: EvalFrame | None = None  # the immediately preceding processed frame, if evaluated
+    for frame in sorted(frames, key=lambda f: f.ts_ms):
+        found = containing_interval(starts, ordered_intervals, frame.ts_ms)
+        if found is None:
+            close()
+            previous = None
+            continue
+        interval = ordered_intervals[found]
+        if previous is not None and previous.predicted != frame.predicted:
+            model_switches += 1
+        previous = frame
+        first_hit.setdefault((found, frame.predicted), frame.ts_ms)
+
+        if frame.predicted == interval.label:
+            close()
+            continue
+        on_boundary = (
+            min(frame.ts_ms - interval.start_ms, interval.end_ms - frame.ts_ms) <= boundary_ms
+        )
+        if on_boundary:
+            boundary_frames += 1
+        else:
+            interior_frames += 1
+        if (
+            open_ep is not None
+            and open_ep[5] == interval.label
+            and open_ep[6] == frame.predicted
+        ):
+            open_ep[1] = frame.ts_ms
+            open_ep[2] += 1
+            open_ep[3] += frame.confidence
+            open_ep[4] = max(open_ep[4], frame.confidence)
+            open_ep[7] = open_ep[7] and on_boundary
+        else:
+            close()
+            open_ep = [
+                frame.ts_ms, frame.ts_ms, 1, frame.confidence, frame.confidence,
+                interval.label, frame.predicted, on_boundary,
+            ]
+    close()
+
+    model_set = set(model_classes)
+    lags: list[Lag] = []
+    for i in range(len(ordered_intervals) - 1):
+        a, b = ordered_intervals[i], ordered_intervals[i + 1]
+        if a.end_ms != b.start_ms or a.label == b.label:
+            continue
+        hit = first_hit.get((i + 1, b.label)) if b.label in model_set else None
+        lags.append(
+            Lag(
+                at_ms=b.start_ms, from_label=a.label, to_label=b.label,
+                lag_ms=None if hit is None else hit - b.start_ms,
+            )
+        )
+    measured = [lag.lag_ms for lag in lags if lag.lag_ms is not None]
+    transitions = Transitions(
+        reference=len(lags),
+        model_switches=model_switches,
+        excess_switches=model_switches - len(lags),
+        median_lag_ms=_median(measured),
+        never_switched=len(lags) - len(measured),
+        lags=lags,
+    )
+    return AxisEvaluation(
+        **vars(core),
+        episodes=episodes,
+        errors=ErrorCounts(boundary_frames, interior_frames),
+        transitions=transitions,
     )
