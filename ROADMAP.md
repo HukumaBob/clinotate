@@ -1652,6 +1652,105 @@ the user to delete. The first task's migration was applied to the dev DB
 typing (a cast instead of a discriminated union); `category_id` validation. Parts 2-4
 as above.
 
+### Phase 3: QC screen, classification sub-project 2 (reference labeling) — DONE (2026-11-03, live-checked on one axis)
+
+Design: [docs/specs/2026-11-03-qc-reference-labeling-design.md](docs/specs/2026-11-03-qc-reference-labeling-design.md).
+Plan: [docs/plans/2026-11-03-qc-reference-labeling.md](docs/plans/2026-11-03-qc-reference-labeling.md).
+Commits `2752c45`, `0d6e365` (docs); backend `df26a9d`, `3a500f1`, `3ae429f`, `b2213db`,
+`bb35450`; frontend `6e3775b` (+fix `a43120b`), `35d144d` (+fix `2000893`), `aea181c`
+(+fix `ca67bdf`), `1b6fdf1`, `400ebde`, `cf9d7ed`; final fix wave `ad97d97`, `3c2ce4d`;
+residual fix `1f7ea33`. Not pushed.
+
+Sub-project 2 of 4 of "classification in QC". Part 1 (classification in QC runs) is done;
+3 (evaluation against the reference) and 4 (dataset from error episodes) are not started.
+
+**Built (backend):** new module `backend/app/reference/` with tables `reference_intervals`
+(video, category, label, copied `taxonomy_version`, `[start_ms, end_ms)`, minimum 100 ms,
+intervals of one axis never overlap, gaps allowed, `ON DELETE RESTRICT` to the video) and
+`video_references` (`compromised_at`, `compromised_by_training_run_id`); migration
+`c3d4e5f6a7b8`. API under `/reference`: `GET /videos/{id}` (axes = categories of the
+video's procedure with frame-classification labels; digit keys 1..9,0 in one running
+sequence across axes ordered by category id and label id, classes beyond ten keyless;
+status none/clean/compromised; intervals with an `orphaned` flag),
+`POST/PATCH/DELETE /videos/{id}/intervals` (video row locked with `SELECT FOR UPDATE`,
+422 invalid, 409 overlap), `POST /videos/{id}/restore-clean`, `GET /datasets/{id}/exposure`.
+`create_training_run` marks a reference compromised when a classification run trains on a
+dataset holding frames of that video (detection/segmentation runs, including the DINOv3
+crop classifier, do not); a reference created after such a run is compromised from the
+start (first-interval lookup), and empty reference rows are marked too. Video delete is
+refused (409) while intervals exist; label delete is refused with a readable 409 naming
+the videos; the Dataset balance response gains `reference_exposure`.
+
+**Built (frontend):** `features/reference/` (pure interval/keymap logic with `decideKey`,
+`clampEnd`, `moveEdge`, `roomAfter`; `saveQueue` with per-axis ordering, one request in
+flight per axis, nothing sent with a temporary id, newest values win; `useReferenceEditor`;
+`ReferenceKeys` legend; `ReferenceLanes` with hatched gaps, handles on the selected
+interval and "NN% labeled"; `ReferenceStatus` with restore; `OrphanedIntervals` list with
+delete) and `entities/useReference.ts` (optimistic updates with per-item rollback). Page
+`/qc/reference/:videoId` (label a video before any model runs); reference lanes above each
+matched model lane on the classification run page (matched by class names); compromised
+banner; "Label reference" links on the QC page and run history; non-blocking warnings on
+the Dataset balance panel and the Train config form.
+
+**Labeling behaviour:** a digit key starts an interval at the playhead (snapping to the end
+of the previous interval of that axis if within 1 s) whose right edge follows the playhead;
+the same key or Escape closes it; another key of the same axis closes it and starts the
+next; with an interval selected a digit relabels it; edges drag with the mouse (and seek
+the video); Delete/Backspace removes the selected interval; keys are ignored while typing;
+`[` and `]` still step blips.
+
+**Deviations from the spec (my calls):**
+- Intervals are `[start_ms, end_ms)` in ms on the player's timeline.
+- Only classification training runs compromise a reference.
+- Restore-clean is open to any authenticated user (roles are not enforced anywhere in the repo).
+- Media PATCH changes only the title, so no procedure-change guard exists or was needed.
+- Orphaned = category is not an axis or label is not among the axis classes.
+- Saves are throttled to once per second while an interval grows; edge drags are saved up
+  to 1 s late; the save-error flag persists until the next user edit.
+
+**Review:** per-task reviews and a final whole-branch review found and fixed real defects:
+overlapping intervals at clamp boundaries (`a43120b`), stale whole-snapshot rollbacks and
+temporary ids reaching the server (`2000893`), unordered requests per axis giving 409s
+(`ca67bdf`), a reference reading clean after an earlier classification training and
+invisible/undeletable orphaned intervals (`ad97d97`, `3c2ce4d`), and an emptied-then-retrained
+reference reading clean (`1f7ea33`).
+
+**Live check (2026-11-03)** on video `polyposis` (28 s, colonoscopy, axes Anatomy and
+Quality, keys 1-8 and 9,0): key 7 started a growing interval at 2.0 s; key 3 switched to
+colon_right with the two intervals touching; a click plus key 4 relabeled it; dragging its
+right edge extended it; key 0 plus Escape created a Quality interval; Delete removed an
+interval; the server rows matched. After a reload the page showed 66% / 11% labeled with
+hatched gaps and status Clean; no console errors. A new classification run on the same
+video (model `yolo11n-cls-run528`) showed the reference lane above the Anatomy model lane
+(aligned), the legend and the status, and no reference lane for Quality (no model axis for
+it). All rows created for the check were removed (2 intervals, the empty `video_references`
+row, the run and its MinIO object).
+
+**Not verified live:** compromise on a real training run (it would use the GPU; API tests
+only); keys ignored while typing in a real field; restore-clean and the orphaned-interval
+list in the browser; mode/quality model axes (only one classification model exists); EGDS
+with more than ten classes (keyless chips); the pagehide flush on a real tab close; hundreds
+of intervals on a long video; `[` / `]` blip navigation together with editing in the browser.
+
+**Things learned the hard way:** the migration was applied to the dev DB (`alembic upgrade
+head`, additive, approved by the user). During Task 8 the disk `/mnt/work-disk` filled up
+(an abandoned 29.9 GB browser download); the user authorized deleting it and nothing was
+lost. Plain `npx tsc --noEmit` checks nothing in this repo (root tsconfig has `files: []`);
+the real check is `npx tsc --noEmit -p tsconfig.app.json`, which has many pre-existing
+errors. The final review ran it: no errors in non-test code of sub-projects 1 and 2 apart
+from the pre-existing `AbComparePage.tsx:168,178`; test-file typing errors in
+`RunsTable.test.tsx:9` (introduced by sub-project 1: fixture lacks `task_type`) and
+`entities/useReference.test.tsx:313`. Known pre-existing failing backend tests:
+`tests/test_inference_api.py::test_deleting_a_video_that_has_qc_runs_is_refused` and
+`tests/test_jobs.py::test_enqueue_sam3_predict_creates_pending_job`.
+
+**Deferred:** reference lanes use `reference.duration_ms` while model lanes use
+max(video duration, last frame time) (sub-pixel offset normally); a narrow race between
+`create_interval`'s first-interval lookup and a concurrent training-run commit; the
+ReferencePage test mocks the editor; the host re-renders per frame while an interval
+grows; the pagehide flush has no `keepalive`; `ClassifierSpec.category_id` is still
+unvalidated (from sub-project 1). Parts 3-4 as above.
+
 ### Phase 2b: Train screen — DONE (2026-08-20)
 
 Brainstorming began on the Train screen and the `training` module. No spec

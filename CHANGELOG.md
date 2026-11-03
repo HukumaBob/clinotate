@@ -16,6 +16,15 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   A/B compare are refused for these runs. `InferenceRun` gains a nullable `axes` column
   (migration `b2c3d4e5f6a7`); `POST /inference/runs` accepts `classifiers`.
 
+- QC reference labeling: a video can carry a hand-labeled reference per classification axis
+  (intervals with a label, gaps allowed, no overlap), labeled with digit keys on
+  `/qc/reference/:videoId` and shown above the matching model lane on the classification
+  run page. A reference is marked compromised when a classification model was trained on
+  frames of its video (restorable); the Dataset balance panel and the Train form warn about
+  it. New tables `reference_intervals` and `video_references` (migration `c3d4e5f6a7b8`),
+  API under `/reference`. A video with intervals cannot be deleted, and deleting a label
+  used by a reference is refused with the videos named.
+
 ## [0.3.1] - 2026-11-03
 
 ### Fixed

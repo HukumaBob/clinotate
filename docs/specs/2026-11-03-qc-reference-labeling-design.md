@@ -1,6 +1,6 @@
 # QC screen: reference labeling, sub-project 2 of 4
 
-Date: 2026-11-03. Status: draft, awaiting approval. Builds on
+Date: 2026-11-03. Status: implemented on master 2026-11-03 and live-checked (see ROADMAP). Builds on
 [QC classification](2026-11-03-qc-classification-design.md) (sub-project 1,
 done) and the existing frame-level classification taxonomy
 ([sequence grid classification](../superpowers/specs/2026-08-13-sequence-grid-frame-classification-design.md)).
