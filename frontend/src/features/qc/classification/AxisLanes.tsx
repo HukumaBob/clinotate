@@ -10,6 +10,12 @@ import type { ClassificationDocument } from "./types";
 
 type Axis = ClassificationDocument["axes"][number];
 
+/** A stretch of the model lane where the model disagrees with the reference. */
+export interface ErrorSpan {
+  startMs: number;
+  endMs: number;
+}
+
 interface AxisLanesProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   axes: ClassificationDocument["axes"];
@@ -24,7 +30,16 @@ interface AxisLanesProps {
    * missing: none). The nodes keep their own clock subscription, so a stable
    * element is not re-rendered by this component's playhead ticks. */
   reference?: (ReactNode | null | undefined)[];
+  /** Per model axis (index-aligned with `axes`), the stretches hatched red on
+   * its model lane; missing or empty: none. Pass a memoised array: the
+   * hatching is redrawn only when a list's identity changes. */
+  errorSpans?: ErrorSpan[][];
 }
+
+const NO_SPANS: ErrorSpan[] = [];
+
+const HATCHING =
+  "repeating-linear-gradient(135deg, rgba(239, 68, 68, 0.85) 0 3px, rgba(239, 68, 68, 0.15) 3px 7px)";
 
 const ROW_LABEL = "w-16 shrink-0 text-[11px] text-gray-500";
 
@@ -130,8 +145,41 @@ const BlipTicks = memo(function BlipTicks({ blips, durationMs }: { blips: Blip[]
   );
 });
 
+const ErrorHatching = memo(function ErrorHatching({
+  axis,
+  spans,
+  durationMs,
+}: {
+  axis: number;
+  spans: ErrorSpan[];
+  durationMs: number;
+}) {
+  return (
+    <>
+      {spans.map((span, i) => {
+        const start = Math.min(Math.max(span.startMs, 0), durationMs);
+        const end = Math.min(Math.max(span.endMs, start), durationMs);
+        return (
+          <div
+            key={i}
+            aria-hidden="true"
+            data-testid={`error-span-${axis}-${i}`}
+            className="pointer-events-none absolute inset-y-0 border-x border-red-500/80"
+            style={{
+              left: percent(start, durationMs),
+              width: `${((end - start) / durationMs) * 100}%`,
+              backgroundImage: HATCHING,
+            }}
+          />
+        );
+      })}
+    </>
+  );
+});
+
 /** One lane per classification axis under the player: a coloured segment per
- * stretch of one label, white ticks at blips, a playhead, click to seek. */
+ * stretch of one label, red hatching where the model disagrees with the
+ * reference, white ticks at blips, a playhead, click to seek. */
 export function AxisLanes({
   videoRef,
   axes,
@@ -141,6 +189,7 @@ export function AxisLanes({
   onSeek,
   activeAxis = null,
   reference,
+  errorSpans,
 }: AxisLanesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [widthPx, setWidthPx] = useState(0);
@@ -206,6 +255,7 @@ export function AxisLanes({
                     durationMs={durationMs}
                     widthPx={widthPx}
                   />
+                  <ErrorHatching axis={i} spans={errorSpans?.[i] ?? NO_SPANS} durationMs={durationMs} />
                 </div>
                 <BlipTicks blips={blipsByAxis[i] ?? []} durationMs={durationMs} />
                 <div

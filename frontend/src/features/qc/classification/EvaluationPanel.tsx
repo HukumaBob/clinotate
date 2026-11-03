@@ -15,6 +15,8 @@ export interface EvaluationPanelProps {
   onSeek: (ms: number) => void;
   /** Notified whenever the boundary tolerance changes, in milliseconds. */
   onBoundaryChange?: (ms: number) => void;
+  /** The boundary tolerance the panel starts with, in milliseconds (default 0). */
+  initialBoundaryMs?: number;
 }
 
 const EPISODE_CAP = 200;
@@ -24,9 +26,16 @@ function errorMessage(error: unknown): string {
   return typeof detail === "string" ? detail : "Could not score this run.";
 }
 
-export function EvaluationPanel({ runId, videoId, hasReference, onSeek, onBoundaryChange }: EvaluationPanelProps) {
-  const [boundaryMs, setBoundaryMs] = useState(0);
-  const [draft, setDraft] = useState("0");
+export function EvaluationPanel({
+  runId,
+  videoId,
+  hasReference,
+  onSeek,
+  onBoundaryChange,
+  initialBoundaryMs = 0,
+}: EvaluationPanelProps) {
+  const [boundaryMs, setBoundaryMs] = useState(initialBoundaryMs);
+  const [draft, setDraft] = useState(String(initialBoundaryMs / 1000));
   const [axisName, setAxisName] = useState<string | null>(null);
   const [sort, setSort] = useState<"longest" | "confident">("longest");
   const [shown, setShown] = useState(EPISODE_CAP);

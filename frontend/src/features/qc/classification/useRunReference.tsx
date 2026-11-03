@@ -28,6 +28,9 @@ export interface RunReference {
   /** Per model axis, its editable reference lane (null: no matching axis);
    * undefined while the reference is loading or could not be loaded. */
   lanes: (ReactNode | null)[] | undefined;
+  /** The video's reference has at least one labeled (non-orphaned) interval;
+   * false while it loads or when it could not be loaded. */
+  hasReference: boolean;
 }
 
 /** The video's reference on the classification run page: each model axis is
@@ -65,7 +68,8 @@ export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: Ru
     durationMs: referenceDurationMs,
   });
 
-  if (!reference) return { banner: null, bar: null, lanes: undefined };
+  if (!reference) return { banner: null, bar: null, lanes: undefined, hasReference: false };
+  const hasReference = reference.intervals.some((interval) => !interval.orphaned);
 
   const matchedAxes = matchedIndexes.map((i) => refAxes[i]);
   const matchedCategories = new Set(matchedAxes.map((axis) => axis.categoryId));
@@ -131,5 +135,5 @@ export function useRunReference({ videoRef, videoId, modelAxes, durationMs }: Ru
     ),
   );
 
-  return { banner, bar, lanes };
+  return { banner, bar, lanes, hasReference };
 }

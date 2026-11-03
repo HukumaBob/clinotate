@@ -11,7 +11,17 @@ const doc = makeDoc();
 const indexes = buildAxisIndexes(doc);
 const blips = mergeBlips(indexes.map((index, axis) => findBlips(index, axis, 2)));
 
-function Harness({ onSeek, reference }: { onSeek: (ms: number) => void; reference?: React.ReactNode[] }) {
+type Span = { startMs: number; endMs: number };
+
+function Harness({
+  onSeek,
+  reference,
+  errorSpans,
+}: {
+  onSeek: (ms: number) => void;
+  reference?: React.ReactNode[];
+  errorSpans?: Span[][];
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   return (
     <>
@@ -24,6 +34,7 @@ function Harness({ onSeek, reference }: { onSeek: (ms: number) => void; referenc
         blips={blips}
         onSeek={onSeek}
         reference={reference}
+        errorSpans={errorSpans}
       />
     </>
   );
@@ -83,5 +94,46 @@ describe("AxisLanes", () => {
     const mode = screen.getByRole("group", { name: "Mode" });
     expect(within(mode).queryByTestId("ref-node")).toBeNull();
     expect(within(mode).queryByText("reference")).toBeNull();
+  });
+
+  it("hatches the error spans on the model lane of their axis only", () => {
+    render(<Harness onSeek={() => {}} errorSpans={[[{ startMs: 200, endMs: 300 }, { startMs: 900, endMs: 1200 }], []]} />);
+    const anatomy = screen.getByRole("group", { name: "Anatomy" });
+    const track = within(anatomy).getByTestId("lane-track");
+    const first = within(track).getByTestId("error-span-0-0");
+    expect(first.style.left).toBe("20%");
+    expect(first.style.width).toBe("10%");
+    expect(first.style.backgroundImage).toContain("repeating-linear-gradient");
+    expect(first.className).toContain("pointer-events-none");
+    // Clamped to the end of the lane.
+    const second = within(track).getByTestId("error-span-0-1");
+    expect(second.style.left).toBe("90%");
+    expect(second.style.width).toBe("10%");
+    // Under the blip ticks: drawn before them.
+    const tick = within(track).getByTestId("blip-tick");
+    expect(first.compareDocumentPosition(tick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const mode = screen.getByRole("group", { name: "Mode" });
+    expect(within(mode).queryByTestId(/^error-span-/)).toBeNull();
+  });
+
+  it("draws no hatching without error spans", () => {
+    render(<Harness onSeek={() => {}} />);
+    expect(screen.queryByTestId(/^error-span-/)).toBeNull();
+  });
+
+  it("does not recompute the hatching on a playhead tick", async () => {
+    const spans: Span[] = [{ startMs: 200, endMs: 300 }];
+    const mapSpy = vi.fn(Array.prototype.map);
+    Object.defineProperty(spans, "map", { value: mapSpy });
+    const errorSpans = [spans, []];
+    const { container } = render(<Harness onSeek={() => {}} errorSpans={errorSpans} />);
+    const calls = mapSpy.mock.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    const playheads = () =>
+      [...container.querySelectorAll<HTMLElement>("[data-testid='lane-track'] > .bg-blue-400")];
+    expect(playheads()[0].style.left).toBe("0%");
+    container.querySelector("video")!.currentTime = 0.5;
+    await vi.waitFor(() => expect(playheads()[0].style.left).toBe("50%"));
+    expect(mapSpy.mock.calls.length).toBe(calls);
   });
 });

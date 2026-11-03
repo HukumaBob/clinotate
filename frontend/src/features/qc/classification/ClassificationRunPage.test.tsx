@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { EvaluationRead } from "../../../entities/useEvaluation";
 import { ClassificationRunPage } from "./ClassificationRunPage";
 import { makeDoc } from "./testDoc";
 import type { ClassificationDocument } from "./types";
@@ -14,6 +15,8 @@ let referenceState: { data?: Record<string, unknown>; isPending?: boolean; isErr
 const createInterval = vi.fn();
 const deleteInterval = vi.fn();
 let restoreState: { isError?: boolean; error?: unknown };
+let evalState: { data?: EvaluationRead; isPending?: boolean; isError?: boolean; error?: unknown };
+const useEvaluation = vi.fn();
 
 vi.mock("../../../entities/useInferenceRuns", () => ({
   useInferenceRun: () => ({ data: runState }),
@@ -28,6 +31,12 @@ vi.mock("../../../entities/useReference", () => ({
   useUpdateInterval: () => ({ mutateAsync: vi.fn() }),
   useDeleteInterval: () => ({ mutateAsync: vi.fn(), mutate: deleteInterval }),
   useRestoreClean: () => ({ mutate: vi.fn(), ...restoreState }),
+}));
+vi.mock("../../../entities/useEvaluation", () => ({
+  useEvaluation: (...args: unknown[]) => {
+    useEvaluation(...args);
+    return evalState;
+  },
 }));
 vi.mock("../../media/TranscodePrompt", () => ({
   TranscodePrompt: () => <p>Transcode prompt</p>,
@@ -57,6 +66,32 @@ function makeReference(status: "none" | "clean" | "compromised", withAxes = true
   };
 }
 
+type EvalAxis = EvaluationRead["axes"][number];
+
+function evalAxis(name: string, over: Partial<EvalAxis> = {}): EvalAxis {
+  return {
+    name, matched: true, reference_category_id: 2, reference_axis_name: "Location",
+    frames_total: 7, frames_evaluated: 7, frames_excluded: 0, accuracy: 0.857, macro_f1: 0.8,
+    classes: [], confusion: { labels: [], matrix: [] },
+    errors: { boundary_frames: 0, interior_frames: 1 },
+    transitions: { reference: 1, model_switches: 3, excess_switches: 2, median_lag_ms: null, never_switched: 0, lags: [] },
+    episodes: [
+      { start_ms: 200, end_ms: 200, frames: 1, truth: "caecum", predicted: "ascending",
+        kind: "interior", mean_confidence: 0.8, max_confidence: 0.8 },
+    ],
+    ...over,
+  };
+}
+
+/** A reference with one labeled (non-orphaned) interval on Location, from 0.6 s. */
+function labeledReference() {
+  const reference = makeReference("clean");
+  reference.intervals = [
+    { id: 50, video_id: 9, category_id: 2, label_id: 10, taxonomy_version: 1, start_ms: 600, end_ms: 1000, orphaned: false },
+  ] as never[];
+  return reference;
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/qc/5"]}>
@@ -83,6 +118,13 @@ beforeEach(() => {
     start_ms: vars.startMs, end_ms: vars.endMs, orphaned: false,
   }));
   referenceState = { data: makeReference("clean") };
+  useEvaluation.mockClear();
+  evalState = {
+    data: {
+      run_id: 5, video_id: 9, reference_status: "clean", boundary_ms: 2000,
+      axes: [evalAxis("Anatomy"), evalAxis("Mode", { matched: false, reference_category_id: null, reference_axis_name: null })],
+    },
+  };
   videoState = { id: 9, title: "Colonoscopy 1", stream_url: "/v.mp4", duration_seconds: 1, browser_playable: true };
 });
 
@@ -308,5 +350,95 @@ describe("ClassificationRunPage", () => {
     restoreState = { isError: true, error: { detail: "Video 9 has no reference" } };
     renderPage();
     expect(screen.getByRole("alert")).toHaveTextContent("Video 9 has no reference");
+  });
+
+  it("shows the evaluation panel under the blip window", () => {
+    referenceState = { data: labeledReference() };
+    renderPage();
+    const panel = screen.getByRole("region", { name: "Evaluation" });
+    const blipWindow = screen.getByLabelText("Blip window");
+    expect(blipWindow.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(useEvaluation).toHaveBeenCalledWith(5, 2000, true);
+    expect(useEvaluation.mock.calls.every((call) => call[1] === 2000)).toBe(true);
+  });
+
+  it("hatches the error episodes on the matched model lane only", () => {
+    referenceState = { data: labeledReference() };
+    renderPage();
+    const anatomy = screen.getByRole("group", { name: "Anatomy" });
+    const span = within(within(anatomy).getByTestId("lane-track")).getByTestId("error-span-0-0");
+    // 200 ms plus one 100 ms processed step, on a 1000 ms lane.
+    expect(span.style.left).toBe("20%");
+    expect(span.style.width).toBe("10%");
+    expect(within(screen.getByRole("group", { name: "Mode" })).queryByTestId(/^error-span-/)).toBeNull();
+  });
+
+  it("follows the panel's boundary tolerance", () => {
+    referenceState = { data: labeledReference() };
+    renderPage();
+    fireEvent.change(screen.getByLabelText("Boundary tolerance (s)"), { target: { value: "0.5" } });
+    expect(useEvaluation).toHaveBeenLastCalledWith(5, 500, true);
+    const last = useEvaluation.mock.calls.slice(-2);
+    expect(last.every((call) => call[1] === 500)).toBe(true);
+  });
+
+  it("pauses and seeks when an episode is clicked, dropping the blip highlight", async () => {
+    referenceState = { data: labeledReference() };
+    const user = userEvent.setup();
+    const { container } = renderPage();
+    const video = container.querySelector("video")!;
+    const pause = vi.spyOn(video, "pause").mockImplementation(() => {});
+    await user.keyboard("]]");
+    expect(screen.getByRole("group", { name: "Mode" })).toHaveAttribute("data-active", "true");
+    await user.click(screen.getByRole("button", { name: /caecum → ascending/ }));
+    expect(pause).toHaveBeenCalled();
+    expect(video.currentTime).toBeCloseTo(0.2);
+    expect(screen.getByRole("group", { name: "Mode" })).toHaveAttribute("data-active", "false");
+    expect(screen.getByRole("group", { name: "Anatomy" })).toHaveAttribute("data-active", "false");
+  });
+
+  it("requests nothing and draws no hatching without reference labels", () => {
+    renderPage();
+    expect(screen.getByText("Label this video's reference to score the model")).toBeInTheDocument();
+    expect(useEvaluation.mock.calls.length).toBeGreaterThan(0);
+    expect(useEvaluation.mock.calls.every((call) => call[2] === false)).toBe(true);
+    expect(screen.queryByTestId(/^error-span-/)).toBeNull();
+  });
+
+  it("does not count orphaned intervals as reference labels", () => {
+    const reference = labeledReference();
+    (reference.intervals as unknown as { orphaned: boolean }[])[0].orphaned = true;
+    referenceState = { data: reference };
+    renderPage();
+    expect(screen.getByText("Label this video's reference to score the model")).toBeInTheDocument();
+    expect(useEvaluation.mock.calls.every((call) => call[2] === false)).toBe(true);
+  });
+
+  it("works while the evaluation loads or fails", async () => {
+    referenceState = { data: labeledReference() };
+    evalState = { isPending: true };
+    const first = renderPage();
+    expect(screen.getByText("Scoring…")).toBeInTheDocument();
+    expect(screen.queryByTestId(/^error-span-/)).toBeNull();
+    first.unmount();
+    evalState = { isError: true, error: { detail: "Run not found" } };
+    const user = userEvent.setup();
+    const { container } = renderPage();
+    expect(screen.getByText("Run not found")).toBeInTheDocument();
+    expect(screen.queryByTestId(/^error-span-/)).toBeNull();
+    await user.keyboard("]");
+    expect(container.querySelector("video")!.currentTime).toBeCloseTo(0.2);
+    await user.keyboard("2");
+    await vi.waitFor(() =>
+      expect(createInterval).toHaveBeenCalledWith(expect.objectContaining({ labelId: 11, startMs: 200 })),
+    );
+  });
+
+  it("shows no evaluation panel before the run has succeeded", () => {
+    referenceState = { data: labeledReference() };
+    runState = { ...runState, status: "running" };
+    predictionsState = {};
+    renderPage();
+    expect(screen.queryByRole("region", { name: "Evaluation" })).toBeNull();
   });
 });

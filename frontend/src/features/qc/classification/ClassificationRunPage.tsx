@@ -17,6 +17,7 @@ import { buildAxisIndexes } from "./axisIndex";
 import { BlipWindowControl } from "./BlipWindowControl";
 import { findBlips, mergeBlips, type Blip } from "./blips";
 import type { ClassificationDocument } from "./types";
+import { useRunEvaluation } from "./useRunEvaluation";
 import { useRunReference } from "./useRunReference";
 
 const NO_BLIPS: Blip[] = [];
@@ -83,6 +84,16 @@ export function ClassificationRunPage() {
     },
     [moveTo],
   );
+
+  const evaluation = useRunEvaluation({
+    videoRef,
+    runId,
+    videoId: run?.video_id ?? null,
+    hasReference: runReference.hasReference,
+    modelAxes: document?.axes,
+    indexes,
+    seekTo,
+  });
 
   const jump = useCallback(
     (direction: "prev" | "next") => {
@@ -179,6 +190,7 @@ export function ClassificationRunPage() {
                   onSeek={seekTo}
                   activeAxis={activeAxis}
                   reference={runReference.lanes}
+                  errorSpans={evaluation.errorSpans}
                 />
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                   <EventNav
@@ -216,6 +228,7 @@ export function ClassificationRunPage() {
                 <p className="text-xs text-gray-500">Blip controls appear when predictions load.</p>
               )
             )}
+            {evaluation.panel}
           </aside>
         </div>
       )}
