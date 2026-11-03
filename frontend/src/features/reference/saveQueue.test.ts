@@ -1,0 +1,135 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { SaveQueue, type SaveOps } from "./saveQueue";
+import type { RefInterval } from "./types";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const row = (id: number, startMs: number, endMs: number, labelId = 10): RefInterval => ({
+  id,
+  categoryId: 2,
+  labelId,
+  startMs,
+  endMs,
+});
+
+function setup(ops: Partial<SaveOps> = {}) {
+  const full: SaveOps = {
+    create: vi.fn(async (v) => ({ id: 100, ...v })),
+    update: vi.fn(async () => undefined),
+    remove: vi.fn(async () => undefined),
+    ...ops,
+  };
+  const onRemap = vi.fn();
+  const onFail = vi.fn();
+  const onChange = vi.fn();
+  const queue = new SaveQueue(full, { onRemap, onFail, onChange }, 1000);
+  return { queue, ops: full, onRemap, onFail, onChange };
+}
+
+const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("SaveQueue", () => {
+  it("holds edits of a created interval until the server id arrives, then sends the newest", async () => {
+    const create = deferred<RefInterval>();
+    const { queue, ops, onRemap } = setup({ create: vi.fn(() => create.promise) });
+    queue.create(row(-1, 0, 100));
+    queue.edit(row(-1, 0, 100), row(-1, 0, 500), "now");
+    queue.edit(row(-1, 0, 500), row(-1, 0, 900), "now");
+    await flushPromises();
+    expect(ops.update).not.toHaveBeenCalled();
+
+    create.resolve(row(100, 0, 100));
+    await flushPromises();
+    expect(onRemap).toHaveBeenCalledWith(-1, 100);
+    expect(ops.update).toHaveBeenCalledTimes(1);
+    expect(ops.update).toHaveBeenCalledWith({ intervalId: 100, endMs: 900 });
+  });
+
+  it("serializes updates of one interval and coalesces to the newest value", async () => {
+    const first = deferred<void>();
+    const update = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(undefined);
+    const { queue } = setup({ update });
+    queue.edit(row(5, 0, 1000), row(5, 0, 2000), "now");
+    queue.edit(row(5, 0, 2000), row(5, 0, 3000), "now");
+    queue.edit(row(5, 0, 3000), row(5, 0, 4000), "now");
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenLastCalledWith({ intervalId: 5, endMs: 2000 });
+
+    first.resolve();
+    await flushPromises();
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenLastCalledWith({ intervalId: 5, endMs: 4000 });
+  });
+
+  it("deletes a created interval only after its server id arrives", async () => {
+    const create = deferred<RefInterval>();
+    const { queue, ops } = setup({ create: vi.fn(() => create.promise) });
+    queue.create(row(-1, 0, 100));
+    queue.remove(row(-1, 0, 100));
+    expect(queue.rows()).toEqual([{ row: row(-1, 0, 100), deleted: true }]);
+    expect(ops.remove).not.toHaveBeenCalled();
+
+    create.resolve(row(100, 0, 100));
+    await flushPromises();
+    expect(ops.remove).toHaveBeenCalledWith(100);
+    expect(ops.update).not.toHaveBeenCalled();
+  });
+
+  it("a failed create drops the entry and reports the failure", async () => {
+    const { queue, onFail } = setup({ create: vi.fn(async () => Promise.reject(new Error("409"))) });
+    queue.create(row(-1, 0, 100));
+    expect(queue.state()).toBe("saving");
+    await flushPromises();
+    expect(onFail).toHaveBeenCalledWith(-1);
+    expect(queue.rows()).toEqual([]);
+    expect(queue.state()).toBe("error");
+  });
+
+  it("throttled edits send at most once per interval of time", async () => {
+    vi.useFakeTimers();
+    const { queue, ops } = setup();
+    let end = 1000;
+    for (let i = 0; i < 25; i += 1) {
+      queue.edit(row(5, 0, end), row(5, 0, end + 100), "throttled");
+      end += 100;
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(ops.update).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(ops.update).toHaveBeenCalledTimes(3);
+    expect(ops.update).toHaveBeenLastCalledWith({ intervalId: 5, endMs: end });
+  });
+
+  it("flushAll sends throttled edits immediately", async () => {
+    vi.useFakeTimers();
+    const { queue, ops } = setup();
+    queue.edit(row(5, 0, 1000), row(5, 0, 1700), "throttled");
+    queue.flushAll();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ops.update).toHaveBeenCalledWith({ intervalId: 5, endMs: 1700 });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(ops.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgets an entry once its values are saved", async () => {
+    const { queue } = setup();
+    queue.edit(row(5, 0, 1000), row(5, 0, 2000), "now");
+    expect(queue.rows()).toHaveLength(1);
+    await flushPromises();
+    expect(queue.rows()).toEqual([]);
+    expect(queue.state()).toBe("idle");
+  });
+});
