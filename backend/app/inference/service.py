@@ -17,9 +17,10 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.celery_app import celery_app
 from app.datasets.models import TaskType
+from app.inference.axes import infer_axis
 from app.inference.compare import disagreements
 from app.inference.models import InferenceRun, InferenceRunStatus, QcFlag, QcFlagKind
-from app.inference.schemas import InferenceRunRead
+from app.inference.schemas import ClassifierSpec, InferenceRunRead
 from app.jobs.models import Job, JobStatus, JobType
 from app.media.models import Frame, Sequence, Video
 from app.media.service import FramesOutOfRange, extract_frames_at
@@ -105,10 +106,10 @@ def create_inference_run(
     session.commit()
     session.refresh(run)
 
-    job = Job(
-        job_type=JobType.INFERENCE_RUN,
-        status=JobStatus.PENDING,
-        payload={
+    return _start_run(
+        session,
+        run,
+        {
             "inference_run_id": run.id,
             "video_id": video_id,
             "model_version_id": version.id,
@@ -118,6 +119,18 @@ def create_inference_run(
             "frame_stride": frame_stride,
             "perturbation": perturbation,
         },
+        created_by,
+    )
+
+
+def _start_run(
+    session: Session, run: InferenceRun, payload: dict, created_by: User
+) -> InferenceRun:
+    """Create the run's Job, hand it to the broker, or mark both failed."""
+    job = Job(
+        job_type=JobType.INFERENCE_RUN,
+        status=JobStatus.PENDING,
+        payload=payload,
         created_by_id=created_by.id,
     )
     session.add(job)
@@ -143,6 +156,103 @@ def create_inference_run(
         session.commit()
         raise EnqueueFailed(message) from exc
     return run
+
+
+
+
+def create_classification_run(
+    session: Session,
+    *,
+    video_id: int,
+    classifiers: list[ClassifierSpec],
+    frame_stride: int,
+    created_by: User,
+    perturbation: dict | None = None,
+) -> InferenceRun:
+    """One run, one decode, one classifier model per axis."""
+    video = session.get(Video, video_id)
+    if video is None:
+        raise VideoNotFound(f"Video {video_id} not found")
+    if video.browser_playable is False:
+        raise VideoNotPlayable(
+            f"Video {video_id} is not browser-playable; convert it in Media first"
+        )
+
+    axes: list[dict] = []
+    weights: list[str] = []
+    seen: set[str] = set()
+    for spec in classifiers:
+        version = training_service.get_model_version(session, spec.model_version_id)
+        if version.task_type != TaskType.CLASSIFICATION:
+            raise UnsupportedModelType(
+                f"Model version {version.id} is a {version.task_type.value} model; "
+                "only classification models can be run as classifiers"
+            )
+        adapter = version.training_run.adapter
+        if adapter != YOLO_ADAPTER:
+            raise UnsupportedModelType(
+                f"Model version {version.id} was trained by {adapter}, "
+                "which QC inference cannot run"
+            )
+        classes = list(version.class_names or [])
+        if not classes:
+            raise UnsupportedModelType(
+                f"Model version {version.id} has no recorded class names"
+            )
+        name, category_id = spec.name, spec.category_id
+        if name is None:
+            inferred = infer_axis(session, classes)
+            if inferred is None:
+                raise UnsupportedModelType(
+                    f"Cannot infer an axis name for model version {version.id}; give it a name"
+                )
+            name = inferred[0]
+            if category_id is None:
+                category_id = inferred[1]
+        if name in seen:
+            raise UnsupportedModelType(f"Two classifiers resolve to the axis name {name!r}")
+        seen.add(name)
+        axes.append(
+            {
+                "model_version_id": version.id,
+                "model_name": version.name,
+                "name": name,
+                "category_id": category_id,
+                "classes": classes,
+            }
+        )
+        weights.append(version.storage_key)
+
+    model_name = ", ".join(axis["name"] for axis in axes)[:200]
+    run = InferenceRun(
+        video_id=video_id,
+        model_version_id=None,
+        model_name=model_name,
+        frame_stride=frame_stride,
+        perturbation=perturbation,
+        axes=axes,
+        created_by_id=created_by.id,
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return _start_run(
+        session,
+        run,
+        {
+            "inference_run_id": run.id,
+            "video_id": video_id,
+            "task_type": "classification",
+            "model_name": model_name,
+            "frame_stride": frame_stride,
+            "perturbation": perturbation,
+            "axes": [
+                {"name": axis["name"], "weights_key": key, "classes": axis["classes"]}
+                for axis, key in zip(axes, weights, strict=True)
+            ],
+        },
+        created_by,
+    )
 
 
 def get_run(session: Session, run_id: int) -> InferenceRun:

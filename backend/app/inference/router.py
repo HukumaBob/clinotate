@@ -32,13 +32,23 @@ def create_run(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    perturbation = body.perturbation.model_dump() if body.perturbation else None
     try:
+        if body.classifiers is not None:
+            return service.create_classification_run(
+                session,
+                video_id=body.video_id,
+                classifiers=body.classifiers,
+                frame_stride=body.frame_stride,
+                perturbation=perturbation,
+                created_by=current_user,
+            )
         return service.create_inference_run(
             session,
             video_id=body.video_id,
             model_version_id=body.model_version_id,
             frame_stride=body.frame_stride,
-            perturbation=body.perturbation.model_dump() if body.perturbation else None,
+            perturbation=perturbation,
             created_by=current_user,
         )
     except (service.VideoNotFound, ModelVersionNotFound) as exc:

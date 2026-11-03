@@ -30,13 +30,28 @@ class PerturbationSpec(BaseModel):
         return self
 
 
+class ClassifierSpec(BaseModel):
+    model_version_id: int
+    # Axis name; inferred from the taxonomy when omitted.
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    category_id: int | None = None
+
+
 class InferenceRunCreate(BaseModel):
     video_id: int
-    model_version_id: int
+    # Exactly one of these: one detection/segmentation model, or 1-6 classifiers.
+    model_version_id: int | None = None
+    classifiers: list[ClassifierSpec] | None = Field(default=None, min_length=1, max_length=6)
     # Upper bound is a sanity limit, not a product rule: a stride beyond
     # any plausible video length just yields frame 0.
     frame_stride: int = Field(default=1, ge=1, le=1000)
     perturbation: PerturbationSpec | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_model_source(self):
+        if (self.model_version_id is None) == (self.classifiers is None):
+            raise ValueError("Give exactly one of model_version_id or classifiers")
+        return self
 
 
 class AxisRead(BaseModel):
