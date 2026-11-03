@@ -3,10 +3,13 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.db import get_session
-from app.reference import service
+from app.inference import service as inference_service
+from app.reference import commit, service
 from app.storage import StorageService, get_storage_service
 from app.auth.models import User
 from app.reference.schemas import (
+    CommitEpisodesRead,
+    CommitEpisodesRequest,
     EvaluationRead,
     ExposureVideoRead,
     IntervalCreate,
@@ -111,3 +114,33 @@ def evaluate_run(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except service.RunNotEvaluable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.post(
+    "/runs/{run_id}/commit-episodes",
+    response_model=CommitEpisodesRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def commit_episodes(
+    run_id: int,
+    payload: CommitEpisodesRequest,
+    response: Response,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+    user: User = Depends(get_current_user),
+):
+    try:
+        result = commit.commit_episodes(session, storage, run_id, payload, user)
+    except (service.RunNotFound, service.VideoNotFound) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except service.RunNotEvaluable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except (
+        commit.InvalidSelection,
+        inference_service.FramesPastEnd,
+        inference_service.VideoUnreadable,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    if result.dry_run:
+        response.status_code = status.HTTP_200_OK
+    return result

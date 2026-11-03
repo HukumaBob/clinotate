@@ -135,3 +135,26 @@ class EvaluationRead(BaseModel):
     reference_status: Literal["none", "clean", "compromised"]
     boundary_ms: int
     axes: list[AxisEvaluationRead]
+
+
+class EpisodeKey(BaseModel):
+    axis: str
+    start_ms: int
+
+
+class CommitEpisodesRequest(BaseModel):
+    episodes: list[EpisodeKey] = Field(min_length=1)
+    step_ms: int = Field(1000, ge=100, le=60000)
+    margin_ms: int = Field(1000, ge=0, le=60000)
+    name: str | None = Field(None, max_length=255)
+    dry_run: bool = False
+
+
+class CommitEpisodesRead(BaseModel):
+    dry_run: bool
+    episodes: int
+    frames: int
+    dropped_unlabeled: int
+    annotations_by_axis: dict[str, int]
+    sequence_id: int | None
+    sequence_name: str | None

@@ -5362,6 +5362,63 @@
         }
       }
     },
+    "/reference/runs/{run_id}/commit-episodes": {
+      "post": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Commit Episodes",
+        "operationId": "commit_episodes_reference_runs__run_id__commit_episodes_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitEpisodesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitEpisodesRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -6247,6 +6304,114 @@
         ],
         "title": "ClassifierSpec"
       },
+      "CommitEpisodesRead": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "episodes": {
+            "type": "integer",
+            "title": "Episodes"
+          },
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          },
+          "dropped_unlabeled": {
+            "type": "integer",
+            "title": "Dropped Unlabeled"
+          },
+          "annotations_by_axis": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Annotations By Axis"
+          },
+          "sequence_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence Id"
+          },
+          "sequence_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dry_run",
+          "episodes",
+          "frames",
+          "dropped_unlabeled",
+          "annotations_by_axis",
+          "sequence_id",
+          "sequence_name"
+        ],
+        "title": "CommitEpisodesRead"
+      },
+      "CommitEpisodesRequest": {
+        "properties": {
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeKey"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Episodes"
+          },
+          "step_ms": {
+            "type": "integer",
+            "maximum": 60000.0,
+            "minimum": 100.0,
+            "title": "Step Ms",
+            "default": 1000
+          },
+          "margin_ms": {
+            "type": "integer",
+            "maximum": 60000.0,
+            "minimum": 0.0,
+            "title": "Margin Ms",
+            "default": 1000
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "episodes"
+        ],
+        "title": "CommitEpisodesRequest"
+      },
       "CropBox": {
         "properties": {
           "left": {
@@ -6445,6 +6610,24 @@
           "split_counts"
         ],
         "title": "DatasetRead"
+      },
+      "EpisodeKey": {
+        "properties": {
+          "axis": {
+            "type": "string",
+            "title": "Axis"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "axis",
+          "start_ms"
+        ],
+        "title": "EpisodeKey"
       },
       "EvalClassRead": {
         "properties": {
