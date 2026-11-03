@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../shared/api/client";
 import {
+  EVALUATION_REFRESH_MS,
   type ReferenceRead,
+  scheduleEvaluationRefresh,
   useCreateInterval,
   useDeleteInterval,
   useReference,
@@ -484,7 +486,30 @@ describe("delete and restore failures", () => {
 });
 
 describe("evaluation invalidation", () => {
-  it("invalidates evaluations when a reference mutation settles", async () => {
+  const evaluationCalls = (invalidate: ReturnType<typeof setup>["invalidate"]) =>
+    invalidate.mock.calls.filter((c) => JSON.stringify(c[0]?.queryKey) === JSON.stringify(["evaluation"]));
+
+  afterEach(() => vi.useRealTimers());
+
+  it("refreshes evaluations once, after the last settle in the window, without cancelling", () => {
+    vi.useFakeTimers();
+    const { queryClient, invalidate } = setup();
+    for (let i = 0; i < 5; i++) {
+      scheduleEvaluationRefresh(queryClient);
+      vi.advanceTimersByTime(1000);
+    }
+    expect(evaluationCalls(invalidate)).toHaveLength(0);
+    vi.advanceTimersByTime(EVALUATION_REFRESH_MS - 1000 - 1);
+    expect(evaluationCalls(invalidate)).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    expect(evaluationCalls(invalidate)).toHaveLength(1);
+    expect(evaluationCalls(invalidate)[0][1]).toEqual({ cancelRefetch: false });
+    scheduleEvaluationRefresh(queryClient);
+    vi.advanceTimersByTime(EVALUATION_REFRESH_MS);
+    expect(evaluationCalls(invalidate)).toHaveLength(2);
+  });
+
+  it("a reference mutation refreshes the reference at once and evaluations later", async () => {
     vi.mocked(apiClient.DELETE).mockResolvedValue({} as never);
     const { wrapper, invalidate } = setup();
     const { result } = renderHook(() => useDeleteInterval(5), { wrapper });
@@ -492,7 +517,9 @@ describe("evaluation invalidation", () => {
       await result.current.mutateAsync(1);
     });
     expect(invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toContain(
-      JSON.stringify(["evaluation"]),
+      JSON.stringify(["reference", 5]),
     );
+    expect(evaluationCalls(invalidate)).toHaveLength(0);
+    await waitFor(() => expect(evaluationCalls(invalidate)).toHaveLength(1), { timeout: 3000 });
   });
 });

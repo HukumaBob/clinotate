@@ -43,4 +43,45 @@ describe("useEvaluation", () => {
     const { result } = renderHook(() => useEvaluation(7, 500, true), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
   });
+
+  it("shows a 4xx at once, without retrying", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ error: { detail: "conflict" } } as never);
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useEvaluation(7, 500, true), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(apiClient.GET).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the previous scores while a new tolerance loads", async () => {
+    let release!: (value: unknown) => void;
+    vi.mocked(apiClient.GET)
+      .mockResolvedValueOnce({ data: { run_id: 7, boundary_ms: 500 } } as never)
+      .mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as never);
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook(({ ms }) => useEvaluation(7, ms, true), {
+      wrapper,
+      initialProps: { ms: 500 },
+    });
+    await waitFor(() => expect(result.current.data).toEqual({ run_id: 7, boundary_ms: 500 }));
+    rerender({ ms: 1000 });
+    await waitFor(() => expect(apiClient.GET).toHaveBeenCalledTimes(2));
+    expect(result.current.data).toEqual({ run_id: 7, boundary_ms: 500 });
+    expect(result.current.isPending).toBe(false);
+    expect(result.current.isPlaceholderData).toBe(true);
+    release({ data: { run_id: 7, boundary_ms: 1000 } });
+    await waitFor(() => expect(result.current.data).toEqual({ run_id: 7, boundary_ms: 1000 }));
+  });
+
+  it("does not refetch a fresh evaluation on remount", async () => {
+    vi.mocked(apiClient.GET).mockResolvedValue({ data: { run_id: 7 } } as never);
+    const { wrapper } = setup();
+    const first = renderHook(() => useEvaluation(7, 500, true), { wrapper });
+    await waitFor(() => expect(first.result.current.data).toEqual({ run_id: 7 }));
+    first.unmount();
+    renderHook(() => useEvaluation(7, 500, true), { wrapper });
+    expect(apiClient.GET).toHaveBeenCalledTimes(1);
+  });
 });

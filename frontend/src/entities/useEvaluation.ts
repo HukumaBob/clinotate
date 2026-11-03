@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "../shared/api/client";
 import type { components } from "../shared/api/generated/schema";
@@ -16,5 +16,10 @@ export function useEvaluation(runId: number | null, boundaryMs: number, enabled:
       return result.data as EvaluationRead;
     },
     enabled: enabled && runId !== null,
+    // A new tolerance keeps the previous scores on screen until it loads.
+    placeholderData: keepPreviousData,
+    // A 409 (nothing to score) is final: show it at once.
+    retry: false,
+    staleTime: 5000,
   });
 }

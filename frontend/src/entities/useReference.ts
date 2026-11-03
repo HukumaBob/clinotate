@@ -52,13 +52,30 @@ function patchCache(
   );
 }
 
+/** Quiet period after the last reference save before evaluations refresh. */
+export const EVALUATION_REFRESH_MS = 1500;
+
+let evaluationTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Trailing debounce of the evaluation refresh: while an interval grows or an
+ * edge is dragged the editor saves about once a second, and every rescore
+ * re-reads the whole predictions document on the server. Evaluations refresh
+ * once the saves pause, and a newer refresh never aborts a running fetch. */
+export function scheduleEvaluationRefresh(queryClient: QueryClient) {
+  if (evaluationTimer !== null) clearTimeout(evaluationTimer);
+  evaluationTimer = setTimeout(() => {
+    evaluationTimer = null;
+    void queryClient.invalidateQueries({ queryKey: ["evaluation"] }, { cancelRefetch: false });
+  }, EVALUATION_REFRESH_MS);
+}
+
 /** Refetch only when the last in-flight reference mutation of this video
  * settles (the settling one still counts itself), so an early settle cannot
  * overwrite a later optimistic state with stale server data. */
 function settle(queryClient: QueryClient, videoId: number | null) {
   if (queryClient.isMutating({ mutationKey: mutationKey(videoId) }) <= 1) {
     void queryClient.invalidateQueries({ queryKey: ["reference", videoId] });
-    void queryClient.invalidateQueries({ queryKey: ["evaluation"] });
+    scheduleEvaluationRefresh(queryClient);
   }
 }
 
