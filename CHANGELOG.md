@@ -8,9 +8,12 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-03
+
 ### Fixed
 - A failed dataset export now says why in the Datasets table (what is wrong, on which frame
-  and annotation) instead of only "N findings; export aborted".
+  and annotation) instead of only "N findings; export aborted", and links to the frame's
+  editor (`/sequences/<id>?frame=<frame id>`).
 - SAM2/SAM3 no longer save empty masks: tracking skips frames where the object is gone
   (counted in the job's `empty_frames`) and a single prediction that comes back empty fails
   with a message. Empty masks made dataset exports abort as invalid.
@@ -75,5 +78,6 @@ First public release.
 - YOLO11 `l`/`x` models have not been run end-to-end.
 - No CI yet.
 
+[0.3.1]: https://github.com/HukumaBob/clinotate/releases/tag/v0.3.1
 [0.3.0]: https://github.com/HukumaBob/clinotate/releases/tag/v0.3.0
 [0.2.0]: https://github.com/HukumaBob/clinotate/releases/tag/v0.2.0
