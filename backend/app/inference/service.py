@@ -8,6 +8,7 @@ ever hands out a presigned link to it.
 import json
 import logging
 import math
+from collections.abc import Callable
 from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select
@@ -547,41 +548,101 @@ def commit_flags(
         raise NoPendingFlags(f"Inference run {run_id} has no pending flags")
 
     video = session.get(Video, run.video_id)
+    now = datetime.now(timezone.utc)
+    first_ms = min(flag.timestamp_ms for flag in flags)
+    last_ms = max(flag.timestamp_ms for flag in flags)
+    start_time = first_ms // 1000
+
+    def on_frame(position: int, frame: Frame) -> None:
+        flag = flags[position]
+        if flag.kind == QcFlagKind.FP:
+            frame.no_findings_reviewed = True
+            frame.no_findings_reviewed_by_id = user.id
+            frame.no_findings_reviewed_at = now
+        flag.committed_at = now
+        flag.frame_id = frame.id
+
+    return store_frames_as_sequence(
+        session,
+        storage,
+        video=video,
+        name=name or _default_sequence_name(video, run),
+        start_time=start_time,
+        duration=max(1, math.ceil(last_ms / 1000) - start_time),
+        origin_qc_run_id=run.id,
+        frame_numbers=[flag.frame_index for flag in flags],
+        on_frame=on_frame,
+    )
+
+
+def store_frames_as_sequence(
+    session: Session,
+    storage: StorageService,
+    *,
+    video: Video,
+    name: str,
+    start_time: int,
+    duration: int,
+    origin_qc_run_id: int | None,
+    frame_numbers: list[int],
+    on_frame: Callable[[int, Frame], None],
+) -> Sequence:
+    """Cut `frame_numbers` out of `video` and store them as one new Sequence.
+
+    All or nothing, and it always ends the caller's transaction:
+
+    `frame_numbers` must be distinct and ascending (what `extract_frames_at`
+    returns); anything else is refused with the mismatch `RuntimeError`.
+
+    1. The frames are cut in one sequential pass (`extract_frames_at`). On
+       failure the session is rolled back (releasing any locks the caller
+       took) and nothing is uploaded: `FramesOutOfRange` becomes
+       `FramesPastEnd(indices)`, `ValueError` (video cannot be opened or
+       decoded) becomes `VideoUnreadable`, and a decoder that returns other
+       frame numbers than requested raises `RuntimeError`.
+    2. A `Sequence(video_id, procedure_id=video.procedure_id, name,
+       start_time, duration, origin_qc_run_id)` is flushed, each frame is
+       uploaded to `frames/{sequence.id}/{position}.png` and a `Frame` row
+       (`frame_index=position`) added, in `frame_numbers` order.
+    3. After one flush (so every `Frame` has its id) `on_frame(position,
+       frame)` is called once per frame, in order: the caller attaches its
+       own rows or fields there (flag bookkeeping, no-findings marks,
+       annotations) inside the same transaction.
+    4. The session is committed and the refreshed Sequence returned.
+
+    Any exception from step 2 on (upload, flush, `on_frame`, commit) rolls
+    the session back, deletes every object uploaded so far (best effort,
+    even if the rollback itself fails) and is re-raised unchanged.
+    """
     try:
-        extracted = extract_frames_at(
-            storage.download(video.storage_key), [flag.frame_index for flag in flags]
-        )
+        extracted = extract_frames_at(storage.download(video.storage_key), frame_numbers)
     except FramesOutOfRange as exc:
         session.rollback()
         raise FramesPastEnd(exc.indices) from exc
     except ValueError as exc:
         session.rollback()
         raise VideoUnreadable(str(exc)) from exc
-    if [index for index, *_ in extracted] != [flag.frame_index for flag in flags]:
+    if [index for index, *_ in extracted] != list(frame_numbers):
         session.rollback()
         raise RuntimeError(
             "Extracted frames do not match the flagged frame numbers; nothing was changed"
         )
 
-    now = datetime.now(timezone.utc)
-    first_ms = min(flag.timestamp_ms for flag in flags)
-    last_ms = max(flag.timestamp_ms for flag in flags)
-    start_time = first_ms // 1000
     uploaded: list[str] = []
     try:
         sequence = Sequence(
             video_id=video.id,
             procedure_id=video.procedure_id,
-            name=name or _default_sequence_name(video, run),
+            name=name,
             start_time=start_time,
-            duration=max(1, math.ceil(last_ms / 1000) - start_time),
-            origin_qc_run_id=run.id,
+            duration=duration,
+            origin_qc_run_id=origin_qc_run_id,
         )
         session.add(sequence)
         session.flush()
 
-        created: list[tuple[QcFlag, Frame]] = []
-        for position, (flag, (_, png, width, height)) in enumerate(zip(flags, extracted, strict=True)):
+        created: list[Frame] = []
+        for position, (_, png, width, height) in enumerate(extracted):
             key = f"frames/{sequence.id}/{position}.png"
             storage.upload(key, png, content_type="image/png")
             uploaded.append(key)
@@ -593,16 +654,11 @@ def commit_flags(
                 height=height,
                 size_bytes=len(png),
             )
-            if flag.kind == QcFlagKind.FP:
-                frame.no_findings_reviewed = True
-                frame.no_findings_reviewed_by_id = user.id
-                frame.no_findings_reviewed_at = now
             session.add(frame)
-            created.append((flag, frame))
+            created.append(frame)
         session.flush()
-        for flag, frame in created:
-            flag.committed_at = now
-            flag.frame_id = frame.id
+        for position, frame in enumerate(created):
+            on_frame(position, frame)
         session.commit()
     except Exception:
         try:
@@ -613,7 +669,7 @@ def commit_flags(
                 try:
                     storage.delete(key)
                 except Exception:  # noqa: BLE001 -- best effort
-                    logger.warning("commit_flags: could not remove %s", key)
+                    logger.warning("store_frames_as_sequence: could not remove %s", key)
         raise
     session.refresh(sequence)
     return sequence

@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.datasets.models import Dataset, DatasetItem, TaskType
 from app.media.models import Frame, Sequence, Video
+from app.reference.commit import RefInterval
 from app.reference.evaluation import AxisEvaluation, EvalFrame, EvalInterval, evaluate_axis
 from app.reference.models import ReferenceInterval, VideoReference
 from app.reference.schemas import (
@@ -449,21 +451,67 @@ def _axis_read(
     )
 
 
-def evaluate_document(
-    run: InferenceRun, document: dict, reference: ReferenceRead, boundary_ms: int
-) -> EvaluationRead:
-    """Score every axis of a classification predictions document in memory."""
+@dataclass
+class AxisContext:
+    """One model axis of a classification predictions document, read for scoring.
+
+    `frames` are the axis's valid frames in document order; `frame_indices`
+    runs parallel to them (the video frame number, from the document key,
+    or None when the key is not an integer). `invalid` counts the malformed
+    frames (too few axes, a class id outside the axis): excluded, never
+    scored. `reference_axis` indexes `RunEvalContext.reference.axes` (None
+    when no class name is shared) and `intervals` are that axis's
+    non-orphaned reference intervals, named by class (empty when unmatched).
+    """
+
+    name: str
+    classes: list[str]
+    reference_axis: int | None
+    frames: list[EvalFrame]
+    frame_indices: list[int | None]
+    invalid: int
+    intervals: list[EvalInterval]
+
+
+@dataclass
+class RunEvalContext:
+    """Everything a finished classification run is scored and committed from.
+
+    `reference_intervals` are ALL non-orphaned reference intervals of the
+    video, over every reference axis (not only the matched ones);
+    `reference_axis_names` maps each reference axis's category id to its name.
+    """
+
+    run: InferenceRun
+    video: Video
+    reference: ReferenceRead
+    document: dict
+    axes: list[AxisContext]
+    reference_intervals: list[RefInterval]
+    reference_axis_names: dict[int, str]
+
+
+def _frame_index(key) -> int | None:
+    try:
+        return int(key)
+    except (TypeError, ValueError):
+        return None
+
+
+def build_axis_contexts(document: dict, reference: ReferenceRead) -> list[AxisContext]:
+    """Read every model axis of a (skeleton-valid) predictions document."""
     model_axes = document["axes"]
     matches = match_axes(model_axes, reference.axes)
-    doc_frames = list(document["frames"].values())
-    results: list[AxisEvaluationRead] = []
+    doc_frames = list(document["frames"].items())
+    contexts: list[AxisContext] = []
     for i, model_axis in enumerate(model_axes):
         classes = model_axis["classes"]
         frames: list[EvalFrame] = []
+        frame_indices: list[int | None] = []
         # Malformed frames (too few axes, a class id outside the axis) are
         # excluded frames: counted, never scored.
         invalid = 0
-        for frame in doc_frames:
+        for key, frame in doc_frames:
             try:
                 entries = frame["axes"]
                 class_id = entries[i]["class_id"] if i < len(entries) else None
@@ -480,27 +528,55 @@ def evaluate_document(
                         confidence=entries[i]["confidence"],
                     )
                 )
+                frame_indices.append(_frame_index(key))
             except (KeyError, TypeError, IndexError):
                 invalid += 1
-        if matches[i] is None:
-            results.append(_unmatched(model_axis["name"], len(frames) + invalid))
-            continue
-        ref_axis = reference.axes[matches[i]]
-        label_names = {c.label_id: c.name for c in ref_axis.classes}
-        intervals = [
-            EvalInterval(iv.start_ms, iv.end_ms, label_names[iv.label_id])
-            for iv in reference.intervals
-            if not iv.orphaned and iv.category_id == ref_axis.category_id
-        ]
-        result = evaluate_axis(
-            frames, intervals, classes, [c.name for c in ref_axis.classes], boundary_ms
+        intervals: list[EvalInterval] = []
+        if matches[i] is not None:
+            ref_axis = reference.axes[matches[i]]
+            label_names = {c.label_id: c.name for c in ref_axis.classes}
+            intervals = [
+                EvalInterval(iv.start_ms, iv.end_ms, label_names[iv.label_id])
+                for iv in reference.intervals
+                if not iv.orphaned and iv.category_id == ref_axis.category_id
+            ]
+        contexts.append(
+            AxisContext(
+                name=model_axis["name"], classes=classes, reference_axis=matches[i],
+                frames=frames, frame_indices=frame_indices, invalid=invalid,
+                intervals=intervals,
+            )
         )
-        result.frames_total += invalid
-        result.frames_excluded += invalid
-        results.append(_axis_read(model_axis["name"], ref_axis, result))
+    return contexts
+
+
+def _score_axes(
+    axes: list[AxisContext], reference: ReferenceRead, boundary_ms: int
+) -> list[AxisEvaluationRead]:
+    results: list[AxisEvaluationRead] = []
+    for axis in axes:
+        if axis.reference_axis is None:
+            results.append(_unmatched(axis.name, len(axis.frames) + axis.invalid))
+            continue
+        ref_axis = reference.axes[axis.reference_axis]
+        result = evaluate_axis(
+            axis.frames, axis.intervals, axis.classes, [c.name for c in ref_axis.classes],
+            boundary_ms,
+        )
+        result.frames_total += axis.invalid
+        result.frames_excluded += axis.invalid
+        results.append(_axis_read(axis.name, ref_axis, result))
+    return results
+
+
+def evaluate_document(
+    run: InferenceRun, document: dict, reference: ReferenceRead, boundary_ms: int
+) -> EvaluationRead:
+    """Score every axis of a classification predictions document in memory."""
+    axes = build_axis_contexts(document, reference)
     return EvaluationRead(
         run_id=run.id, video_id=run.video_id, reference_status=reference.status,
-        boundary_ms=boundary_ms, axes=results,
+        boundary_ms=boundary_ms, axes=_score_axes(axes, reference, boundary_ms),
     )
 
 
@@ -520,9 +596,17 @@ def _is_valid_document(document) -> bool:
     )
 
 
-def evaluate_run(
-    session: Session, storage: StorageService, run_id: int, boundary_ms: int
-) -> EvaluationRead:
+def load_run_eval_context(
+    session: Session, storage: StorageService, run_id: int
+) -> RunEvalContext:
+    """Load and validate what scoring (and committing) a run needs.
+
+    Raises `RunNotFound` (no such run), `VideoNotFound` (its video is gone),
+    and `RunNotEvaluable` when the run is not finished, has no stored
+    predictions, is not a classification run, its video has no non-orphaned
+    reference interval, the predictions object is gone, or the document is
+    not valid. Any other storage error propagates.
+    """
     run = session.get(InferenceRun, run_id)
     if run is None:
         raise RunNotFound(f"Inference run {run_id} not found")
@@ -551,4 +635,27 @@ def evaluate_run(
         raise invalid from exc
     if not _is_valid_document(document):
         raise invalid
-    return evaluate_document(run, document, reference, boundary_ms)
+    return RunEvalContext(
+        run=run,
+        video=session.get(Video, run.video_id),
+        reference=reference,
+        document=document,
+        axes=build_axis_contexts(document, reference),
+        reference_intervals=[
+            RefInterval(iv.category_id, iv.label_id, iv.start_ms, iv.end_ms)
+            for iv in reference.intervals
+            if not iv.orphaned
+        ],
+        reference_axis_names={axis.category_id: axis.name for axis in reference.axes},
+    )
+
+
+def evaluate_run(
+    session: Session, storage: StorageService, run_id: int, boundary_ms: int
+) -> EvaluationRead:
+    context = load_run_eval_context(session, storage, run_id)
+    return EvaluationRead(
+        run_id=context.run.id, video_id=context.run.video_id,
+        reference_status=context.reference.status, boundary_ms=boundary_ms,
+        axes=_score_axes(context.axes, context.reference, boundary_ms),
+    )
