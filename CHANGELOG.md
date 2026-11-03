@@ -33,6 +33,14 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   transitions. New endpoint `GET /reference/runs/{run_id}/evaluation`; computed per request,
   nothing is stored and there is no migration.
 
+- QC error dataset: on the classification run page, error episodes can be ticked (Select
+  all/none per axis, quick filters for interior errors, minimum length and minimum mean
+  confidence) and sent to training. "Send to training…" opens a dialog with a live preview and
+  creates one new sequence of the QC video, with frames sampled around the episodes and
+  classification annotations taken from the video's reference. New endpoint
+  `POST /reference/runs/{run_id}/commit-episodes` (a dry run returns the counts and writes
+  nothing; at most 500 frames per commit); no migration.
+
 ## [0.3.1] - 2026-11-03
 
 ### Fixed

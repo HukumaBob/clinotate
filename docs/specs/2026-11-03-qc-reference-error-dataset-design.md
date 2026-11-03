@@ -1,6 +1,7 @@
 # QC screen: a dataset from error episodes, sub-project 4 of 4
 
-Date: 2026-11-03. Status: draft, awaiting approval. Builds on
+Date: 2026-11-03. Status: implemented on master 2026-11-03 and live-checked (see
+[ROADMAP.md](../../ROADMAP.md)). Builds on
 [QC classification](2026-11-03-qc-classification-design.md),
 [reference labeling](2026-11-03-qc-reference-labeling-design.md) and
 [evaluation](2026-11-03-qc-reference-evaluation-design.md), all done, and on the

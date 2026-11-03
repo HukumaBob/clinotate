@@ -1839,6 +1839,109 @@ id, not run id; `json.loads` of a corrupt predictions document still gives a 500
 hatching draws one element per episode (thousands on a very noisy model); the evaluation
 request is made twice on first page load. Part 4 as above.
 
+### Phase 3: QC screen, classification sub-project 4 (dataset from error episodes) — DONE (2026-11-03, live-checked on a 28 s video)
+
+Design: [docs/specs/2026-11-03-qc-reference-error-dataset-design.md](docs/specs/2026-11-03-qc-reference-error-dataset-design.md).
+Plan: [docs/plans/2026-11-03-qc-reference-error-dataset.md](docs/plans/2026-11-03-qc-reference-error-dataset.md).
+Commits `979c8f0`, `194ab77` (docs); backend `57b266b`, `1864c2f` (refactor), `9d8717f`;
+frontend `4fd9961`, `9076be0`, `0cada55` (+ fix `a1f4868`); final fix wave `84654f5`, `d0a7ecf`.
+Not pushed. No migration, no new tables.
+
+Sub-project 4 of 4 of "classification in QC", the last one. It closes the loop of the whole
+feature: run a classifier, judge it against a hand-labeled reference, send its mistakes back to
+training. Sub-projects 1 (runs), 2 (reference labeling) and 3 (evaluation) were done earlier.
+
+**Built (backend):** `POST /reference/runs/{run_id}/commit-episodes` (201 real, 200 dry run). The
+user's selected error episodes of a run, identified by `(axis name, start_ms)`, become ONE new
+`Sequence` of the QC video (`origin_qc_run_id`, default name
+`QC errors · <video> · run #<id> · <date>`). The server recomputes the evaluation and never trusts
+client frame lists; an unknown or stale key is a 422, and membership does not depend on the
+boundary tolerance. Frames are cut in one sequential pass; classification annotations come from the
+reference (one per reference axis covering the frame, ALL reference axes of the video,
+`taxonomy_version` copied from the label at commit time, orphaned and abstract labels never used).
+Sampling: instants anchored at each episode start, `t = start_ms + k*step_ms` within
+`[start_ms - margin_ms, end_ms + margin_ms]`; the nearest processed frame within half a step (ties
+to the lower timestamp); deduplicated; only frames covered by at least one reference axis are kept
+(the rest are counted as `dropped_unlabeled`). Defaults: step 1 s, margin 1 s. Cap 500 frames per
+commit, checked before any cut. A dry run returns the counts and writes nothing; a real commit is
+all or nothing (uploaded objects are removed on failure). Refactor: the evaluation context loader
+(`load_run_eval_context`) and the frame-storing helper (`store_frames_as_sequence`) are shared
+with `evaluate_run` and the existing `commit_flags`, whose behaviour is unchanged (existing suites
+pass).
+
+**Built (frontend):** a checkbox per episode in the evaluation panel, Select all/none per axis,
+quick filters (Interior only, At least N frames, Mean confidence at least X%) that REPLACE the
+selection of the shown axis, a footer with the selection count and "Send to training…", and
+`EpisodeCommitDialog` (name, step and margin in seconds, a live dry-run preview debounced 400 ms
+with frames, dropped-unlabeled and labels per axis, the reference note for clean/compromised, the
+already-sent figure, Send, and an "Open sequence" link on success). The selection survives a
+tolerance change and is dropped on a run change; the dialog closes on a run change. A real commit
+invalidates the sequence queries, the Media library and the video's sent figure.
+
+**Deviations from the spec (my calls):**
+- `VideoUnreadable` / `FramesPastEnd` map to 422 (as the existing flags route), not 409.
+- The cap is 500 frames, not 2000 (see Review).
+- Sampling is anchored at the episode start (see Review).
+- Repeated commits are not deduplicated: the platform does not record the source frame number of
+  a committed frame, so the dialog shows how many frames of the video were already sent instead.
+- The default selection is empty.
+- Margin frames are ordinary labeled frames, including ones the model got right.
+- Committing does not change the reference status; training does, as built in sub-project 2.
+
+**Review:** per-task reviews and a final whole-branch review found and fixed real defects: a real
+commit could be LOST when the dialog's preview request replaced the commit's callbacks in a single
+mutation (now two mutation instances, mutation-level onSuccess, inputs locked while sending); the
+sampling grid started at `start - margin` and could skip every error frame of a short episode when
+the margin was not a multiple of the step (grid anchored at the episode start); memory and time at
+the old 2000-frame cap (lowered to 500); plus abstract labels, taxonomy-version pinning, query
+invalidation, the dialog surviving a run change, and key parsing for axis names containing `|`.
+
+**Live check (2026-11-03)** on video `polyposis` (28 s) with a reference of three intervals
+(caecum 2000-13855, colon_left 13855-20752, good_quality 5000-8001 ms) and a classification run
+(model `yolo11n-cls-run528`, 847 frames). A dry run of the three longest episodes (step 1 s,
+margin 0.5 s) gave 5 frames, 1 dropped as unlabeled, Anatomy 5; a hand derivation of the anchored
+rule gave the same 5 frames. The real commit created a sequence with `start_time` 9 and `duration`
+11 and frames labeled caecum, caecum, colon_left x3 (taxonomy version 1). An independent Python
+script decoding the stored video confirmed that the 5 stored frames are PIXEL-IDENTICAL to video
+frames 299, 329, 506, 536 and 596, exactly the frame numbers derived from the sampling rule. A
+larger commit (all 40 episodes, step 0.1 s, margin 0.5 s) created 277 frames and 302 annotations
+(277 Anatomy + 25 Quality) in 7.4 s for a 28 s video. The cap and stale-key refusals gave 422 with
+readable messages. In the real browser the quick filters "Interior only" plus "At least 10 frames"
+selected 7 episodes and 107 frames, matching an independent count from the evaluation data; the
+dialog preview showed 21 frames at step 1 s and 37 at 0.5 s with the clean-reference note and
+"282 frames of this video were already sent" (the two earlier test commits); sending created
+"LIVE CHECK ui" (37 frames), the selection cleared, and the new sequence opened in the frame grid
+showed the classification badges "Anatomy / caecum" and "Quality / good_quality" on the frames.
+All rows created for the check were removed: the app refuses to delete a sequence with annotated
+frames, so the three sequences were cleaned through the frame bulk-delete endpoint (which removes
+annotations and MinIO objects) after backing up the rows to the scratchpad, then the sequences,
+the intervals, the empty `video_references` row and the run; the user's own rows (video 3054
+reference, one older QC sequence) were not touched.
+
+**Not verified live:** a commit near the 500-frame cap or on a long video (the check video is 28 s;
+decoding an 85-minute video up to the last wanted frame and holding all PNG bytes in memory before
+upload is the known scaling risk; measured about 25 ms per frame for PNG encode plus upload on the
+28 s video); the compromised-reference note in the dialog; a stale-key 422 reload in the browser;
+concurrent commits; two reference axes with a real second model axis.
+
+**Things learned the hard way:** plain `npx tsc --noEmit` checks nothing in this repo; the real
+check is `-p tsconfig.app.json`, and the final reviews found no errors in non-test files of this
+feature. Known pre-existing failing backend tests:
+`tests/test_inference_api.py::test_deleting_a_video_that_has_qc_runs_is_refused` and
+`tests/test_jobs.py::test_enqueue_sam3_predict_creates_pending_job`. A 5-hour API rate limit
+interrupted one review mid-run; it was resumed after the reset with no work lost.
+
+**Deferred:** stream each frame to storage as it is cut (callback or generator in
+`extract_frames_at`) instead of holding all PNG bytes, then raise the cap; a retry after a lost
+response would create a duplicate sequence (the API is not idempotent); the run does not record
+the `storage_key` it read, so a transcode between the run and the commit could shift frame
+numbering (the same already holds for the flags commit); every preview 422 reloads the evaluation
+(reload only on stale/unknown-key messages); the dialog keeps its key snapshot after a stale-key
+422 (close and send again); checkbox names are not guaranteed unique within one second; the spec
+and plan "Keeping" text does not mention the abstract-label rule; duplicate model axis names render
+with duplicate React keys in the panel and only the commit refuses them; `ClassifierSpec.category_id`
+is still unvalidated (from sub-project 1).
+
 ### Phase 2b: Train screen — DONE (2026-08-20)
 
 Brainstorming began on the Train screen and the `training` module. No spec
