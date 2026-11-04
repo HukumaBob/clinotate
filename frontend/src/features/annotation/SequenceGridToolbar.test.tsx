@@ -15,6 +15,29 @@ vi.mock("./TagRegionsPanel", () => ({
   ),
 }));
 
+vi.mock("./FrameCropPanel", () => ({
+  FrameCropPanel: ({
+    frameIds,
+    previewUrl,
+    hasVideo,
+    onClose,
+  }: {
+    frameIds: number[];
+    previewUrl?: string;
+    hasVideo: boolean;
+    onClose: () => void;
+  }) => (
+    <div>
+      <span>Crop panel for {frameIds.join(",")}</span>
+      <span>preview {previewUrl ?? "none"}</span>
+      <span>{hasVideo ? "has video" : "photo set"}</span>
+      <button type="button" onClick={onClose}>
+        Close crop
+      </button>
+    </div>
+  ),
+}));
+
 describe("SequenceGridToolbar", () => {
   it("shows the sequence name, not a numeric id placeholder", () => {
     render(
@@ -925,5 +948,70 @@ describe("SequenceGridToolbar classification controls", () => {
     expect(screen.getByText("Tick the worst … % of frames")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Find Similar" }));
     expect(screen.getByText("Duplicate when at least … % similar")).toBeInTheDocument();
+  });
+});
+
+describe("SequenceGridToolbar crop panel", () => {
+  const toolbar = (count: number, ids: number[], extra = {}) => (
+    <SequenceGridToolbar
+      sequenceName="Seq"
+      isSelectMode
+      onToggleSelectMode={() => {}}
+      selectedCount={count}
+      onDeleteSelected={() => {}}
+      onCancel={() => {}}
+      sequenceId={7}
+      selectedFrameIds={ids}
+      {...extra}
+    />
+  );
+
+  it("disables Crop with nothing selected and opens the panel for the selection", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(toolbar(0, []));
+    expect(screen.getByRole("button", { name: "Crop" })).toBeDisabled();
+
+    rerender(toolbar(2, [4, 5], { firstSelectedImageUrl: "http://x/4.png", sequenceHasVideo: true }));
+    await user.click(screen.getByRole("button", { name: "Crop" }));
+    expect(screen.getByText("Crop panel for 4,5")).toBeInTheDocument();
+    expect(screen.getByText("preview http://x/4.png")).toBeInTheDocument();
+    expect(screen.getByText("has video")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close crop" }));
+    expect(screen.queryByText(/Crop panel/)).not.toBeInTheDocument();
+  });
+
+  it("toggles the panel from the button", async () => {
+    const user = userEvent.setup();
+    render(toolbar(2, [4, 5]));
+    await user.click(screen.getByRole("button", { name: "Crop" }));
+    expect(screen.getByText("Crop panel for 4,5")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Crop" }));
+    expect(screen.queryByText(/Crop panel/)).not.toBeInTheDocument();
+  });
+
+  it("shows one popover at a time: Crop and Tag regions close each other", async () => {
+    const user = userEvent.setup();
+    render(toolbar(2, [4, 5]));
+    await user.click(screen.getByRole("button", { name: "Tag regions" }));
+    expect(screen.getByText(/Tag regions panel/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Crop" }));
+    expect(screen.getByText("Crop panel for 4,5")).toBeInTheDocument();
+    expect(screen.queryByText(/Tag regions panel/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Tag regions" }));
+    expect(screen.getByText(/Tag regions panel/)).toBeInTheDocument();
+    expect(screen.queryByText(/Crop panel/)).not.toBeInTheDocument();
+  });
+
+  it("closes the panel when the selection empties", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(toolbar(2, [4, 5]));
+    await user.click(screen.getByRole("button", { name: "Crop" }));
+    rerender(toolbar(0, []));
+    expect(screen.queryByText(/Crop panel/)).not.toBeInTheDocument();
+    rerender(toolbar(2, [6, 7]));
+    expect(screen.queryByText(/Crop panel/)).not.toBeInTheDocument();
   });
 });

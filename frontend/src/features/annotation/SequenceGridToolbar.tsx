@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
+import { FrameCropPanel } from "./FrameCropPanel";
 import { ParamPopover } from "./ParamPopover";
 import { TagRegionsPanel } from "./TagRegionsPanel";
 
@@ -33,6 +34,8 @@ interface SequenceGridToolbarProps {
   onDeselectAll?: () => void;
   sequenceId?: number;
   selectedFrameIds?: number[];
+  firstSelectedImageUrl?: string;
+  sequenceHasVideo?: boolean;
 }
 
 export function SequenceGridToolbar({
@@ -62,14 +65,21 @@ export function SequenceGridToolbar({
   onDeselectAll = () => {},
   sequenceId = 0,
   selectedFrameIds = [],
+  firstSelectedImageUrl,
+  sequenceHasVideo = false,
 }: SequenceGridToolbarProps) {
   const allSelected = totalCount > 0 && selectedCount === totalCount;
   const [deleteArmed, setDeleteArmed] = useState(false);
-  const [isTagRegionsOpen, setIsTagRegionsOpen] = useState(false);
-  const closeTagRegions = useCallback(() => setIsTagRegionsOpen(false), []);
+  // One popover at a time: opening one closes the other.
+  const [openPanel, setOpenPanel] = useState<"tagRegions" | "crop" | null>(null);
+  const isTagRegionsOpen = openPanel === "tagRegions";
+  const isCropOpen = openPanel === "crop";
+  const closePanel = useCallback(() => setOpenPanel(null), []);
+  const togglePanel = (panel: "tagRegions" | "crop") =>
+    setOpenPanel((current) => (current === panel ? null : panel));
   // An emptied selection closes the panel, so a later selection does not reopen it.
   useEffect(() => {
-    if (selectedCount === 0) setIsTagRegionsOpen(false);
+    if (selectedCount === 0) setOpenPanel(null);
   }, [selectedCount]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
@@ -133,7 +143,7 @@ export function SequenceGridToolbar({
 
   function handleCancelClick() {
     setDeleteArmed(false);
-    setIsTagRegionsOpen(false);
+    setOpenPanel(null);
     onCancel();
   }
 
@@ -279,7 +289,7 @@ export function SequenceGridToolbar({
                 type="button"
                 aria-label="Tag regions"
                 aria-expanded={isTagRegionsOpen && selectedCount > 0}
-                onClick={() => setIsTagRegionsOpen((current) => !current)}
+                onClick={() => togglePanel("tagRegions")}
                 disabled={selectedCount === 0}
                 title={noSelectionHint}
                 className={buttonClass}
@@ -292,7 +302,31 @@ export function SequenceGridToolbar({
                     sequenceId={sequenceId}
                     frameIds={selectedFrameIds}
                     taxonomyTree={taxonomyTree}
-                    onClose={closeTagRegions}
+                    onClose={closePanel}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Crop"
+                aria-expanded={isCropOpen && selectedCount > 0}
+                onClick={() => togglePanel("crop")}
+                disabled={selectedCount === 0}
+                title={noSelectionHint}
+                className={buttonClass}
+              >
+                Crop…
+              </button>
+              {isCropOpen && selectedCount > 0 && (
+                <div className="absolute left-0 top-full z-20 mt-2">
+                  <FrameCropPanel
+                    sequenceId={sequenceId}
+                    frameIds={selectedFrameIds}
+                    previewUrl={firstSelectedImageUrl}
+                    hasVideo={sequenceHasVideo}
+                    onClose={closePanel}
                   />
                 </div>
               )}

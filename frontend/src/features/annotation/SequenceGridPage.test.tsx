@@ -729,4 +729,42 @@ describe("SequenceGridPage", () => {
     expect(await screen.findByText(/0 of 2 selected/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select all" })).toBeInTheDocument();
   });
+
+  it("opens the crop panel with the first selected frame and the video note", async () => {
+    vi.mocked(apiClient.GET).mockImplementation(async (path: string) => {
+      if (path === "/media/sequences/{sequence_id}") {
+        return {
+          data: {
+            id: 9, name: "Seq", video_id: 3, procedure_id: 7, start_time: 0, duration: 0,
+            annotation_count: 0, crop_box: null,
+          },
+          error: undefined,
+        } as never;
+      }
+      if (path === "/annotation/frames/{frame_id}/annotations") {
+        return { data: [], error: undefined } as never;
+      }
+      if (path.includes("/frames")) {
+        return {
+          data: [
+            { id: 1, sequence_id: 9, storage_key: "k1", frame_index: 0, width: 10, height: 10, image_url: "http://x/1.png", no_findings_reviewed: false },
+            { id: 2, sequence_id: 9, storage_key: "k2", frame_index: 1, width: 10, height: 10, image_url: "http://x/2.png", no_findings_reviewed: false },
+          ],
+          error: undefined,
+        } as never;
+      }
+      return { data: [], error: undefined } as never;
+    });
+
+    renderAtSequence("9");
+    fireEvent.click(screen.getByRole("button", { name: /select/i }));
+    const images = await screen.findAllByAltText(/Frame \d/);
+    fireEvent.click(images[1].closest("button")!);
+
+    fireEvent.click(screen.getByRole("button", { name: "Crop" }));
+
+    expect(await screen.findByAltText("First selected frame")).toHaveAttribute("src", "http://x/2.png");
+    expect(screen.getByText(/Re-cutting this sequence from its video/)).toBeInTheDocument();
+  });
 });
+

@@ -255,6 +255,8 @@ export function SequenceGridPage() {
           onDeselectAll={handleDeselectAll}
           sequenceId={sequenceIdNumber}
           selectedFrameIds={Array.from(selectedFrameIds)}
+          firstSelectedImageUrl={selectedFrames[0]?.image_url}
+          sequenceHasVideo={sequenceQuery.data?.video_id != null}
         />
         {deleteError && (
           <div className="border-t border-gray-800 bg-gray-950 px-4 py-2 text-sm text-red-400">{deleteError}</div>
