@@ -927,9 +927,15 @@ def crop_sequence_frames(
     session: Session = Depends(get_session),
     storage: StorageService = Depends(get_storage_service),
 ) -> FrameCropResult:
-    return frame_crop.crop_frames(
-        session, storage, sequence_id, payload.frame_ids, payload.crop, payload.dry_run
-    )
+    _raise_if_frames_in_datasets(session, payload.frame_ids)
+    try:
+        return frame_crop.crop_frames(
+            session, storage, sequence_id, payload.frame_ids, payload.crop, payload.dry_run
+        )
+    except frame_crop.SequenceNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except frame_crop.CropRefused as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.post(

@@ -190,10 +190,19 @@ class FrameBulkDeleteResult(BaseModel):
     deleted_ids: list[int]
 
 
+MAX_CROP_FRAMES = 500
+
+
 class FrameCropRequest(BaseModel):
-    frame_ids: list[int]
+    frame_ids: list[int] = Field(min_length=1, max_length=MAX_CROP_FRAMES)
     crop: CropBox
     dry_run: bool = False
+
+    @model_validator(mode="after")
+    def _crop_removes_something(self) -> "FrameCropRequest":
+        if not any((self.crop.left, self.crop.right, self.crop.top, self.crop.bottom)):
+            raise ValueError("The crop removes nothing: set at least one inset above 0")
+        return self
 
 
 class FrameCropResult(BaseModel):

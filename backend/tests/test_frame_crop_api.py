@@ -216,3 +216,154 @@ def test_ids_and_indexes_do_not_change(crop_world):
     row, annotation = world.session.get(Frame, frame.id), world.session.get(Annotation, mask.id)
     after = (row.id, row.frame_index, row.sequence_id, annotation.id, annotation.label_id, annotation.taxonomy_version)
     assert after == before
+
+
+# --- guards and failure safety -------------------------------------------------
+
+
+def _snapshot(world):
+    """Everything a refused or failed crop must leave exactly as it was."""
+    world.session.expire_all()
+    frames = [
+        (f.id, f.storage_key, f.width, f.height, f.size_bytes)
+        for f in world.session.query(Frame).filter(
+            Frame.id.in_([f.id for f in world.frames_a + world.frames_b])
+        ).order_by(Frame.id)
+    ]
+    annotations = [
+        (a.id, a.storage_key, a.raw_mask_storage_key)
+        for a in world.session.query(Annotation).order_by(Annotation.id)
+        if a.frame_id in {f.id for f in world.frames_a + world.frames_b}
+    ]
+    return frames, annotations, dict(world.storage.objects)
+
+
+@pytest.mark.parametrize(
+    "crop",
+    [
+        {"left": 0, "right": 0, "top": 0, "bottom": 0},
+        {},
+        {"left": 60, "right": 40},
+    ],
+)
+def test_a_crop_that_removes_nothing_or_everything_is_refused(crop_world, crop):
+    before = _snapshot(crop_world)
+
+    response = _crop(crop_world, crop_world.frames_a[:1], crop)
+
+    assert response.status_code == 422
+    assert _snapshot(crop_world) == before
+
+
+def test_an_unknown_sequence_is_404(crop_world):
+    response = client.post(
+        "/media/sequences/99999999/frames/crop",
+        headers=_headers(),
+        json={"frame_ids": [1], "crop": {"left": 10}},
+    )
+    assert response.status_code == 404
+
+
+def test_a_frame_of_another_sequence_is_refused_and_nothing_changes(crop_world):
+    world = crop_world
+    before = _snapshot(world)
+
+    response = _crop(world, [world.frames_a[0], world.frames_b[0]], {"left": 25})
+
+    assert response.status_code == 422
+    assert str(world.frames_b[0].id) in response.json()["detail"]
+    assert _snapshot(world) == before
+
+
+def test_an_unknown_frame_id_is_refused(crop_world):
+    response = client.post(
+        f"/media/sequences/{crop_world.sequence_a.id}/frames/crop",
+        headers=_headers(),
+        json={"frame_ids": [crop_world.frames_a[0].id, 99999999], "crop": {"left": 25}},
+    )
+    assert response.status_code == 422
+
+
+def test_an_empty_selection_is_422(crop_world):
+    assert _crop(crop_world, [], {"left": 25}).status_code == 422
+
+
+def test_more_than_500_frames_is_422(crop_world):
+    response = client.post(
+        f"/media/sequences/{crop_world.sequence_a.id}/frames/crop",
+        headers=_headers(),
+        json={"frame_ids": list(range(1, 502)), "crop": {"left": 25}},
+    )
+    assert response.status_code == 422
+
+
+def test_frames_in_a_dataset_are_refused_with_409(crop_world):
+    from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
+
+    world = crop_world
+    dataset = Dataset(
+        name=f"crop-guard-{uuid.uuid4().hex[:6]}", task_type=TaskType.DETECTION,
+        taxonomy_version=1, created_by_id=world.user.id,
+    )
+    world.session.add(dataset)
+    world.session.flush()
+    world.session.add(
+        DatasetItem(dataset_id=dataset.id, frame_id=world.frames_a[0].id, split=SplitName.TRAIN)
+    )
+    world.session.commit()
+    before = _snapshot(world)
+    try:
+        response = _crop(world, world.frames_a[:2], {"left": 25})
+        assert response.status_code == 409
+        assert dataset.name in response.json()["detail"]
+        assert _snapshot(world) == before
+    finally:
+        world.session.query(DatasetItem).filter_by(dataset_id=dataset.id).delete()
+        world.session.query(Dataset).filter_by(id=dataset.id).delete()
+        world.session.commit()
+
+
+def test_a_mask_with_a_different_size_aborts_everything(crop_world):
+    world = crop_world
+    mask = add_region(world.session, world.storage, world.frames_a[1], world.polyp, world.user)
+    world.storage.objects[mask.storage_key] = _mask_png(32, 32, (2, 2, 10, 10))
+    world.storage.objects[mask.raw_mask_storage_key] = _mask_png(64, 48, (2, 2, 10, 10))
+    before = _snapshot(world)
+
+    response = _crop(world, world.frames_a[:2], {"left": 25})
+
+    assert response.status_code == 422
+    assert _snapshot(world) == before
+    assert world.storage.uploads == [] and world.storage.deleted == []
+
+
+def test_an_unreadable_image_aborts_everything(crop_world):
+    world = crop_world
+    world.storage.objects[world.frames_a[1].storage_key] = b"this is not an image"
+    before = _snapshot(world)
+
+    response = _crop(world, world.frames_a[:2], {"left": 25})
+
+    assert response.status_code == 422
+    assert _snapshot(world) == before
+    assert world.storage.uploads == [] and world.storage.deleted == []
+
+
+def test_a_failure_after_upload_leaves_the_database_untouched_and_deletes_new_objects(crop_world):
+    world = crop_world
+    mask = add_region(world.session, world.storage, world.frames_a[0], world.polyp, world.user)
+    for key in (mask.storage_key, mask.raw_mask_storage_key):
+        world.storage.objects[key] = _mask_png(64, 48, (30, 10, 40, 20))
+    before = _snapshot(world)
+    world.storage.fail_on_upload = 3  # two frames go up, then the first mask upload fails
+    quiet_client = TestClient(app, raise_server_exceptions=False)
+
+    response = quiet_client.post(
+        f"/media/sequences/{world.sequence_a.id}/frames/crop",
+        headers=_headers(),
+        json={"frame_ids": [f.id for f in world.frames_a[:2]], "crop": {"left": 25}},
+    )
+
+    assert response.status_code == 500
+    assert len(world.storage.uploads) == 2  # the two that succeeded before the failure
+    assert _snapshot(world) == before  # rows unchanged, new objects deleted, old ones intact
