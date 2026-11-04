@@ -9,6 +9,11 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 ## [Unreleased]
 
 ### Added
+- Crop frames of an existing sequence: select frames in the sequence grid, **Crop…**, set the
+  insets (or "Detect automatically"), preview the frame and mask counts, apply. The frames
+  and every mask on them are cut with the same rectangle (irreversible; refused for frames
+  in a dataset). `POST /media/sequences/{id}/frames/crop` and `.../frames/detect-crop`.
+
 - QC working area: a QC run can carry a crop (percent insets of the clean-video region)
   that is applied to every frame before the model, as in training, with detection and
   segmentation results mapped back onto the full frame. Choose it in the run form (preview,

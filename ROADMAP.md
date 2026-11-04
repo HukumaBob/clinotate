@@ -2737,3 +2737,50 @@ the crop. Throwaway rows, jobs and MinIO objects were removed.
 - A video whose picture is mostly static for long stretches could confuse the detector.
 - `DELETE /media/sequences/{id}` left the sequence's frame object in MinIO (seen once,
   not investigated; pre-existing, not part of this work).
+
+### Phase 3: Crop frames of an existing sequence (QC working area, sub-project B) — DONE (2026-11-04, live-checked; final review pending)
+
+Design: [docs/specs/2026-11-04-frame-crop-design.md](docs/specs/2026-11-04-frame-crop-design.md).
+Plan: [docs/plans/2026-11-04-frame-crop.md](docs/plans/2026-11-04-frame-crop.md). Not pushed.
+
+Sub-project B replaced the first idea (crop when a photo set is uploaded) with cropping
+frames that are already stored, so photo sets and older sequences can be fixed in place.
+
+**Built:** in the sequence grid, select frames and open **Crop…**: four percent insets over
+a preview, "Detect automatically", "Preview" (a dry run that reports frames, masks and how
+many masks have pixels in the area being removed) and "Apply" (a second confirming click;
+the crop cannot be undone). `POST /media/sequences/{id}/frames/crop`
+(`frame_ids`, `crop`, `dry_run`) cuts each frame, as a percentage of its own size so mixed
+sizes work, and both mask PNGs (`storage_key`, `raw_mask_storage_key`) of every annotation
+of those frames with the same rectangle. New objects get new storage keys; the rows are
+updated in one commit and the old objects are deleted only after it; a failure before the
+commit rolls back and deletes what was uploaded. Refused: all-zero crop, an empty or
+over-500 selection, a frame outside the sequence, a frame in a dataset (409, as for
+deleting frames), an unreadable image, a mask whose size differs from its frame.
+`POST /media/sequences/{id}/frames/detect-crop` takes the largest non-black region of each
+selected frame, combines the insets by the median, loosens them by 1 point, and answers
+`null` when the frames disagree by more than 5 points, the picture is tiny, or there is
+no border. No migration and no `Frame.crop_box`: nothing reads the applied crop back.
+
+**Deviations from the spec (my calls):**
+- The crop route checks the dataset guard before anything else, so a dry run on a dataset
+  frame answers 409 too.
+- Ownership of the ids is checked in `frame_crop.load_frames`, shared by both routes.
+
+**Live check (2026-11-04):** a throwaway photo sequence made from three real photo frames
+(720x576) with a hand-made mask (one box inside the picture, one in the left border).
+Detect gave 4 / 5.6 / 1.3 / 1.3; the preview said "3 frames, 1 mask" with the clipped
+warning; Apply asked for a confirmation; the frames became 652x562 and both masks 652x562
+with the inside box intact (40000 px); the thumbnails reloaded and the mask stayed on the
+same structure; a second crop of an already cropped frame worked (652 to 639). The rows
+and MinIO objects were removed afterwards.
+
+**Not verified / deferred:**
+- The 409 for a dataset frame was only covered by a test: the dev database has no dataset
+  items.
+- Detect is deliberately cautious. On these photos the device's own interface (a coloured
+  comment box and text) touches the picture, so the proposal kept 4 % on the left instead
+  of the whole overlay; the user finishes it by hand.
+- A video-sequence frame cropped here is regenerated uncropped by a later re-cut (the
+  panel says so).
+- No guard against a SAM job running on the same frames.
