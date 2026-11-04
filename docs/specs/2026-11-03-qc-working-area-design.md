@@ -93,9 +93,10 @@ The crop has to be decided per video.
   duplicated with a test pinning both to the same outputs.
 - Detection/segmentation: the model outputs normalised coordinates
   relative to the cropped image. Before writing the predictions document,
-  map every bbox and polygon point back to the full frame:
-  `x_full = left + x * (1 - left - right)`, likewise for y with top/bottom
-  (all as fractions). Stored predictions are therefore always in
+  map every bbox and polygon point back to the full frame using the real
+  pixel rectangle kept by the crop (after `int()` truncation):
+  `x_full = (x0 + x * (x1 - x0)) / width`, likewise for y. (Implementation
+  call: nominal percentages differ from this on odd frame sizes.) Stored predictions are therefore always in
   full-frame normalised coordinates, and the frontend needs no remapping.
   Bbox width/height scale by the same factors.
 - The predictions document records the applied `crop_box` for traceability

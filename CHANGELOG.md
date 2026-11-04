@@ -9,6 +9,14 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 ## [Unreleased]
 
 ### Added
+- QC working area: a QC run can carry a crop (percent insets of the clean-video region)
+  that is applied to every frame before the model, as in training, with detection and
+  segmentation results mapped back onto the full frame. Choose it in the run form (preview,
+  four fields, "Detect automatically" from temporal pixel variance); the run pages outline
+  it over the full video, and flagged frames committed from the run are cut the same way.
+  `InferenceRun` gains a nullable `crop_box` column (migration `d4e5f6a7b8c9`);
+  `POST /inference/runs` accepts `crop`; `POST /inference/videos/{id}/detect-crop`.
+
 - QC classification runs: a QC run can use one to six Ultralytics classification models
   (one axis each) instead of a detector. `/qc/:runId` then shows a badge per axis over the
   video, one lane per axis (segments, class time shares, change count) and blip ticks

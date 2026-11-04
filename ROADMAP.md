@@ -2686,3 +2686,54 @@ classifier such as the DINOv3 adapter has labelled crops to train on.
 `storage_key`, not `raw_mask_storage_key`. Remove copies deletes both; the old path is
 not fixed here.
 
+
+### Phase 3: QC working area (crop before the model, as in training) — DONE (2026-11-04, live-checked; final review pending)
+
+Design: [docs/specs/2026-11-03-qc-working-area-design.md](docs/specs/2026-11-03-qc-working-area-design.md).
+Plan: [docs/plans/2026-11-03-qc-working-area.md](docs/plans/2026-11-03-qc-working-area.md).
+Commits `259981c` (docs) to `11d5d13`. Not pushed. Sub-project A of two; B (crop when
+uploading a photo set) is not started.
+
+**Problem:** training frames are cut to the clean-video region by hand (`Sequence.crop_box`),
+but QC inference fed the model the whole decoded frame, black border and device overlay
+included. Different input distribution, so QC measured the mismatch rather than the model.
+
+**Built:** `InferenceRun.crop_box` (percent insets, the media `CropBox` shape; migration
+`d4e5f6a7b8c9`), accepted as `crop` on `POST /inference/runs` for detector and classifier
+runs and copied into the job payload. The ml-worker (`crop.py`) cuts every frame right
+after `capture.retrieve()`, before the stress perturbation, with the same `int()`
+truncation as `_apply_crop`; detection and segmentation boxes and polygons are remapped to
+full-frame normalised coordinates before the predictions are written, so the player needs
+no remapping. The document records `crop_box` when set. Flagged frames committed from a
+run, and error-episode commits, are cut with the run's crop and the new sequence stores it.
+`POST /inference/videos/{id}/detect-crop` proposes an area from the per-pixel standard
+deviation over about 50 sampled frames (live picture changes, border and burned-in text do
+not). The run form has a Working area picker (preview, four fields, "Detect
+automatically"), defaulting to the video's latest sequence crop. The detection,
+classification and A/B pages outline the area over the full video.
+
+**Deviations from the spec (my calls):**
+- The remap uses the real pixel rectangle (after `int()` truncation), not the nominal
+  percentages; the two differ on odd frame sizes.
+- The area is stored on the run only; `Video` has no crop (per the user).
+- `RunViewPage` has no page-level test (no harness for that page); the outline is covered
+  by a `WorkingAreaOutline` unit test and the live check.
+
+**Live check (2026-11-04):** video `Kubansk_Mairin_colono` (7:18, 1920x1080). Auto-detect
+gave left 1.2 / right 32.8 / top 4.0 / bottom 4.0 against the hand crop 2 / 34 / 5 / 5
+(looser by the 1 % margin, as designed); on another Olympus video it gave 1.2 / 32.8 /
+4.6 / 4.0 against 2 / 34 / 6 / 5. Detection, segmentation and classification runs at
+stride 30 (439 frames each) succeeded with the area in the document; all 156 boxes and
+22470 polygon points lay inside the area (x 0.012 to 0.672 of the frame). In the browser
+the outline matched the letterboxed geometry to the pixel and the box sat on the polyp.
+A committed flag produced a 1268x994 frame (what `_apply_crop` gives) and a sequence with
+the crop. Throwaway rows, jobs and MinIO objects were removed.
+
+**Not verified / deferred:**
+- Quality with versus without the area was not compared: no labelled data was scored.
+- Auto-detect took 24 s on a 7-minute video and 14 s on an 11-minute one (it decodes the
+  whole video with `grab()`); it returned no crop for one video with no clear border.
+  Thresholds and the 1 % margin were tuned on synthetic video plus these two checks only.
+- A video whose picture is mostly static for long stretches could confuse the detector.
+- `DELETE /media/sequences/{id}` left the sequence's frame object in MinIO (seen once,
+  not investigated; pre-existing, not part of this work).
