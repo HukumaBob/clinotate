@@ -190,6 +190,21 @@ class FrameBulkDeleteResult(BaseModel):
     deleted_ids: list[int]
 
 
+class FrameCropRequest(BaseModel):
+    frame_ids: list[int]
+    crop: CropBox
+    dry_run: bool = False
+
+
+class FrameCropResult(BaseModel):
+    frames: int
+    # Annotations that have a mask (storage_key and/or raw_mask_storage_key).
+    annotations: int
+    # Of those, how many have mask pixels in the area being removed.
+    masks_clipped: int
+    applied: bool
+
+
 class RankQualityRequest(BaseModel):
     percent: int = Field(default=20, ge=1, le=99)
 

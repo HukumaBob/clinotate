@@ -2248,6 +2248,63 @@
         }
       }
     },
+    "/media/sequences/{sequence_id}/frames/crop": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Crop Sequence Frames",
+        "operationId": "crop_sequence_frames_media_sequences__sequence_id__frames_crop_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameCropRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameCropResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/media/sequences/{sequence_id}/rank-quality": {
       "post": {
         "tags": [
@@ -7152,6 +7209,59 @@
           "deleted_ids"
         ],
         "title": "FrameBulkDeleteResult"
+      },
+      "FrameCropRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Frame Ids"
+          },
+          "crop": {
+            "$ref": "#/components/schemas/CropBox"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids",
+          "crop"
+        ],
+        "title": "FrameCropRequest"
+      },
+      "FrameCropResult": {
+        "properties": {
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          },
+          "annotations": {
+            "type": "integer",
+            "title": "Annotations"
+          },
+          "masks_clipped": {
+            "type": "integer",
+            "title": "Masks Clipped"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frames",
+          "annotations",
+          "masks_clipped",
+          "applied"
+        ],
+        "title": "FrameCropResult"
       },
       "FrameRead": {
         "properties": {

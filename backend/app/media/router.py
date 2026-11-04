@@ -16,6 +16,7 @@ from app.inference.models import InferenceRun
 from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
 from app.jobs.service import enqueue_find_similar, enqueue_rank_quality, enqueue_video_transcode
+from app.media import frame_crop
 from app.media.models import Frame, Sequence, Video
 from app.reference.models import ReferenceInterval, VideoReference
 from app.taxonomy.models import AnnotationScope, EvaluationType, Label
@@ -23,6 +24,8 @@ from app.media.schemas import (
     FindSimilarRequest,
     FrameBulkDelete,
     FrameBulkDeleteResult,
+    FrameCropRequest,
+    FrameCropResult,
     FrameRead,
     MediaLibraryItem,
     MediaLibraryPage,
@@ -915,6 +918,18 @@ def bulk_delete_frames(
     for key in storage_keys:
         storage.delete(key)
     return FrameBulkDeleteResult(deleted_ids=deleted_ids)
+
+
+@router.post("/sequences/{sequence_id}/frames/crop", response_model=FrameCropResult)
+def crop_sequence_frames(
+    sequence_id: int,
+    payload: FrameCropRequest,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> FrameCropResult:
+    return frame_crop.crop_frames(
+        session, storage, sequence_id, payload.frame_ids, payload.crop, payload.dry_run
+    )
 
 
 @router.post(
