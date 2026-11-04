@@ -25,6 +25,8 @@ from app.media.schemas import (
     FrameBulkDelete,
     FrameBulkDeleteResult,
     FrameCropRequest,
+    FrameDetectCropRequest,
+    FrameDetectCropResult,
     FrameCropResult,
     FrameRead,
     MediaLibraryItem,
@@ -932,6 +934,22 @@ def crop_sequence_frames(
         return frame_crop.crop_frames(
             session, storage, sequence_id, payload.frame_ids, payload.crop, payload.dry_run
         )
+    except frame_crop.SequenceNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except frame_crop.CropRefused as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+
+@router.post("/sequences/{sequence_id}/frames/detect-crop", response_model=FrameDetectCropResult)
+def detect_sequence_frames_crop(
+    sequence_id: int,
+    payload: FrameDetectCropRequest,
+    session: Session = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> FrameDetectCropResult:
+    try:
+        frames = frame_crop.load_frames(session, sequence_id, payload.frame_ids)
+        return FrameDetectCropResult(crop=frame_crop.detect_frames_crop(storage, frames))
     except frame_crop.SequenceNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except frame_crop.CropRefused as exc:

@@ -45,14 +45,8 @@ def _new_key(old_key: str) -> str:
     return f"{old_key.rsplit('.', 1)[0]}-{uuid.uuid4().hex[:8]}.png"
 
 
-def crop_frames(
-    session: Session,
-    storage: StorageService,
-    sequence_id: int,
-    frame_ids: list[int],
-    crop: CropBox,
-    dry_run: bool,
-) -> FrameCropResult:
+def load_frames(session: Session, sequence_id: int, frame_ids: list[int]) -> list[Frame]:
+    """The requested frames, all of which must belong to the sequence."""
     if session.get(Sequence, sequence_id) is None:
         raise SequenceNotFound(f"Sequence {sequence_id} not found")
     wanted = set(frame_ids)
@@ -65,6 +59,18 @@ def crop_frames(
     missing = sorted(wanted - {frame.id for frame in frames})
     if missing:
         raise CropRefused(f"Frames {missing} are not in sequence {sequence_id}")
+    return frames
+
+
+def crop_frames(
+    session: Session,
+    storage: StorageService,
+    sequence_id: int,
+    frame_ids: list[int],
+    crop: CropBox,
+    dry_run: bool,
+) -> FrameCropResult:
+    frames = load_frames(session, sequence_id, frame_ids)
     annotations = (
         session.query(Annotation)
         .filter(
@@ -150,3 +156,65 @@ def crop_frames(
     for key in old_keys:
         storage.delete(key)
     return result
+
+
+# Detection tuning. Pixels at or below this grey level count as border.
+_NEAR_BLACK = 12
+_DETECT_WIDTH = 320
+_MIN_PICTURE_AREA = 0.05
+_MAX_SIDE_SPREAD_PCT = 5.0
+_MIN_INSET_PCT = 1.0
+_MARGIN_PCT = 1.0
+
+
+def _picture_insets(image: np.ndarray) -> dict[str, float] | None:
+    """Insets (percent) of the largest non-black region, or None if it is tiny."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    scale = _DETECT_WIDTH / gray.shape[1]
+    if scale < 1:
+        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    picture = (gray > _NEAR_BLACK).astype(np.uint8)
+    picture = cv2.morphologyEx(picture, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    count, _labels, stats, _centroids = cv2.connectedComponentsWithStats(picture)
+    if count < 2:
+        return None
+    biggest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    x, y, w, h, _area = stats[biggest]
+    height, width = picture.shape
+    if w * h < _MIN_PICTURE_AREA * width * height:
+        return None
+    return {
+        "left": x / width * 100,
+        "right": (width - x - w) / width * 100,
+        "top": y / height * 100,
+        "bottom": (height - y - h) / height * 100,
+    }
+
+
+def detect_frames_crop(storage: StorageService, frames: list[Frame]) -> CropBox | None:
+    """Propose a crop from the black border of the given frames.
+
+    Each frame's picture is the largest non-black region (burned-in text in the
+    border is small and drops out). The per-side insets are combined by the
+    median, and the proposal is withheld when the frames disagree by more than
+    `_MAX_SIDE_SPREAD_PCT`, when any picture is tiny, or when there is no
+    border to remove. The result is loosened by `_MARGIN_PCT`, never tightened.
+    """
+    per_frame = []
+    for frame in frames:
+        image = _decode(storage.download(frame.storage_key), cv2.IMREAD_COLOR, f"Frame {frame.id}")
+        insets = _picture_insets(image)
+        if insets is None:
+            return None
+        per_frame.append(insets)
+    if not per_frame:
+        return None
+    medians: dict[str, float] = {}
+    for side in ("left", "right", "top", "bottom"):
+        values = [insets[side] for insets in per_frame]
+        if max(values) - min(values) > _MAX_SIDE_SPREAD_PCT:
+            return None
+        medians[side] = float(np.median(values))
+    if all(value < _MIN_INSET_PCT for value in medians.values()):
+        return None
+    return CropBox(**{side: round(max(0.0, value - _MARGIN_PCT), 1) for side, value in medians.items()})

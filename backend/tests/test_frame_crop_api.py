@@ -367,3 +367,95 @@ def test_a_failure_after_upload_leaves_the_database_untouched_and_deletes_new_ob
     assert response.status_code == 500
     assert len(world.storage.uploads) == 2  # the two that succeeded before the failure
     assert _snapshot(world) == before  # rows unchanged, new objects deleted, old ones intact
+
+
+# --- automatic proposal -----------------------------------------------------------
+
+W, H = 128, 96
+
+
+def _still_png(left_px=26, right_px=13, top_px=0, bottom_px=0, text=False, seed=0) -> bytes:
+    """A textured picture inside a black border; optionally a static bright 'overlay' in the border."""
+    rng = np.random.default_rng(seed)
+    image = np.zeros((H, W, 3), dtype=np.uint8)
+    image[top_px : H - bottom_px, left_px : W - right_px] = rng.integers(
+        60, 256, (H - top_px - bottom_px, W - left_px - right_px, 3), dtype=np.uint8
+    )
+    if text and left_px > 20:
+        image[10:20, 4:16] = 255
+    return cv2.imencode(".png", image)[1].tobytes()
+
+
+def _put_stills(world, pngs):
+    frames = world.frames_a[: len(pngs)]
+    for frame, png in zip(frames, pngs):
+        world.storage.objects[frame.storage_key] = png
+    return frames
+
+
+def _detect(world, frames):
+    return client.post(
+        f"/media/sequences/{world.sequence_a.id}/frames/detect-crop",
+        headers=_headers(),
+        json={"frame_ids": [f.id for f in frames]},
+    )
+
+
+def test_detect_finds_the_picture_inside_a_black_border(crop_world):
+    frames = _put_stills(crop_world, [_still_png(seed=i) for i in range(3)])
+
+    response = _detect(crop_world, frames)
+
+    assert response.status_code == 200, response.text
+    crop = response.json()["crop"]
+    true_left, true_right = 26 / W * 100, 13 / W * 100
+    assert true_left - 2.5 <= crop["left"] <= true_left  # never tighter than the true border
+    assert true_right - 2.5 <= crop["right"] <= true_right
+    assert crop["top"] <= 1 and crop["bottom"] <= 1
+
+
+def test_overlay_text_in_the_border_does_not_widen_the_area(crop_world):
+    plain = _detect(crop_world, _put_stills(crop_world, [_still_png(seed=i) for i in range(3)]))
+    texty = _detect(
+        crop_world, _put_stills(crop_world, [_still_png(text=True, seed=i) for i in range(3)])
+    )
+
+    assert texty.json()["crop"] is not None
+    assert texty.json()["crop"]["left"] == pytest.approx(plain.json()["crop"]["left"], abs=1)
+
+
+def test_a_borderless_frame_gives_null(crop_world):
+    frames = _put_stills(crop_world, [_still_png(0, 0, seed=i) for i in range(3)])
+    assert _detect(crop_world, frames).json() == {"crop": None}
+
+
+def test_a_tiny_picture_gives_null(crop_world):
+    pngs = [_still_png(left_px=50, right_px=50, top_px=40, bottom_px=40, seed=i) for i in range(2)]
+    assert _detect(crop_world, _put_stills(crop_world, pngs)).json() == {"crop": None}
+
+
+def test_frames_that_disagree_by_more_than_5_points_give_null(crop_world):
+    pngs = [_still_png(left_px=13, seed=1), _still_png(left_px=38, seed=2)]  # about 10 % vs 30 %
+    assert _detect(crop_world, _put_stills(crop_world, pngs)).json() == {"crop": None}
+
+
+def test_detect_uses_the_median_across_frames(crop_world):
+    pngs = [_still_png(left_px=26, seed=1), _still_png(left_px=26, seed=2), _still_png(left_px=31, seed=3)]
+
+    crop = _detect(crop_world, _put_stills(crop_world, pngs)).json()["crop"]
+
+    assert crop is not None
+    assert 26 / W * 100 - 2.5 <= crop["left"] <= 26 / W * 100  # the odd frame (31 px) does not pull it
+
+
+def test_detect_route_validates_ids_like_crop(crop_world):
+    world = crop_world
+    response = _detect(world, [world.frames_a[0], world.frames_b[0]])
+    assert response.status_code == 422
+    assert str(world.frames_b[0].id) in response.json()["detail"]
+
+
+def test_detect_of_an_unreadable_image_is_422(crop_world):
+    world = crop_world
+    world.storage.objects[world.frames_a[0].storage_key] = b"not an image"
+    assert _detect(world, world.frames_a[:1]).status_code == 422

@@ -2305,6 +2305,63 @@
         }
       }
     },
+    "/media/sequences/{sequence_id}/frames/detect-crop": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Detect Sequence Frames Crop",
+        "operationId": "detect_sequence_frames_crop_media_sequences__sequence_id__frames_detect_crop_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sequence Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameDetectCropRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameDetectCropResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/media/sequences/{sequence_id}/rank-quality": {
       "post": {
         "tags": [
@@ -7264,6 +7321,43 @@
           "applied"
         ],
         "title": "FrameCropResult"
+      },
+      "FrameDetectCropRequest": {
+        "properties": {
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Frame Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_ids"
+        ],
+        "title": "FrameDetectCropRequest"
+      },
+      "FrameDetectCropResult": {
+        "properties": {
+          "crop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CropBox"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "crop"
+        ],
+        "title": "FrameDetectCropResult"
       },
       "FrameRead": {
         "properties": {

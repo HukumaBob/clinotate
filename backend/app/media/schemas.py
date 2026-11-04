@@ -205,6 +205,15 @@ class FrameCropRequest(BaseModel):
         return self
 
 
+class FrameDetectCropRequest(BaseModel):
+    frame_ids: list[int] = Field(min_length=1, max_length=MAX_CROP_FRAMES)
+
+
+class FrameDetectCropResult(BaseModel):
+    # None: nothing reliable to propose (no border, tiny picture, frames disagree).
+    crop: CropBox | None
+
+
 class FrameCropResult(BaseModel):
     frames: int
     # Annotations that have a mask (storage_key and/or raw_mask_storage_key).
