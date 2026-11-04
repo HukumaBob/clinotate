@@ -2719,7 +2719,7 @@ classification and A/B pages outline the area over the full video.
 - `RunViewPage` has no page-level test (no harness for that page); the outline is covered
   by a `WorkingAreaOutline` unit test and the live check.
 
-**Live check (2026-11-04):** video `Kubansk_Mairin_colono` (7:18, 1920x1080). Auto-detect
+**Live check (2026-11-04):** a 7:18, 1920x1080 colonoscopy video (an Olympus-style frame with a black border and burned-in overlay). Auto-detect
 gave left 1.2 / right 32.8 / top 4.0 / bottom 4.0 against the hand crop 2 / 34 / 5 / 5
 (looser by the 1 % margin, as designed); on another Olympus video it gave 1.2 / 32.8 /
 4.6 / 4.0 against 2 / 34 / 6 / 5. Detection, segmentation and classification runs at
