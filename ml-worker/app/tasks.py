@@ -902,9 +902,8 @@ def model_train(job_id: int, adapter=None) -> None:
             output_dir = work / "output"
             output_dir.mkdir()
 
-            archive_bytes = storage.download(job.payload["export_key"])
             archive_path = work / "dataset.zip"
-            archive_path.write_bytes(archive_bytes)
+            storage.download_to_file(job.payload["export_key"], archive_path)
             with zipfile.ZipFile(archive_path) as archive:
                 archive.extractall(dataset_dir)
 
@@ -915,15 +914,14 @@ def model_train(job_id: int, adapter=None) -> None:
                     raise RuntimeError(
                         f"Parent model version {run.base_model_version_id} no longer exists"
                     )
+                parent_path = work / "parent.pt"
                 try:
-                    parent_bytes = storage.download(parent.storage_key)
+                    storage.download_to_file(parent.storage_key, parent_path)
                 except Exception as exc:  # noqa: BLE001 -- re-raised with context
                     raise RuntimeError(
                         f"Could not fetch the weights of parent model {parent.name!r} "
                         f"({parent.storage_key}): {exc}"
                     ) from exc
-                parent_path = work / "parent.pt"
-                parent_path.write_bytes(parent_bytes)
                 base_model = str(parent_path)
 
             result = adapter.train(

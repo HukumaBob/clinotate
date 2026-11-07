@@ -34,6 +34,14 @@ class StorageService:
         response = self._client.get_object(Bucket=self._bucket, Key=key)
         return response["Body"].read()
 
+    def download_to_file(self, key: str, path) -> None:
+        """Streams an object straight to ``path`` in chunks. Use this for
+        large objects (dataset archives, weights): ``download`` holds the
+        whole object in RAM, and a caller that keeps the bytes alive for a
+        long job -- training -- pins gigabytes the DataLoader workers then
+        inherit."""
+        self._client.download_file(self._bucket, key, str(path))
+
 
 @lru_cache
 def get_storage_service() -> StorageService:

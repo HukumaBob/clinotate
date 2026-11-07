@@ -112,6 +112,10 @@ def fake_storage(monkeypatch):
                 archive.writestr("data.yaml", "train: images/train\nval: images/val\n")
             return buffer.getvalue()
 
+        def download_to_file(self, key: str, path) -> None:
+            with open(path, "wb") as fh:
+                fh.write(self.download(key))
+
         def upload(self, key: str, data: bytes, content_type: str) -> None:
             self.uploaded[key] = data
 

@@ -151,7 +151,7 @@ def _yolo11_fields() -> list[ParamField]:
         f("cache", "Cache images", "system", "choice", "false", choices=("false", "ram", "disk"),
           help="Keep decoded images in memory or on disk to speed up epochs; 'false' reads files "
                "each time."),
-        f("workers", "Data-loader workers", "system", "int", 4, min=0, max=16,
+        f("workers", "Data-loader workers", "system", "int", 4, min=0, max=8,
           help="Parallel image-loading processes. Keep this at or below the number of CPU "
                "cores minus two; more workers slow the whole machine and use more RAM."),
         f("amp", "Mixed precision", "system", "bool", True,
@@ -240,7 +240,7 @@ def _dinov3_fields() -> list[ParamField]:
           help="Also embed mirrored copies of each crop. Only applies in frozen mode, where "
                "features are computed once and cached."),
         # -- system
-        f("workers", "Data-loader workers", "system", "int", 4, min=0, max=16,
+        f("workers", "Data-loader workers", "system", "int", 4, min=0, max=8,
           help="Parallel image-loading processes."),
         f("amp", "Mixed precision", "system", "bool", True,
           help="Faster and lighter on memory; switch off only to diagnose odd numerical results."),

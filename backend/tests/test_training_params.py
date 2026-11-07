@@ -360,3 +360,14 @@ def test_mask_mode_help_describes_the_real_fill():
     helptext = _fields(params.settings_schema(DINOV3, SEG))["mask_mode"]["help"]
     assert "average colour" in helptext
     assert "blacks" not in helptext
+
+
+@pytest.mark.parametrize("adapter", [DINOV3, ADAPTER])
+def test_workers_are_capped_below_the_host_core_count(adapter):
+    """Twelve DataLoader workers on a 6-core host froze the desktop; the
+    form must not offer more than the host can feed."""
+    task = CLS if adapter == DINOV3 else DET
+    field = _fields(params.settings_schema(adapter, task))["workers"]
+    assert field["max"] == 8
+    with pytest.raises(params.InvalidSettings):
+        params.resolve_settings(adapter, task, {"workers": 12})
