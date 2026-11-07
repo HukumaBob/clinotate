@@ -528,13 +528,161 @@ def compute_balance(
     return report
 
 
+_PARTS = (SplitName.TRAIN, SplitName.VAL, SplitName.TEST)
+_EXHAUSTIVE_UNITS = 8
+_MAX_SWEEPS = 200
+
+
+def required_parts(unit_count: int) -> tuple[SplitName, ...]:
+    """The parts a class present in `unit_count` units can reach: units are
+    indivisible, so 1 unit reaches train, 2 reach train and val (test is the
+    part given up, because val drives model selection), 3 or more reach all."""
+    return _PARTS[: max(0, min(unit_count, len(_PARTS)))]
+
+
+def _refine_by_coverage(
+    unit_split: dict,
+    unit_classes: dict,
+    frames_by_unit: dict,
+    shares: tuple[float, float, float],
+    min_n: dict[str, int],
+) -> dict:
+    """Re-assign units to maximise class coverage, then match `shares`.
+
+    Score, smaller is better: (required (class, part) pairs left uncovered,
+    sum over parts of |realised frame share - target share|). Assignments that
+    break the per-part minimum unit counts are inadmissible. Up to
+    `_EXHAUSTIVE_UNITS` units every assignment is tried, in key order, keeping
+    the first best (so ties resolve to the lexicographically smallest); beyond
+    that the incoming assignment is improved by single moves, then swaps, in key
+    order until nothing improves. Deterministic either way.
+    """
+    units = sorted(unit_split)
+    n = len(units)
+    classes = sorted({c for unit in units for c in unit_classes.get(unit, ())})
+    if not classes:
+        return unit_split
+
+    member = {
+        c: sum(1 << i for i, unit in enumerate(units) if c in unit_classes.get(unit, ()))
+        for c in classes
+    }
+    pairs = [
+        (member[c], part)
+        for c in classes
+        for part in range(len(required_parts(bin(member[c]).count("1"))))
+    ]
+    frames = [frames_by_unit.get(unit, 0) for unit in units]
+    total = sum(frames)
+    minimum = [min_n["train"], min_n["val"], min_n["test"]]
+
+    def score(masks, sums, counts):
+        if any(counts[p] < minimum[p] for p in range(3)):
+            return None
+        uncovered = sum(1 for mask, part in pairs if not masks[part] & mask)
+        deviation = 0.0 if total == 0 else sum(
+            abs(sums[p] / total - shares[p]) for p in range(3)
+        )
+        return (uncovered, round(deviation, 9))
+
+    masks = [0, 0, 0]
+    sums = [0, 0, 0]
+    counts = [0, 0, 0]
+
+    if n <= _EXHAUSTIVE_UNITS:
+        best: list = [None, None]
+        chosen = [0] * n
+
+        def walk(i: int) -> None:
+            if i == n:
+                value = score(masks, sums, counts)
+                if value is not None and (best[0] is None or value < best[0]):
+                    best[0], best[1] = value, tuple(chosen)
+                return
+            for part in range(3):
+                chosen[i] = part
+                masks[part] |= 1 << i
+                sums[part] += frames[i]
+                counts[part] += 1
+                walk(i + 1)
+                masks[part] &= ~(1 << i)
+                sums[part] -= frames[i]
+                counts[part] -= 1
+
+        walk(0)
+        if best[1] is None:
+            return unit_split
+        return {unit: _PARTS[best[1][i]] for i, unit in enumerate(units)}
+
+    current = [_PARTS.index(unit_split[unit]) for unit in units]
+    for i, part in enumerate(current):
+        masks[part] |= 1 << i
+        sums[part] += frames[i]
+        counts[part] += 1
+
+    def shift(i: int, src: int, dst: int) -> None:
+        masks[src] &= ~(1 << i)
+        masks[dst] |= 1 << i
+        sums[src] -= frames[i]
+        sums[dst] += frames[i]
+        counts[src] -= 1
+        counts[dst] += 1
+
+    best_score = score(masks, sums, counts)
+    for _ in range(_MAX_SWEEPS):
+        found = None
+        for i in range(n):
+            src = current[i]
+            for dst in range(3):
+                if dst == src:
+                    continue
+                shift(i, src, dst)
+                value = score(masks, sums, counts)
+                shift(i, dst, src)
+                if value is not None and (best_score is None or value < best_score):
+                    best_score, found = value, ("move", i, dst)
+        if found is None:
+            for i in range(n):
+                for j in range(i + 1, n):
+                    if current[i] == current[j]:
+                        continue
+                    pi, pj = current[i], current[j]
+                    shift(i, pi, pj)
+                    shift(j, pj, pi)
+                    value = score(masks, sums, counts)
+                    shift(j, pi, pj)
+                    shift(i, pj, pi)
+                    if value is not None and (best_score is None or value < best_score):
+                        best_score, found = value, ("swap", i, j)
+        if found is None:
+            break
+        if found[0] == "move":
+            _, i, dst = found
+            shift(i, current[i], dst)
+            current[i] = dst
+        else:
+            _, i, j = found
+            pi, pj = current[i], current[j]
+            shift(i, pi, pj)
+            shift(j, pj, pi)
+            current[i], current[j] = pj, pi
+    return {unit: _PARTS[current[i]] for i, unit in enumerate(units)}
+
+
 def assign_splits(
     sequence_ids: list[int],
     split_config: dict,
     frame_counts_by_sequence: dict[int, int] | None = None,
     grouping_keys: dict[int, "GroupingKey"] | None = None,
+    class_frames_by_sequence: dict[int, dict[int, int]] | None = None,
 ) -> dict[int, SplitName]:
     """Assign whole grouping units to splits; sequences inherit their unit's.
+
+    When `class_frames_by_sequence` (sequence id -> {class id: frames}) holds
+    any class, the frame-count dealing below is only the starting point: the
+    assignment is then refined so every class reaches as many of train/val/test
+    as its number of units allows (see `required_parts`), with the frame shares
+    of `split_config` as the secondary goal. A unit is still never divided.
 
     The indivisible unit is the video, not the sequence: several sequences
     cut from one video are the same procedure, so putting one in train and
@@ -614,6 +762,22 @@ def assign_splits(
         chosen = max(counts, key=lambda name: targets[name] - counts[name])
         counts[chosen] += 1
         unit_split[unit] = SplitName(chosen)
+
+    if class_frames_by_sequence:
+        unit_classes = {
+            unit: {
+                class_id
+                for sequence_id in members
+                for class_id, frames in class_frames_by_sequence.get(sequence_id, {}).items()
+                if frames > 0
+            }
+            for unit, members in sequences_by_unit.items()
+        }
+        if any(unit_classes.values()):
+            unit_split = _refine_by_coverage(
+                unit_split, unit_classes, frames_by_unit,
+                (train_pct, val_pct, test_pct), min_n,
+            )
 
     assignment: dict[int, SplitName] = {}
     for unit, members in sequences_by_unit.items():
