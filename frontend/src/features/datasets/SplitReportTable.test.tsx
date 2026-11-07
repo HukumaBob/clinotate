@@ -65,6 +65,13 @@ describe("SplitReportTable", () => {
     expect(totals).toHaveTextContent("test");
   });
 
+  it("says '1 unit', not '1 units'", () => {
+    render(<SplitReportTable report={report()} />);
+    const totals = screen.getByTestId("split-totals");
+    expect(totals).toHaveTextContent("val 95 frames · 1 unit ·");
+    expect(totals).toHaveTextContent("train 464 frames · 3 units ·");
+  });
+
   it("renders no warning list when there are no warnings", () => {
     render(<SplitReportTable report={report({ warnings: [] })} />);
     expect(screen.queryByTestId("split-warnings")).not.toBeInTheDocument();

@@ -9,6 +9,13 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 ## [Unreleased]
 
 ### Added
+- Split report for datasets: a class-by-part table (frames and independent source units per
+  train/val/test cell) with plain-language warnings (a class missing from a part, a class from
+  fewer than three sources, a thin val/test cell, a part far from its target share). It is shown
+  live in the dataset create form, in the metrics dialog of a saved dataset and as a warning
+  line when a dataset is chosen in the Train workspace. `POST /datasets/balance` takes an
+  optional `split_config` and returns `split_report`; `GET /datasets/{id}/split-report` rebuilds
+  it from the stored items, so it works for every existing dataset.
 - Crop frames of an existing sequence: select frames in the sequence grid, **Crop…**, set the
   insets (or "Detect automatically"), preview the frame and mask counts, apply. The frames
   and every mask on them are cut with the same rectangle (irreversible; refused for frames
@@ -55,6 +62,11 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   nothing; at most 500 frames per commit); no migration.
 
 ### Changed
+- New datasets are split with class coverage in mind: whole units (a video, or a sequence
+  without one) are still never divided, but they are now placed so every class reaches as many
+  of train/val/test as its number of units allows (three or more units: all three parts; two:
+  train and val; one: train). Coverage comes before the exact 70/20/10 proportions. Existing
+  datasets are not re-split.
 - ml-worker no longer lets a training run starve the host: the container is capped at 4 CPUs
   and 8 GB, the default and maximum "Data-loader workers" are 4 and 8 (were 8 and 16), the
   dataset archive and parent weights are streamed to disk instead of held in RAM, and the

@@ -2807,3 +2807,38 @@ Real-run results (2026-11-07, 8 min for 50 epochs, `workers=4`): lowest free RAM
 swap up to 0.9 GB, GPU 15-65 %, at most 65 degrees C, no reboot. Open: peak 7.3 GB is close to
 the 8 GB cap, so a heavier run (YOLO l/x, big batch) may need 9 GB; the next task waits
 ~20-30 s for the restart.
+
+### Class-aware dataset split and split visibility (2026-11-07)
+
+Spec: `docs/superpowers/specs/2026-11-07-class-aware-dataset-split-design.md`, plan:
+`docs/superpowers/plans/2026-11-07-class-aware-dataset-split.md`. Trigger: a classifier trained
+on `anatomy-001` scored 35 % top-1 and labelled 93 % of a real video "rectum"; the split had
+left `colon_right` without validation frames and `colon_left` without test frames, and nothing
+on screen said so.
+
+Built (backend `datasets/service.py`, `datasets/split_report.py`, `datasets/router.py`;
+frontend `SplitReportTable`, `SplitWarnings`, three placements):
+
+- `assign_splits` takes an optional per-sequence class-frame map and refines the frame-count
+  dealing: exhaustive search up to 8 units, deterministic local search beyond. Score: required
+  (class, part) pairs left uncovered, then distance of the frame shares from `split_config`.
+  Units without frames are never moved and never count towards the per-part minimums.
+- `plan_splits` is shared by dataset creation and the `/datasets/balance` preview, so the
+  preview is what gets stored. `build_split_report` is pure; warning kinds `missing_in_split`,
+  `few_units`, `thin_cell` (under 5 frames in val/test), `split_share` (more than 15 points off).
+- A gap that follows from having too few units (colon_left from 2 sources cannot be in test)
+  is reported once, as `few_units`; `missing_in_split` is kept for parts a class should reach.
+
+Live check on the dev database (nothing was created there; the preview endpoint writes
+nothing): `anatomy-001` has 8 units, not 5 as first counted by hand (the hand count ignored
+sequences without a video, which the code correctly treats as units of their own): 6 in train,
+1 in val, 1 in test. Its report shows `colon_left` from 2 sources with no test frames and
+`colon_right` with no val frames. The same selection previewed with the new assignment puts
+`colon_right` into val (79 frames) and leaves only the unavoidable `colon_left` gap, at the cost
+of train falling to 53 % of the frames (reported by `split_share`).
+
+Open: no dataset was recreated on the dev database, so the end-to-end "create, then compare"
+step rests on the unit test that stored splits equal the planned ones; the real fix for
+`anatomy-001` is more labelled videos per class, which the report now makes visible; a
+selection with only two units still cannot satisfy every single-source class (reported, not
+hidden).

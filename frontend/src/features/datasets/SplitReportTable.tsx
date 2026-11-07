@@ -39,7 +39,7 @@ export function SplitReportTable({ report }: SplitReportTableProps) {
       <div data-testid="split-totals" className="flex flex-wrap gap-x-4 gap-y-1 text-gray-400">
         {PARTS.map((part) => (
           <span key={part}>
-            {`${part} ${report[part].frames} frames · ${report[part].units} units · ${percent(report[part].share)} (target ${percent(report[part].target)})`}
+            {`${part} ${report[part].frames} frames · ${report[part].units} ${report[part].units === 1 ? "unit" : "units"} · ${percent(report[part].share)} (target ${percent(report[part].target)})`}
           </span>
         ))}
       </div>
