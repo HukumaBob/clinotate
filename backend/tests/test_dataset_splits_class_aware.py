@@ -203,3 +203,14 @@ def test_large_selection_uses_local_search_to_reach_missing_part():
     assert TEST not in _reached(old, class_frames)[9]
     assert _reached(new, class_frames)[9] == {TRAIN, VAL, TEST}
     assert len(set(new.values())) == 3
+
+
+def test_units_without_frames_do_not_satisfy_the_minimums():
+    # Units 4 and 5 hold no frames (all their annotations were excluded). They
+    # must not be what puts "a unit" into test: real frames have to be there.
+    ids, keys, counts, class_frames = _case({1: {1}, 2: {1}, 3: {2}, 4: set(), 5: set()})
+
+    assignment = assign_splits(ids, CONFIG, counts, keys, class_frames)
+
+    content = {assignment[n] for n in (1, 2, 3)}
+    assert TEST in content and TRAIN in content and VAL in content

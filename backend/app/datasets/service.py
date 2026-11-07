@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.annotation.models import Annotation
 from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
-from app.datasets.split_report import PARTS, required_parts  # noqa: F401 -- re-exported
+from app.datasets.split_report import (  # noqa: F401 -- PARTS/required_parts are re-exported
+    PARTS,
+    FrameRow,
+    required_parts,
+)
 from app.media.models import Frame, Sequence
 from app.taxonomy.hierarchy import GroupingRules, LabelTree, build_label_tree, resolve_class
 from app.taxonomy.models import AnnotationScope, EvaluationType, Label
@@ -539,7 +543,6 @@ def _refine_by_coverage(
     unit_classes: dict,
     frames_by_unit: dict,
     shares: tuple[float, float, float],
-    min_n: dict[str, int],
 ) -> dict:
     """Re-assign units to maximise class coverage, then match `shares`.
 
@@ -550,12 +553,21 @@ def _refine_by_coverage(
     the first best (so ties resolve to the lexicographically smallest); beyond
     that the incoming assignment is improved by single moves, then swaps, in key
     order until nothing improves. Deterministic either way.
+
+    Only units that hold frames are moved, and the per-part minimums (train 1,
+    val once there are 2 such units, test once there are 3) are counted over
+    them: an empty unit must not be what "fills" test. Empty units keep the part
+    the frame-count dealing gave them.
     """
-    units = sorted(unit_split)
-    n = len(units)
-    classes = sorted({c for unit in units for c in unit_classes.get(unit, ())})
+    classes = sorted({c for unit in unit_split for c in unit_classes.get(unit, ())})
     if not classes:
         return unit_split
+    fixed = {
+        unit: part for unit, part in unit_split.items()
+        if not frames_by_unit.get(unit, 0) and not unit_classes.get(unit)
+    }
+    units = sorted(unit for unit in unit_split if unit not in fixed)
+    n = len(units)
 
     member = {
         c: sum(1 << i for i, unit in enumerate(units) if c in unit_classes.get(unit, ()))
@@ -568,7 +580,7 @@ def _refine_by_coverage(
     ]
     frames = [frames_by_unit.get(unit, 0) for unit in units]
     total = sum(frames)
-    minimum = [min_n["train"], min_n["val"], min_n["test"]]
+    minimum = [1 if n >= 1 else 0, 1 if n >= 2 else 0, 1 if n >= 3 else 0]
 
     def score(masks, sums, counts):
         if any(counts[p] < minimum[p] for p in range(3)):
@@ -606,7 +618,7 @@ def _refine_by_coverage(
         walk(0)
         if best[1] is None:
             return unit_split
-        return {unit: _PARTS[best[1][i]] for i, unit in enumerate(units)}
+        return {**fixed, **{unit: _PARTS[best[1][i]] for i, unit in enumerate(units)}}
 
     current = [_PARTS.index(unit_split[unit]) for unit in units]
     for i, part in enumerate(current):
@@ -660,7 +672,7 @@ def _refine_by_coverage(
             shift(i, pi, pj)
             shift(j, pj, pi)
             current[i], current[j] = pj, pi
-    return {unit: _PARTS[current[i]] for i, unit in enumerate(units)}
+    return {**fixed, **{unit: _PARTS[current[i]] for i, unit in enumerate(units)}}
 
 
 def assign_splits(
@@ -770,7 +782,7 @@ def assign_splits(
         if any(unit_classes.values()):
             unit_split = _refine_by_coverage(
                 unit_split, unit_classes, frames_by_unit,
-                (train_pct, val_pct, test_pct), min_n,
+                (train_pct, val_pct, test_pct),
             )
 
     assignment: dict[int, SplitName] = {}
@@ -778,6 +790,88 @@ def assign_splits(
         for sequence_id in members:
             assignment[sequence_id] = unit_split[unit]
     return assignment
+
+
+@dataclass
+class SplitPlan:
+    """What `create_dataset` will store, computed without writing anything."""
+
+    assignment: dict[int, SplitName]
+    rows: list[FrameRow]
+    class_names: dict[int, str]
+
+
+def plan_splits(
+    session: Session,
+    sequence_ids: list[int],
+    task_type: TaskType,
+    rules: GroupingRules,
+    excluded_label_ids: set[int],
+    class_limits: dict[int, int],
+    split_config: dict,
+    tree: LabelTree | None = None,
+    composition: list[FrameComposition] | None = None,
+    grouping_keys: dict[int, "GroupingKey"] | None = None,
+) -> SplitPlan:
+    """The split a dataset built from this selection gets, plus one `FrameRow`
+    per composed frame for the split report.
+
+    Shared by dataset creation and the live preview, so the preview shows what
+    creation stores. Classes resolve through `resolve_class` exactly as in
+    `compute_balance`. `tree`/`composition`/`grouping_keys` may be passed in by
+    a caller that already computed them.
+    """
+    tree = tree if tree is not None else build_label_tree(session)
+    if composition is None:
+        composition = collect_frames(
+            session, sequence_ids, task_type, excluded_label_ids, tree, rules, class_limits
+        )
+    if grouping_keys is None:
+        grouping_keys = grouping_keys_for_sequences(session, sequence_ids)
+
+    frame_ids = [item.frame_id for item in composition]
+    sequence_by_frame = dict(
+        session.query(Frame.id, Frame.sequence_id).filter(Frame.id.in_(frame_ids)).all()
+    ) if frame_ids else {}
+    annotation_ids = [aid for item in composition for aid in item.annotation_ids]
+    label_by_annotation = dict(
+        session.query(Annotation.id, Annotation.label_id)
+        .filter(Annotation.id.in_(annotation_ids)).all()
+    ) if annotation_ids else {}
+    class_of = {
+        aid: resolve_class(label_id, tree, rules) for aid, label_id in label_by_annotation.items()
+    }
+
+    frame_counts: dict[int, int] = {}
+    class_frames: dict[int, dict[int, int]] = {}
+    classes_by_frame: dict[int, frozenset[int]] = {}
+    for item in composition:
+        sequence_id = sequence_by_frame.get(item.frame_id)
+        frame_counts[sequence_id] = frame_counts.get(sequence_id, 0) + 1
+        classes = frozenset(class_of[aid] for aid in item.annotation_ids if aid in class_of)
+        classes_by_frame[item.frame_id] = classes
+        for class_id in classes:
+            by_class = class_frames.setdefault(sequence_id, {})
+            by_class[class_id] = by_class.get(class_id, 0) + 1
+
+    assignment = assign_splits(
+        sequence_ids, split_config, frame_counts, grouping_keys, class_frames
+    )
+    rows = []
+    for item in composition:
+        sequence_id = sequence_by_frame.get(item.frame_id)
+        rows.append(FrameRow(
+            unit=grouping_keys.get(sequence_id, ("sequence", sequence_id)),
+            split=assignment.get(sequence_id, SplitName.TRAIN),
+            class_ids=classes_by_frame[item.frame_id],
+        ))
+
+    used = {class_id for row in rows for class_id in row.class_ids}
+    class_names = {
+        label.id: label.name
+        for label in session.query(Label).filter(Label.id.in_(used)).all()
+    } if used else {}
+    return SplitPlan(assignment=assignment, rows=rows, class_names=class_names)
 
 
 def create_dataset(session: Session, payload, user) -> Dataset:
@@ -860,13 +954,10 @@ def create_dataset(session: Session, payload, user) -> Dataset:
     session.add(dataset)
     session.flush()
 
-    frame_counts_by_sequence: dict[int, int] = {}
-    for sequence_id in sequence_by_frame.values():
-        frame_counts_by_sequence[sequence_id] = frame_counts_by_sequence.get(sequence_id, 0) + 1
-
-    split_by_sequence = assign_splits(
-        payload.sequence_ids, payload.split_config, frame_counts_by_sequence, grouping_keys
-    )
+    split_by_sequence = plan_splits(
+        session, payload.sequence_ids, payload.task_type, rules, excluded, class_limits,
+        payload.split_config, tree=tree, composition=composition, grouping_keys=grouping_keys,
+    ).assignment
 
     for item in composition:
         sequence_id = sequence_by_frame.get(item.frame_id)
