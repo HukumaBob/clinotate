@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.annotation.models import Annotation
 from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
+from app.datasets.split_report import PARTS, required_parts  # noqa: F401 -- re-exported
 from app.media.models import Frame, Sequence
 from app.taxonomy.hierarchy import GroupingRules, LabelTree, build_label_tree, resolve_class
 from app.taxonomy.models import AnnotationScope, EvaluationType, Label
@@ -528,16 +529,9 @@ def compute_balance(
     return report
 
 
-_PARTS = (SplitName.TRAIN, SplitName.VAL, SplitName.TEST)
+_PARTS = PARTS
 _EXHAUSTIVE_UNITS = 8
 _MAX_SWEEPS = 200
-
-
-def required_parts(unit_count: int) -> tuple[SplitName, ...]:
-    """The parts a class present in `unit_count` units can reach: units are
-    indivisible, so 1 unit reaches train, 2 reach train and val (test is the
-    part given up, because val drives model selection), 3 or more reach all."""
-    return _PARTS[: max(0, min(unit_count, len(_PARTS)))]
 
 
 def _refine_by_coverage(
