@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from celery.signals import task_postrun
 from PIL import Image
 from sqlalchemy import text
 
@@ -1038,6 +1039,36 @@ def model_train(job_id: int, adapter=None) -> None:
         session.commit()
     finally:
         session.close()
+
+
+def _exit_worker_process() -> None:
+    """Immediate exit; the container's `restart: unless-stopped` policy
+    brings up a fresh process. Split out so tests can replace it."""
+    sys.stderr.flush()
+    sys.stdout.flush()
+    os._exit(0)
+
+
+@task_postrun.connect
+def _restart_worker_after_training(sender=None, **_kwargs) -> None:
+    """Exits the worker process once a `model_train` task has finished,
+    whatever its outcome, so the next task starts in a clean process.
+
+    A finished training run leaves roughly 5 GB resident in this process
+    (CUDA context, PyTorch, Ultralytics) that nothing here releases: the
+    idle worker measured ~0.9 GB before a run and ~5.2 GB after it. With a
+    16 GB host shared with the desktop that is the difference between a
+    responsive machine and swap. Same restart-the-process approach as
+    `_restart_worker_process_after_track_failure`, which documents why
+    in-process cleanup does not work.
+
+    Safe because Celery acks at task start here (acks_late is off), and
+    `task_postrun` fires after the result is stored and the task's DB
+    session is closed. `--pool=solo` means no other task runs in this
+    process meanwhile. Tests that call `model_train()` directly never fire
+    the signal, so they are unaffected."""
+    if getattr(sender, "name", None) == "model_train":
+        _exit_worker_process()
 
 
 INFERENCE_PROGRESS_SECONDS = 2.0

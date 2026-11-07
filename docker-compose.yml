@@ -90,9 +90,13 @@ services:
         # Training with many DataLoader workers saturated all 6 host cores
         # and pushed the 16GB host into swap, freezing the desktop while the
         # GPU sat at ~30%. Cap the container so the host stays responsive.
+        # 8g, not more: the desktop session uses ~5.5 GB of the 16 GB host,
+        # so a larger cap lets the container starve the host before it hits
+        # its own limit. The worker process restarts itself after every
+        # training run (see _restart_worker_after_training in app/tasks.py).
         limits:
           cpus: "4"
-          memory: 10g
+          memory: 8g
         reservations:
           devices:
             - driver: nvidia
