@@ -332,4 +332,27 @@ describe("BalancePanel reference exposure warning", () => {
     renderPanel();
     expect(screen.queryByTestId("reference-exposure-warning")).toBeNull();
   });
+
+  it("shows the split table when the report carries a split_report", () => {
+    const cell = (frames: number, units: number) => ({ frames, units });
+    renderPanel({
+      report: {
+        ...REPORT,
+        split_report: {
+          classes: [{ label_id: 1, name: "polyp", units: 3, train: cell(20, 1), val: cell(10, 1), test: cell(0, 0) }],
+          train: { frames: 20, units: 1, share: 0.67, target: 0.7 },
+          val: { frames: 10, units: 1, share: 0.33, target: 0.2 },
+          test: { frames: 0, units: 0, share: 0, target: 0.1 },
+          warnings: [{ kind: "missing_in_split", message: "polyp has no frames in test.", label_id: 1, split: "test" }],
+        },
+      },
+    });
+    expect(screen.getByTestId("split-totals")).toBeInTheDocument();
+    expect(screen.getByText("polyp has no frames in test.")).toBeInTheDocument();
+  });
+
+  it("shows no split table when split_report is null or absent", () => {
+    renderPanel({ report: { ...REPORT, split_report: null } });
+    expect(screen.queryByTestId("split-totals")).not.toBeInTheDocument();
+  });
 });

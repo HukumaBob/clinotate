@@ -75,4 +75,22 @@ describe("TrainToolbar", () => {
     fireEvent.click(back);
     expect(onCloseForm).toHaveBeenCalledTimes(1);
   });
+
+  it("shows the split warnings of the selected dataset's report", () => {
+    const splitReport = {
+      classes: [],
+      train: { frames: 1, units: 1, share: 1, target: 0.7 },
+      val: { frames: 0, units: 0, share: 0, target: 0.2 },
+      test: { frames: 0, units: 0, share: 0, target: 0.1 },
+      warnings: [{ kind: "few_units" as const, message: "ileum has no test.", label_id: 5, split: null }],
+    };
+    setup({ splitReport });
+    expect(screen.getByText("1 split warning")).toBeInTheDocument();
+    expect(screen.getByText("ileum has no test.")).toBeInTheDocument();
+  });
+
+  it("shows no split warnings without a report", () => {
+    setup();
+    expect(screen.queryByText(/split warning/)).not.toBeInTheDocument();
+  });
 });

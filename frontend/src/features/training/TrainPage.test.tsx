@@ -59,6 +59,7 @@ interface World {
   catalog: unknown[];
   history: unknown[];
   adapters: (datasetId: number) => unknown[];
+  splitReport?: unknown;
 }
 
 let world: World;
@@ -89,6 +90,8 @@ function installMock() {
       }
       case "/training/settings-schema":
         return { data: settingsSchemaFixture };
+      case "/datasets/{dataset_id}/split-report":
+        return { data: world.splitReport ?? null };
       case "/training/models":
         return { data: [{ id: 3, training_run_id: 5, name: "m3", task_type: "detection", metrics: {}, is_active: false, base_model: "yolo11n.pt", base_model_version_id: null, created_at: "2026-10-09T00:00:00Z" }] };
       case "/training/models/{version_id}/metrics":
@@ -184,6 +187,28 @@ describe("TrainPage", () => {
     expect(screen.queryByRole("heading", { name: "Train" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ New run" })).toBeEnabled();
     expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("loads the split report of the selected dataset and shows its warnings", async () => {
+    world.splitReport = {
+      classes: [],
+      train: { frames: 10, units: 3, share: 1, target: 0.7 },
+      val: { frames: 0, units: 0, share: 0, target: 0.2 },
+      test: { frames: 0, units: 0, share: 0, target: 0.1 },
+      warnings: [{ kind: "missing_in_split", message: "ileum has no frames in val.", label_id: 5, split: "val" }],
+    };
+    renderPage("/train?dataset=496");
+    expect(await screen.findByText("1 split warning")).toBeInTheDocument();
+    expect(screen.getByText("ileum has no frames in val.")).toBeInTheDocument();
+    expect(getCalls("/datasets/{dataset_id}/split-report")[0][1]).toEqual({
+      params: { path: { dataset_id: 496 } },
+    });
+  });
+
+  it("shows no split warnings when the report cannot be loaded", async () => {
+    renderPage("/train?dataset=496");
+    await waitFor(() => expect(getCalls("/datasets/{dataset_id}/split-report")).toHaveLength(1));
+    expect(screen.queryByText(/split warning/)).not.toBeInTheDocument();
   });
 
   it("shows the run count in the toolbar summary", async () => {

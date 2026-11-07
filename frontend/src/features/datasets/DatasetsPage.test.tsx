@@ -172,6 +172,18 @@ describe("DatasetsPage", () => {
     });
   });
 
+  it("sends the split percentages with the balance request", async () => {
+    render(<DatasetsPage />, { wrapper });
+    await userEvent.click(await screen.findByLabelText(/select seq-a/i));
+
+    await waitFor(() => {
+      const balanceCalls = vi
+        .mocked(apiClient.POST)
+        .mock.calls.filter(([path]) => path === "/datasets/balance");
+      expect(balanceCalls.at(-1)?.[1]?.body?.split_config).toEqual({ train: 70, val: 20, test: 10 });
+    });
+  });
+
   it("disables saving until the dataset has a name", async () => {
     render(<DatasetsPage />, { wrapper });
     expect(await screen.findByRole("button", { name: /save dataset/i })).toBeDisabled();

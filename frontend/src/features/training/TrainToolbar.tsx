@@ -1,4 +1,8 @@
+import type { components } from "../../shared/api/generated/schema";
 import { DatasetSummary, type DatasetOption } from "./DatasetSummary";
+import { SplitWarnings } from "./SplitWarnings";
+
+type SplitReportRead = components["schemas"]["SplitReportRead"];
 
 interface TrainToolbarProps {
   datasets: DatasetOption[];
@@ -8,6 +12,8 @@ interface TrainToolbarProps {
   onNewRun: () => void;
   formOpen: boolean;
   onCloseForm: () => void;
+  /** The selected dataset's split report, when loaded. */
+  splitReport?: SplitReportRead | null;
 }
 
 export function TrainToolbar({
@@ -18,6 +24,7 @@ export function TrainToolbar({
   onNewRun,
   formOpen,
   onCloseForm,
+  splitReport,
 }: TrainToolbarProps) {
   const selected = datasets.find((dataset) => dataset.id === selectedId) ?? null;
   return (
@@ -39,6 +46,7 @@ export function TrainToolbar({
         ))}
       </select>
       <DatasetSummary dataset={selected} runCount={selected ? runCount : undefined} />
+      <SplitWarnings report={splitReport} />
       <button
         type="button"
         disabled={!formOpen && selected === null}

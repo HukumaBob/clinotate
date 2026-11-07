@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { components } from "../../shared/api/generated/schema";
+import { SplitReportTable } from "./SplitReportTable";
 
 type BalanceReportRead = components["schemas"]["BalanceReportRead"];
 
@@ -258,6 +259,15 @@ export function BalancePanel({
           <dd className="text-right">{String(report.metrics.severity ?? "no_data")}</dd>
         </dl>
       </div>
+
+      {report.split_report && (
+        <div data-testid="split-report" className="rounded border border-gray-800 bg-gray-900 p-3">
+          <h3 className="mb-2 text-xs uppercase tracking-wide text-gray-400">
+            Split across train / val / test
+          </h3>
+          <SplitReportTable report={report.split_report} />
+        </div>
+      )}
 
       {(report.recommendations ?? []).length > 0 && (
         <ul data-testid="recommendations" className="flex flex-col gap-1">

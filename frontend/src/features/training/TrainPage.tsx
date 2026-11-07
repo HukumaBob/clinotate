@@ -29,6 +29,7 @@ import { useTrainUrl } from "./useTrainUrl";
 
 type TrainingRunRead = components["schemas"]["TrainingRunRead"];
 type BaseModelOption = components["schemas"]["BaseModelOption"];
+type SplitReportRead = components["schemas"]["SplitReportRead"];
 
 interface Prefill {
   nonce: number;
@@ -52,6 +53,7 @@ const FALLBACK_ADAPTERS: AdapterOption[] = [
 export function TrainPage() {
   const [url, update] = useTrainUrl();
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
+  const [splitReport, setSplitReport] = useState<SplitReportRead | null>(null);
   const [baseModels, setBaseModels] = useState<BaseModelOption[]>([]);
   const [baseModelsError, setBaseModelsError] = useState<string | null>(null);
   const [settingsSchema, setSettingsSchema] = useState<SettingsSchema | null>(
@@ -85,6 +87,29 @@ export function TrainPage() {
     error: runsError,
     refresh: refreshRuns,
   } = useRuns(selectedDatasetId);
+
+  // The split report of the selected dataset; only the newest request may write
+  // state, and a failure just leaves no warnings (they are advisory).
+  useEffect(() => {
+    if (selectedDatasetId === null) {
+      setSplitReport(null);
+      return;
+    }
+    let current = true;
+    void (async () => {
+      try {
+        const { data } = await apiClient.GET("/datasets/{dataset_id}/split-report", {
+          params: { path: { dataset_id: selectedDatasetId } },
+        });
+        if (current) setSplitReport(data ?? null);
+      } catch {
+        if (current) setSplitReport(null);
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, [selectedDatasetId]);
 
   const refreshDatasets = useCallback(async () => {
     const { data } = await apiClient.GET("/datasets");
@@ -478,6 +503,7 @@ export function TrainPage() {
         onNewRun={() => update({ tab: "new" })}
         formOpen={url.tab === "new"}
         onCloseForm={() => update({ tab: "runs" })}
+        splitReport={splitReport}
       />
 
       {activeRun && activeIsLive && (

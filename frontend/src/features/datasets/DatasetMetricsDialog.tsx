@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 
+import { useDatasetSplitReport } from "../../entities/useDatasets";
 import type { components } from "../../shared/api/generated/schema";
+import { SplitReportTable } from "./SplitReportTable";
 
 type DatasetRead = components["schemas"]["DatasetRead"];
 
@@ -20,6 +22,9 @@ interface StoredClassCount {
  * composition is frozen at save time, so its balance is too. It must never
  * call /datasets/balance to recompute anything. */
 export function DatasetMetricsDialog({ dataset, onClose }: DatasetMetricsDialogProps) {
+  // The stored split is as frozen as the snapshot: rebuilt from dataset_items,
+  // never from a /datasets/balance recompute.
+  const splitReport = useDatasetSplitReport(dataset.id);
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -86,6 +91,15 @@ export function DatasetMetricsDialog({ dataset, onClose }: DatasetMetricsDialogP
               <span className="mr-3">Val: {String(splitCounts.val ?? "-")}</span>
               <span>Test: {String(splitCounts.test ?? "-")}</span>
             </div>
+
+            {splitReport.data && (
+              <div data-testid="dialog-split-report">
+                <h3 className="mb-2 text-xs uppercase tracking-wide text-gray-400">
+                  Split across train / val / test
+                </h3>
+                <SplitReportTable report={splitReport.data} />
+              </div>
+            )}
 
             <ul className="flex flex-col gap-1">
               {classes.map((entry) => (

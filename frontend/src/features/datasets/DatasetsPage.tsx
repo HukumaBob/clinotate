@@ -159,6 +159,7 @@ export function DatasetsPage() {
     excluded_label_ids: [] as number[],
     class_limits: {} as Record<number, number>,
     threshold,
+    split_config: null as Record<string, number> | null,
   });
 
   useEffect(() => {
@@ -170,10 +171,15 @@ export function DatasetsPage() {
         excluded_label_ids: Array.from(excluded),
         class_limits: classLimits,
         threshold,
+        // Omitted while train + val exceed 100: the server would reject it.
+        split_config:
+          trainPercent + valPercent <= 100
+            ? { train: trainPercent, val: valPercent, test: testPercent }
+            : null,
       });
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [selectedSequenceIds, collapsed, excluded, classLimits, taskType, threshold]);
+  }, [selectedSequenceIds, collapsed, excluded, classLimits, taskType, threshold, trainPercent, valPercent, testPercent]);
 
   const balanceQuery = useDatasetBalance(debouncedRequest, debouncedRequest.sequence_ids.length > 0);
 
