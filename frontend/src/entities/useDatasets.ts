@@ -18,6 +18,20 @@ export function useDatasetBalance(request: BalanceRequest, enabled = true) {
   });
 }
 
+export function useDatasetSplitReport(datasetId: number | null) {
+  return useQuery({
+    queryKey: ["dataset-split-report", datasetId],
+    enabled: datasetId !== null,
+    queryFn: async () => {
+      const result = await apiClient.GET("/datasets/{dataset_id}/split-report", {
+        params: { path: { dataset_id: datasetId as number } },
+      });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+  });
+}
+
 export function useDatasets() {
   return useQuery({
     queryKey: ["datasets"],
