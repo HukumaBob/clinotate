@@ -87,6 +87,12 @@ services:
       - minio
     deploy:
       resources:
+        # Training with many DataLoader workers saturated all 6 host cores
+        # and pushed the 16GB host into swap, freezing the desktop while the
+        # GPU sat at ~30%. Cap the container so the host stays responsive.
+        limits:
+          cpus: "4"
+          memory: 10g
         reservations:
           devices:
             - driver: nvidia
