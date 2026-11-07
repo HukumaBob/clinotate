@@ -54,6 +54,13 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   `POST /reference/runs/{run_id}/commit-episodes` (a dry run returns the counts and writes
   nothing; at most 500 frames per commit); no migration.
 
+### Changed
+- ml-worker no longer lets a training run starve the host: the container is capped at 4 CPUs
+  and 8 GB, the default and maximum "Data-loader workers" are 4 and 8 (were 8 and 16), the
+  dataset archive and parent weights are streamed to disk instead of held in RAM, and the
+  worker process restarts itself after every training run (a finished run left about 5 GB
+  resident; the idle worker is about 0.5 GB again afterwards).
+
 ## [0.3.1] - 2026-11-03
 
 ### Fixed

@@ -2784,3 +2784,26 @@ and MinIO objects were removed afterwards.
 - A video-sequence frame cropped here is regenerated uncropped by a later re-cut (the
   panel says so).
 - No guard against a SAM job running on the same frames.
+
+
+### Host slowdown during training (2026-11-07)
+
+Training froze the desktop while the GPU idled at ~30 %: 12 DataLoader workers on 6
+cores, ~450 MB RAM free, 1.7 GB in swap. Fixed in three commits (`b381508`, `759973e`,
+`c11d766`):
+
+- `docker-compose.yml`: `ml-worker` limited to 4 CPUs / 8 GB. 10 GB was tried first and is
+  too high on a 16 GB host that also runs the desktop (~5.5 GB).
+- `workers` setting: default 4 (YOLO was 8), maximum 8 (was 16) for both trainers.
+- `StorageService.download_to_file` streams the dataset zip and parent weights to disk;
+  `model_train` used to keep both as `bytes` for the whole run. This was *not* the main
+  cause of the 5 GB: the main process still held ~5.2 GB after a run.
+- The ~5 GB is the CUDA context, PyTorch and Ultralytics, which nothing in the process
+  releases. A `task_postrun` handler for `model_train` exits the process and the
+  container's restart policy supplies a fresh one (same idea as the `track()` failure
+  restart). Measured on a real run: container 7.3 GB at the peak, 516 MiB right after.
+
+Real-run results (2026-11-07, 8 min for 50 epochs, `workers=4`): lowest free RAM 3.9 GB,
+swap up to 0.9 GB, GPU 15-65 %, at most 65 degrees C, no reboot. Open: peak 7.3 GB is close to
+the 8 GB cap, so a heavier run (YOLO l/x, big batch) may need 9 GB; the next task waits
+~20-30 s for the restart.
