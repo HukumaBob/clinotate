@@ -1,9 +1,22 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.datasets.models import SplitName, TaskType
 from app.reference.schemas import ExposureVideoRead
+
+
+def _check_split_config(value: dict) -> dict:
+    train = value.get("train", 0)
+    val = value.get("val", 0)
+    if not isinstance(train, (int, float)) or not isinstance(val, (int, float)):
+        raise ValueError("split_config train/val must be numbers")
+    if train < 0 or val < 0:
+        raise ValueError("split_config train/val must each be >= 0")
+    if train + val > 100:
+        raise ValueError("split_config train + val must be <= 100")
+    return value
 
 
 class GroupingOverrides(BaseModel):
@@ -18,6 +31,13 @@ class BalanceRequest(BaseModel):
     excluded_label_ids: list[int] = Field(default_factory=list)
     class_limits: dict[int, int] = Field(default_factory=dict)
     threshold: int = 10
+    # When given, the response carries the split report this selection would get.
+    split_config: dict | None = None
+
+    @field_validator("split_config")
+    @classmethod
+    def _validate_split_config(cls, value: dict | None) -> dict | None:
+        return None if value is None else _check_split_config(value)
 
 
 class ClassCountRead(BaseModel):
@@ -40,6 +60,42 @@ class QcOriginRead(BaseModel):
     frame_count: int
 
 
+class SplitCellRead(BaseModel):
+    frames: int
+    units: int
+
+
+class SplitClassRead(BaseModel):
+    label_id: int
+    name: str
+    units: int
+    train: SplitCellRead
+    val: SplitCellRead
+    test: SplitCellRead
+
+
+class SplitTotalRead(BaseModel):
+    frames: int
+    units: int
+    share: float
+    target: float
+
+
+class SplitWarningRead(BaseModel):
+    kind: Literal["missing_in_split", "few_units", "thin_cell", "split_share"]
+    message: str
+    label_id: int | None = None
+    split: Literal["train", "val", "test"] | None = None
+
+
+class SplitReportRead(BaseModel):
+    classes: list[SplitClassRead]
+    train: SplitTotalRead
+    val: SplitTotalRead
+    test: SplitTotalRead
+    warnings: list[SplitWarningRead]
+
+
 class BalanceReportRead(BaseModel):
     classes: list[ClassCountRead]
     total_frames: int
@@ -50,6 +106,7 @@ class BalanceReportRead(BaseModel):
     recommendations: list[RecommendationRead] = Field(default_factory=list)
     qc_origin: list[QcOriginRead] = Field(default_factory=list)
     reference_exposure: list[ExposureVideoRead] = Field(default_factory=list)
+    split_report: SplitReportRead | None = None
 
 
 class DatasetCreate(BaseModel):
@@ -65,15 +122,7 @@ class DatasetCreate(BaseModel):
     @field_validator("split_config")
     @classmethod
     def _validate_split_config(cls, value: dict) -> dict:
-        train = value.get("train", 0)
-        val = value.get("val", 0)
-        if not isinstance(train, (int, float)) or not isinstance(val, (int, float)):
-            raise ValueError("split_config train/val must be numbers")
-        if train < 0 or val < 0:
-            raise ValueError("split_config train/val must each be >= 0")
-        if train + val > 100:
-            raise ValueError("split_config train + val must be <= 100")
-        return value
+        return _check_split_config(value)
 
 
 class ExportRequest(BaseModel):

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.datasets.models import Dataset, DatasetItem
+from app.datasets.models import Dataset, DatasetItem, SplitName
 from app.datasets.schemas import (
     BalanceReportRead,
     BalanceRequest,
@@ -14,8 +14,19 @@ from app.datasets.schemas import (
     DatasetRead,
     ExportDownloadRead,
     ExportRequest,
+    SplitReportRead,
 )
-from app.datasets.service import compute_balance, create_dataset, qc_origin_for_sequences
+from app.datasets.service import (
+    build_label_tree,
+    collect_frames,
+    compute_balance,
+    create_dataset,
+    grouping_keys_for_sequences,
+    plan_splits,
+    qc_origin_for_sequences,
+    split_report_for_dataset,
+)
+from app.datasets.split_report import SplitReport, build_split_report
 from app.db import get_session
 from app.jobs.models import Job, JobStatus, JobType
 from app.jobs.schemas import JobRead
@@ -102,6 +113,30 @@ def _serialize_one(session: Session, dataset: Dataset, include_items: bool) -> d
     return result
 
 
+def _serialize_split_report(report: SplitReport) -> dict:
+    def cell(value) -> dict:
+        return {"frames": value.frames, "units": value.units}
+
+    def total(value) -> dict:
+        return {"frames": value.frames, "units": value.units,
+                "share": value.share, "target": value.target}
+
+    parts = ("train", "val", "test")
+    return {
+        "classes": [
+            {"label_id": c.label_id, "name": c.name, "units": c.units,
+             **{part: cell(c.cells[SplitName(part)]) for part in parts}}
+            for c in report.classes
+        ],
+        **{part: total(report.totals[SplitName(part)]) for part in parts},
+        "warnings": [
+            {"kind": w.kind, "message": w.message, "label_id": w.label_id,
+             "split": w.split.value if w.split is not None else None}
+            for w in report.warnings
+        ],
+    }
+
+
 @router.post("/balance", response_model=BalanceReportRead)
 def dataset_balance(payload: BalanceRequest, session: Session = Depends(get_session)) -> dict:
     """Live recompute for the panel. Writes nothing -- that is its contract."""
@@ -109,11 +144,28 @@ def dataset_balance(payload: BalanceRequest, session: Session = Depends(get_sess
         collapse=frozenset(payload.grouping_overrides.collapse),
         expand=frozenset(payload.grouping_overrides.expand),
     )
-    report = compute_balance(
-        session, payload.sequence_ids, payload.task_type, rules,
-        set(payload.excluded_label_ids), payload.threshold,
-        class_limits=dict(payload.class_limits),
+    excluded = set(payload.excluded_label_ids)
+    class_limits = dict(payload.class_limits)
+    tree = build_label_tree(session)
+    composition = collect_frames(
+        session, payload.sequence_ids, payload.task_type, excluded, tree, rules, class_limits
     )
+    grouping_keys = grouping_keys_for_sequences(session, payload.sequence_ids)
+    report = compute_balance(
+        session, payload.sequence_ids, payload.task_type, rules, excluded, payload.threshold,
+        tree, class_limits, composition=composition, grouping_keys=grouping_keys,
+    )
+    split_report = None
+    if payload.split_config is not None:
+        # The very function dataset creation uses, so the preview is what gets stored.
+        plan = plan_splits(
+            session, payload.sequence_ids, payload.task_type, rules, excluded, class_limits,
+            payload.split_config, tree=tree, composition=composition,
+            grouping_keys=grouping_keys,
+        )
+        split_report = _serialize_split_report(
+            build_split_report(plan.rows, plan.class_names, payload.split_config)
+        )
     return {
         "classes": [
             {"label_id": c.label_id, "name": c.name, "instances": c.instances,
@@ -133,6 +185,7 @@ def dataset_balance(payload: BalanceRequest, session: Session = Depends(get_sess
         "reference_exposure": exposure_for_sequences(
             session, payload.sequence_ids, payload.task_type
         ),
+        "split_report": split_report,
     }
 
 
@@ -200,6 +253,15 @@ def get_dataset(dataset_id: int, session: Session = Depends(get_session)) -> dic
     if dataset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
     return _serialize_one(session, dataset, include_items=True)
+
+
+@router.get("/{dataset_id}/split-report", response_model=SplitReportRead)
+def get_split_report(dataset_id: int, session: Session = Depends(get_session)) -> dict:
+    """How the stored dataset's classes are spread over train/val/test."""
+    dataset = session.get(Dataset, dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+    return _serialize_split_report(split_report_for_dataset(session, dataset))
 
 
 @router.post("/{dataset_id}/export", response_model=JobRead, status_code=status.HTTP_202_ACCEPTED)

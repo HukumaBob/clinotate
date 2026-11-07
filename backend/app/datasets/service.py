@@ -9,6 +9,8 @@ from app.datasets.models import Dataset, DatasetItem, SplitName, TaskType
 from app.datasets.split_report import (  # noqa: F401 -- PARTS/required_parts are re-exported
     PARTS,
     FrameRow,
+    SplitReport,
+    build_split_report,
     required_parts,
 )
 from app.media.models import Frame, Sequence
@@ -872,6 +874,55 @@ def plan_splits(
         for label in session.query(Label).filter(Label.id.in_(used)).all()
     } if used else {}
     return SplitPlan(assignment=assignment, rows=rows, class_names=class_names)
+
+
+def split_report_for_dataset(session: Session, dataset: Dataset) -> SplitReport:
+    """The split report of a stored dataset, rebuilt from its `dataset_items`.
+
+    Works for every dataset, including ones created before the class-aware
+    split. Classes resolve with the dataset's own grouping overrides. Items
+    whose annotations were deleted since are skipped rather than failing.
+    """
+    overrides = dataset.grouping_overrides or {}
+    rules = GroupingRules(
+        collapse=frozenset(overrides.get("collapse", [])),
+        expand=frozenset(overrides.get("expand", [])),
+    )
+    tree = build_label_tree(session)
+    items = session.query(DatasetItem).filter(DatasetItem.dataset_id == dataset.id).all()
+
+    frame_ids = [item.frame_id for item in items]
+    sequence_by_frame = dict(
+        session.query(Frame.id, Frame.sequence_id).filter(Frame.id.in_(frame_ids)).all()
+    ) if frame_ids else {}
+    keys = grouping_keys_for_sequences(session, sorted(set(sequence_by_frame.values())))
+    annotation_ids = [aid for item in items for aid in item.annotation_ids]
+    label_by_annotation = dict(
+        session.query(Annotation.id, Annotation.label_id)
+        .filter(Annotation.id.in_(annotation_ids)).all()
+    ) if annotation_ids else {}
+
+    rows = []
+    for item in items:
+        sequence_id = sequence_by_frame.get(item.frame_id)
+        if sequence_id is None:
+            continue
+        classes = frozenset(
+            resolve_class(label_by_annotation[aid], tree, rules)
+            for aid in item.annotation_ids if aid in label_by_annotation
+        )
+        rows.append(FrameRow(
+            unit=keys.get(sequence_id, ("sequence", sequence_id)),
+            split=item.split,
+            class_ids=classes,
+        ))
+
+    used = {class_id for row in rows for class_id in row.class_ids}
+    names = {
+        label.id: label.name
+        for label in session.query(Label).filter(Label.id.in_(used)).all()
+    } if used else {}
+    return build_split_report(rows, names, dataset.split_config or {})
 
 
 def create_dataset(session: Session, payload, user) -> Dataset:

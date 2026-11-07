@@ -3323,6 +3323,54 @@
         }
       }
     },
+    "/datasets/{dataset_id}/split-report": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Split Report",
+        "description": "How the stored dataset's classes are spread over train/val/test.",
+        "operationId": "get_split_report_datasets__dataset_id__split_report_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitReportRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/datasets/{dataset_id}/export": {
       "post": {
         "tags": [
@@ -6006,6 +6054,16 @@
             },
             "type": "array",
             "title": "Reference Exposure"
+          },
+          "split_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SplitReportRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -6052,6 +6110,18 @@
             "type": "integer",
             "title": "Threshold",
             "default": 10
+          },
+          "split_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split Config"
           }
         },
         "type": "object",
@@ -9920,6 +9990,59 @@
         ],
         "title": "SettingsUpdate"
       },
+      "SplitCellRead": {
+        "properties": {
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          },
+          "units": {
+            "type": "integer",
+            "title": "Units"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frames",
+          "units"
+        ],
+        "title": "SplitCellRead"
+      },
+      "SplitClassRead": {
+        "properties": {
+          "label_id": {
+            "type": "integer",
+            "title": "Label Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "units": {
+            "type": "integer",
+            "title": "Units"
+          },
+          "train": {
+            "$ref": "#/components/schemas/SplitCellRead"
+          },
+          "val": {
+            "$ref": "#/components/schemas/SplitCellRead"
+          },
+          "test": {
+            "$ref": "#/components/schemas/SplitCellRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label_id",
+          "name",
+          "units",
+          "train",
+          "val",
+          "test"
+        ],
+        "title": "SplitClassRead"
+      },
       "SplitName": {
         "type": "string",
         "enum": [
@@ -9928,6 +10051,121 @@
           "test"
         ],
         "title": "SplitName"
+      },
+      "SplitReportRead": {
+        "properties": {
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/SplitClassRead"
+            },
+            "type": "array",
+            "title": "Classes"
+          },
+          "train": {
+            "$ref": "#/components/schemas/SplitTotalRead"
+          },
+          "val": {
+            "$ref": "#/components/schemas/SplitTotalRead"
+          },
+          "test": {
+            "$ref": "#/components/schemas/SplitTotalRead"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SplitWarningRead"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "classes",
+          "train",
+          "val",
+          "test",
+          "warnings"
+        ],
+        "title": "SplitReportRead"
+      },
+      "SplitTotalRead": {
+        "properties": {
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          },
+          "units": {
+            "type": "integer",
+            "title": "Units"
+          },
+          "share": {
+            "type": "number",
+            "title": "Share"
+          },
+          "target": {
+            "type": "number",
+            "title": "Target"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frames",
+          "units",
+          "share",
+          "target"
+        ],
+        "title": "SplitTotalRead"
+      },
+      "SplitWarningRead": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "missing_in_split",
+              "few_units",
+              "thin_cell",
+              "split_share"
+            ],
+            "title": "Kind"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "label_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Id"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "train",
+                  "val",
+                  "test"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "SplitWarningRead"
       },
       "SuggestSequenceNameResponse": {
         "properties": {
