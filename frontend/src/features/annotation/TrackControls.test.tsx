@@ -10,7 +10,9 @@ vi.mock("../../shared/api/client", () => ({
   apiClient: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
 }));
 
-function renderControls(overrides: Partial<{ maxBackward: number; maxForward: number }> = {}) {
+function renderControls(
+  overrides: Partial<{ maxBackward: number; maxForward: number; trackBlocked: boolean }> = {},
+) {
   vi.mocked(apiClient.GET).mockResolvedValue({
     data: { max_track_range_frames: 20 },
     error: undefined,
@@ -25,6 +27,7 @@ function renderControls(overrides: Partial<{ maxBackward: number; maxForward: nu
         onTrack={onTrack}
         maxBackward={overrides.maxBackward ?? 50}
         maxForward={overrides.maxForward ?? 50}
+        trackBlocked={overrides.trackBlocked}
       />
     </QueryClientProvider>,
   );
@@ -106,5 +109,36 @@ describe("TrackControls combined-range cap", () => {
     fireEvent.change(forwardInput, { target: { value: "30" } });
 
     expect(store.getState().forward).toBe(3);
+  });
+});
+
+describe("TrackControls while the segment is still being drawn", () => {
+  function withPrompt(store: ReturnType<typeof createFrameEditorStore>) {
+    act(() => {
+      store.getState().setLabelSelection({ labelTagId: 7 });
+      store.getState().addPrompt({ type: "point", coords: [0.5, 0.5], label: true });
+    });
+  }
+
+  it("keeps Track disabled and says why while the predict is running", async () => {
+    const { store } = renderControls({ trackBlocked: true });
+    withPrompt(store);
+
+    expect(screen.getByRole("button", { name: "Track" })).toBeDisabled();
+    expect(screen.getByText(/wait for the segment/i)).toBeInTheDocument();
+  });
+
+  it("enables Track once the segment is drawn", async () => {
+    const { store } = renderControls({ trackBlocked: false });
+    withPrompt(store);
+
+    expect(screen.getByRole("button", { name: "Track" })).toBeEnabled();
+    expect(screen.queryByText(/wait for the segment/i)).not.toBeInTheDocument();
+  });
+
+  it("does not show the waiting hint when there is nothing to track yet", () => {
+    renderControls({ trackBlocked: true });
+
+    expect(screen.queryByText(/wait for the segment/i)).not.toBeInTheDocument();
   });
 });

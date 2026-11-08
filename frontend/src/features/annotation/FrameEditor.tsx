@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAnnotations, useDeleteAnnotation } from "../../entities/useAnnotations";
 import { useFrame } from "../../entities/useFrames";
 import { useJob } from "../../entities/useJobs";
+import { isSegmentPending } from "./segmentPending";
 import { useSequence } from "../../entities/useSequence";
 import { useSettings } from "../../entities/useSettings";
 import { useTaxonomyTree } from "../../entities/useTaxonomyTree";
@@ -67,6 +68,7 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   const sequenceQuery = useSequence(frameQuery.data?.sequence_id ?? Number.NaN);
   const taxonomyTreeQuery = useTaxonomyTree(sequenceQuery.data?.procedure_id ?? null);
   const predictMutation = useSam2Predict();
+  const segmentPending = isSegmentPending(predictMutation.isPending, jobQuery.data);
   const trackMutation = useSam2Track();
   const deleteAnnotation = useDeleteAnnotation(frameId);
   const settingsQuery = useSettings();
@@ -229,6 +231,9 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
   function handleTrack() {
     const state = store.getState();
     if (state.labelTagId === null || state.pendingPrompts.length === 0) return;
+    // The button is disabled while the segment is being drawn; this guards the
+    // other ways in (a stale click handler, a keyboard shortcut).
+    if (segmentPending) return;
     // Re-clamp right before sending, not just trust the store's current
     // value -- TrackControls clamps as the user edits, but if the settings
     // query resolves to a lower cap (or its default changes) between the
@@ -384,6 +389,7 @@ export function FrameEditor({ frameId, frames, onClose, onFrameChange }: FrameEd
           vramIsLive={vramIsLive}
           maxBackward={maxBackward}
           maxForward={maxForward}
+          trackBlocked={segmentPending}
         />
       </div>
     </div>

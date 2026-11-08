@@ -11,16 +11,20 @@ interface TrackControlsProps {
   // within its sequence -- backing the "Max" shortcut buttons below.
   maxBackward: number;
   maxForward: number;
+  // True while the segment for the current prompts is still being computed:
+  // Track waits for it (see segmentPending.ts).
+  trackBlocked?: boolean;
 }
 
-export function TrackControls({ store, onTrack, maxBackward, maxForward }: TrackControlsProps) {
+export function TrackControls({ store, onTrack, maxBackward, maxForward, trackBlocked = false }: TrackControlsProps) {
   const backward = useStore(store, (state) => state.backward);
   const forward = useStore(store, (state) => state.forward);
   const setBackward = useStore(store, (state) => state.setBackward);
   const setForward = useStore(store, (state) => state.setForward);
   const labelTagId = useStore(store, (state) => state.labelTagId);
   const pendingPrompts = useStore(store, (state) => state.pendingPrompts);
-  const trackDisabled = labelTagId === null || pendingPrompts.length === 0;
+  const nothingToTrack = labelTagId === null || pendingPrompts.length === 0;
+  const trackDisabled = nothingToTrack || trackBlocked;
 
   const settingsQuery = useSettings();
   // See docs/superpowers/specs/2026-08-11-settings-page-design.md: while
@@ -92,6 +96,9 @@ export function TrackControls({ store, onTrack, maxBackward, maxForward }: Track
           Max
         </button>
       </div>
+      {trackBlocked && !nothingToTrack && (
+        <p className="text-xs text-amber-400">Wait for the segment to finish before tracking.</p>
+      )}
       {settingsQuery.data && (
         <p className="text-xs text-gray-500">
           Combined backward + forward is capped at {combinedCap} frames to protect GPU memory.

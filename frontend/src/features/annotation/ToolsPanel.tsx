@@ -22,6 +22,7 @@ interface ToolsPanelProps {
   vramIsLive: boolean;
   maxBackward: number;
   maxForward: number;
+  trackBlocked?: boolean;
 }
 
 const TOOLS: PromptType[] = ["point", "mask"];
@@ -38,6 +39,7 @@ export function ToolsPanel({
   vramIsLive,
   maxBackward,
   maxForward,
+  trackBlocked = false,
 }: ToolsPanelProps) {
   const activeModel = useStore(store, (state) => state.activeModel);
   const activeTool = useStore(store, (state) => state.activeTool);
@@ -168,7 +170,13 @@ export function ToolsPanel({
 
       <section className="space-y-1">
         <h2 className="text-[11px] font-medium text-gray-500">Track</h2>
-        <TrackControls store={store} onTrack={onTrack} maxBackward={maxBackward} maxForward={maxForward} />
+        <TrackControls
+          store={store}
+          onTrack={onTrack}
+          maxBackward={maxBackward}
+          maxForward={maxForward}
+          trackBlocked={trackBlocked}
+        />
       </section>
 
       <div className="border-t border-gray-800" />
