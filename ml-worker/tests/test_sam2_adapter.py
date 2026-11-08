@@ -337,3 +337,77 @@ def test_track_combines_all_point_prompts_in_a_single_call():
     add_call = mock_predictor.add_new_points_or_box.call_args
     assert add_call.kwargs["points"] == [[400.0, 200.0], [720.0, 40.0]]
     assert add_call.kwargs["labels"] == [1, 0]
+
+
+# -- both predictors stay resident: no unload/reload churn between predict and track ----
+#
+# Two host resets happened on the first track after a predict, after several
+# predict/track switches within a minute; every switch freed one predictor
+# (gc.collect + empty_cache) and reloaded the other from disk.
+
+
+def _adapter_with_fake_predictors():
+    image_patch = patch("app.sam2_adapter.SAM2ImagePredictor")
+    video_patch = patch("app.sam2_adapter.SAM2VideoPredictor")
+    cache_patch = patch("app.sam2_adapter.torch.cuda.empty_cache")
+    image_cls, video_cls, empty_cache = image_patch.start(), video_patch.start(), cache_patch.start()
+    return Sam2Adapter(), image_cls, video_cls, empty_cache, (image_patch, video_patch, cache_patch)
+
+
+def _stop(patches):
+    for p in patches:
+        p.stop()
+
+
+def test_loading_the_video_predictor_keeps_the_image_predictor_resident():
+    adapter, image_cls, video_cls, empty_cache, patches = _adapter_with_fake_predictors()
+    try:
+        image = adapter._get_image_predictor()
+        video = adapter._get_video_predictor()
+
+        assert adapter._image_predictor is image
+        assert adapter._video_predictor is video
+        empty_cache.assert_not_called()
+    finally:
+        _stop(patches)
+
+
+def test_loading_the_image_predictor_keeps_the_video_predictor_resident():
+    adapter, image_cls, video_cls, empty_cache, patches = _adapter_with_fake_predictors()
+    try:
+        video = adapter._get_video_predictor()
+        image = adapter._get_image_predictor()
+
+        assert adapter._video_predictor is video
+        assert adapter._image_predictor is image
+        empty_cache.assert_not_called()
+    finally:
+        _stop(patches)
+
+
+def test_switching_back_and_forth_loads_each_predictor_only_once():
+    adapter, image_cls, video_cls, empty_cache, patches = _adapter_with_fake_predictors()
+    try:
+        for _ in range(4):
+            adapter._get_image_predictor()
+            adapter._get_video_predictor()
+
+        assert image_cls.from_pretrained.call_count == 1
+        assert video_cls.from_pretrained.call_count == 1
+        empty_cache.assert_not_called()
+    finally:
+        _stop(patches)
+
+
+def test_a_failed_load_still_frees_what_it_holds():
+    adapter, image_cls, video_cls, empty_cache, patches = _adapter_with_fake_predictors()
+    try:
+        video_cls.from_pretrained.side_effect = RuntimeError("CUDA out of memory")
+
+        with pytest.raises(RuntimeError):
+            adapter._get_video_predictor()
+
+        assert adapter._video_predictor is None
+        empty_cache.assert_called()
+    finally:
+        _stop(patches)

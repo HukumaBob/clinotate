@@ -112,7 +112,18 @@ class Sam2Adapter:
         """Both predictors are lazy-loaded, same rationale as Sam3Adapter:
         this GPU has only enough VRAM headroom for one large model family
         at a time, so building both eagerly in __init__ would OOM callers
-        who only ever use one of predict()/track()."""
+        who only ever use one of predict()/track().
+
+        Once loaded, the image and the video predictor STAY resident side by
+        side (about 2.3 GB of the 8 GB). They used to evict each other, so
+        every predict <-> track switch freed one and reloaded the other from
+        disk (gc.collect + empty_cache + from_pretrained). The host reset
+        twice, both times on the first track after a predict, after several
+        such switches within a minute (2026-11-07 18:17, 2026-11-08 17:18).
+        Removing the churn is an experiment on that suspicion, not a proven
+        fix: see ROADMAP "SAM2 host resets". Evicting the whole family for a
+        SAM-3 task is unchanged (_release_image_predictor /
+        _release_video_predictor, called from tasks.py)."""
         self._image_predictor = None
         self._video_predictor = None
         self._image_model_id = image_model_id
@@ -132,7 +143,6 @@ class Sam2Adapter:
 
     def _get_image_predictor(self):
         if self._image_predictor is None:
-            self._release_video_predictor()
             try:
                 self._image_predictor = SAM2ImagePredictor.from_pretrained(self._image_model_id)
             except Exception:
@@ -144,7 +154,6 @@ class Sam2Adapter:
 
     def _get_video_predictor(self):
         if self._video_predictor is None:
-            self._release_image_predictor()
             try:
                 self._video_predictor = SAM2VideoPredictor.from_pretrained(self._video_model_id)
             except Exception:
