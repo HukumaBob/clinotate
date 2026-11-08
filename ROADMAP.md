@@ -2900,6 +2900,13 @@ Later the same day (resets 3 and 4, and what the user noticed):
   SAM jobs in the worker (`e2dba73`, `MIN_GPU_JOB_GAP_SECONDS`). Both are workarounds for an unexplained
   fault, not fixes.
 
+Result of the first series with both in place and no power limit (2026-11-08 18:36-18:46): 64 jobs
+(32 predicts, 32 tracks) in 9 min 9 s, none failed, no reset; the shortest gap between a predict and
+the next track was 5.3 s; GPU power still peaked at 223 W and 70 C, host RAM never under 7.5 GB. The
+earlier resets came at the 5th, 8th, 13th (no power limit) and 57th (150 W) job, so one clean series is
+encouraging but not proof; whether the pacing or the disabled Track button matters more is not
+separated (no control with one of them removed).
+
 Open: repeat the rapid series with these two in place and no power limit (it reset to 215 W after the
 reboot, which keeps the comparison with the 13-job reset clean). If it resets again: GPU "prefer maximum
 performance" (`nvidia-settings -a GPUPowerMizerMode=1`, no sudo), clock lock (`sudo nvidia-smi -lgc`),
