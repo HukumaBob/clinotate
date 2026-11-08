@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from celery.signals import task_postrun, worker_ready
+from celery.signals import task_postrun, task_prerun, worker_ready
 from PIL import Image
 from sqlalchemy import text
 
@@ -1042,6 +1042,35 @@ def model_train(job_id: int, adapter=None) -> None:
         session.commit()
     finally:
         session.close()
+
+
+# Interactive GPU jobs keep a minimum gap between the end of one and the start of the
+# next. Four host resets happened on a SAM2 track that started 0.3-2.9 s after the
+# previous job: the Track button used to fire before the point's segment was drawn,
+# so the track queued right behind the predict. A workaround for an unexplained
+# fault (no kernel, driver or journal message), not a fix: see ROADMAP "SAM2 host
+# resets". Quality ranking, similarity search, training and QC inference are not
+# interactive and are not paced.
+MIN_GPU_JOB_GAP_SECONDS = 5.0
+_GPU_PACED_TASKS = frozenset({"sam2_predict", "sam2_track", "sam3_predict", "sam3_track"})
+_last_gpu_job_finished: float | None = None
+
+
+@task_prerun.connect
+def _pace_gpu_jobs(sender=None, **_kwargs) -> None:
+    """Sleeps out what is left of the minimum gap before a paced job starts."""
+    if getattr(sender, "name", None) not in _GPU_PACED_TASKS or _last_gpu_job_finished is None:
+        return
+    wait = MIN_GPU_JOB_GAP_SECONDS - (time.monotonic() - _last_gpu_job_finished)
+    if wait > 0:
+        time.sleep(wait)
+
+
+@task_postrun.connect
+def _stamp_gpu_job_finished(sender=None, **_kwargs) -> None:
+    global _last_gpu_job_finished
+    if getattr(sender, "name", None) in _GPU_PACED_TASKS:
+        _last_gpu_job_finished = time.monotonic()
 
 
 ORPHANED_JOB_ERROR = "Abandoned: the worker process stopped while this job was running"
