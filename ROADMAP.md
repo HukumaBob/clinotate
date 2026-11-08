@@ -2860,10 +2860,16 @@ fsynced log (`.superpowers/monitor-sam2.sh`, git-ignored) and the `jobs` table g
   `torch.cuda.empty_cache()`) and reloaded the other from disk (`from_pretrained`). Experiment
   (`5ebe1f7`): both predictors stay resident, no unload on a switch (tests in
   `test_sam2_adapter.py`).
-- Result so far: one rapid series of 38 jobs (20 predicts, 18 tracks) in 5 min 40 s, no reset,
-  none failed; a predict takes 0.5 s and a track 2.1 s (was 2.5-4 s and 4-5 s). The worker holds
-  2.8 GB, the GPU 3.4 GB. One series is not proof: the resets were probabilistic and the SAM-3 <->
-  SAM-2 family switch still unloads models.
+- Result: the first rapid series passed (38 jobs, 20 predicts and 18 tracks in 5 min 40 s; a predict
+  takes 0.5 s and a track 2.1 s, was 2.5-4 s and 4-5 s; worker 2.8 GB, GPU 3.4 GB). **The second
+  series reset the host again** (2026-11-08 17:46:47, the track of job 3101, about the 13th job of
+  that series), with both predictors already resident, so nothing was being loaded or unloaded at that
+  moment. Unload/reload churn is therefore not the (only) cause. The change stays (it makes jobs
+  faster) but it is not the fix.
+- Common to all three resets: the start of a SAM2 track, seconds after a predict, inside a burst of
+  jobs; no kernel, NVIDIA or journal message; host RAM, swap, worker RAM, temperature and VRAM normal
+  in the 5 s samples. Track starts also show a CPU burst (4 cores at 100 %) together with GPU power
+  at the 215 W limit (210-222 W sampled on most tracks).
 
 Found on the way and fixed:
 
@@ -2874,6 +2880,6 @@ Found on the way and fixed:
 - Jobs left `RUNNING` by a reset stayed running forever; the worker now closes them at start
   (`0f8a6a5`), checked live with a fake orphan.
 
-Open: more rapid series (after a rest, with the desktop busy, with a SAM-3 switch in between);
-if a reset still happens, lower the GPU power limit (`nvidia-smi -pl`, needs sudo) to test the
-power hypothesis.
+Open: test the power hypothesis next: `sudo nvidia-smi -pl 150` (limit 105-280 W, resets on reboot;
+a clear cut, not a final value) and repeat the rapid series. If it still resets with the GPU at 150 W,
+suspect the rest of the machine (PSU headroom for GPU + CPU bursts, RAM: a memtest), not SAM2 code.

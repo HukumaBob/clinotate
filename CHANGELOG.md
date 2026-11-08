@@ -74,7 +74,8 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 ### Changed
 - SAM 2.1: the image predictor and the video predictor now stay loaded side by side (about 2.3 GB)
   instead of evicting each other on every predict/track switch. Experiment against the host resets
-  seen on the first track after a predict; see ROADMAP "SAM2 host resets".
+  seen on the first track after a predict; see ROADMAP "SAM2 host resets". It makes jobs faster
+  but did not stop the resets.
 - New datasets are split with class coverage in mind: whole units (a video, or a sequence
   without one) are still never divided, but they are now placed so every class reaches as many
   of train/val/test as its number of units allows (three or more units: all three parts; two:
