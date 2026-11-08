@@ -2,6 +2,7 @@ import gc
 import io
 import json
 import os
+import signal
 import sys
 import tempfile
 import threading
@@ -740,9 +741,7 @@ def _restart_worker_process_after_track_failure() -> None:
     broker (Redis) redelivers the message to whichever worker process picks
     up the queue next, which is this same container once it restarts.
     """
-    sys.stderr.flush()
-    sys.stdout.flush()
-    os._exit(1)
+    _exit_worker_process()
 
 
 LOG_FLUSH_SECONDS = 2.0
@@ -1041,12 +1040,30 @@ def model_train(job_id: int, adapter=None) -> None:
         session.close()
 
 
+_GRACEFUL_EXIT_SECONDS = 30.0
+
+
 def _exit_worker_process() -> None:
-    """Immediate exit; the container's `restart: unless-stopped` policy
-    brings up a fresh process. Split out so tests can replace it."""
+    """Asks this worker process to exit so the container's `restart: unless-stopped`
+    policy brings up a fresh one.
+
+    SIGTERM is Celery's warm shutdown: the running task finishes, its message is
+    ACKED, and only then does the process stop. An immediate `os._exit` is not
+    safe here: with this Celery/Redis setup the message of the running task stays
+    unacked until the task has completed, so a hard exit leaves it in Redis's
+    `unacked` set and it is delivered AGAIN (after the 1 h visibility timeout, or
+    right after the next boot). A training run was re-executed that way after
+    every restart, three times before it was noticed.
+
+    A daemon watchdog still hard-exits after `_GRACEFUL_EXIT_SECONDS` in case a
+    broken CUDA state makes the graceful shutdown hang; the cost then is the
+    redelivery, which beats a worker that never restarts."""
     sys.stderr.flush()
     sys.stdout.flush()
-    os._exit(0)
+    watchdog = threading.Timer(_GRACEFUL_EXIT_SECONDS, os._exit, args=(0,))
+    watchdog.daemon = True
+    watchdog.start()
+    os.kill(os.getpid(), signal.SIGTERM)
 
 
 @task_postrun.connect
@@ -1062,11 +1079,13 @@ def _restart_worker_after_training(sender=None, **_kwargs) -> None:
     `_restart_worker_process_after_track_failure`, which documents why
     in-process cleanup does not work.
 
-    Safe because Celery acks at task start here (acks_late is off), and
-    `task_postrun` fires after the result is stored and the task's DB
-    session is closed. `--pool=solo` means no other task runs in this
-    process meanwhile. Tests that call `model_train()` directly never fire
-    the signal, so they are unaffected."""
+    `task_postrun` fires after the result is stored and the task's DB session
+    is closed. The exit is a SIGTERM warm shutdown (see `_exit_worker_process`),
+    NOT a hard exit: the message of the running task is only acked once the task
+    has completed, and a hard exit here made Redis deliver the same training run
+    again after every restart. `--pool=solo` means no other task runs in this
+    process meanwhile. Tests that call `model_train()` directly never fire the
+    signal, so they are unaffected."""
     if getattr(sender, "name", None) == "model_train":
         _exit_worker_process()
 
