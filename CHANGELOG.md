@@ -65,6 +65,9 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   nothing; at most 500 frames per commit); no migration.
 
 ### Fixed
+- Track is disabled until the segment of the point or box just placed has been drawn. It used to be
+  enabled as soon as a prompt existed, so a track could queue right behind the predict job and the
+  predict's draft mask was left behind.
 - A training run was executed again after every restart of the ml-worker (run 660 three times).
   The worker used to exit with a hard `os._exit` after a training run or a failed SAM track, but
   with this Celery/Redis setup the message of a running task is acked only once the task has
@@ -72,6 +75,9 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   acks first), with a 30 s hard-exit watchdog as a fallback.
 
 ### Changed
+- Interactive SAM jobs (SAM 2.1 and SAM-3 predict and track) keep a minimum gap of 5 s between the end
+  of one and the start of the next in the ml-worker. A workaround for the host resets seen on a track
+  that started seconds after a predict; see ROADMAP "SAM2 host resets".
 - SAM 2.1: the image predictor and the video predictor now stay loaded side by side (about 2.3 GB)
   instead of evicting each other on every predict/track switch. Experiment against the host resets
   seen on the first track after a predict; see ROADMAP "SAM2 host resets". It makes jobs faster

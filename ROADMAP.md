@@ -2880,6 +2880,27 @@ Found on the way and fixed:
 - Jobs left `RUNNING` by a reset stayed running forever; the worker now closes them at start
   (`0f8a6a5`), checked live with a fake orphan.
 
-Open: test the power hypothesis next: `sudo nvidia-smi -pl 150` (limit 105-280 W, resets on reboot;
-a clear cut, not a final value) and repeat the rapid series. If it still resets with the GPU at 150 W,
-suspect the rest of the machine (PSU headroom for GPU + CPU bursts, RAM: a memtest), not SAM2 code.
+Later the same day (resets 3 and 4, and what the user noticed):
+
+- Reset 4 (2026-11-08 18:03:42, job 3178) happened with the GPU power limit at 150 W, after 56 jobs
+  of the series; power samples stayed at or under 150 W (157 W peak), 61 C. The power cap delayed the
+  reset (resets came at the 5th, 8th and 13th job without it) but did not remove it. A kernel-log
+  writer to an fsynced file (`.superpowers/kernlog.sh`) was added; no PCIe/AER/Xid message exists in any
+  journal of the last two days.
+- The user pointed out that the Track button was pressed BEFORE the point's segment was drawn. True:
+  `TrackControls` enabled Track as soon as a prompt existed, so the track job queued right behind the
+  predict job; it also left the predict's draft mask behind (`draftAnnotationId` was still empty when
+  the track succeeded). The payloads of the four crashing tracks (2947, 3008, 3101, 3178) are
+  indistinguishable from successful ones (same keys, one point or box prompt, `backward 0`, `forward`
+  3 or 5), but they started 0.3-2.9 s (median about 1.2 s) after the previous predict finished, against
+  3.3 s on average for the tracks that succeeded (minimum 1.2 s). Four cases, a tendency not a rule.
+- Hypothesis now: jobs running back to back, so the GPU never settles between load steps (power-state or
+  clock transitions), and a hang on the first heavy kernels of a track. Steps taken: Track stays disabled
+  until the segment is drawn (`10eda4c`, `isSegmentPending`), and a 5 s minimum gap between interactive
+  SAM jobs in the worker (`e2dba73`, `MIN_GPU_JOB_GAP_SECONDS`). Both are workarounds for an unexplained
+  fault, not fixes.
+
+Open: repeat the rapid series with these two in place and no power limit (it reset to 215 W after the
+reboot, which keeps the comparison with the 13-job reset clean). If it resets again: GPU "prefer maximum
+performance" (`nvidia-settings -a GPUPowerMizerMode=1`, no sudo), clock lock (`sudo nvidia-smi -lgc`),
+then the rest of the machine (PSU headroom, RAM memtest, proprietary instead of open NVIDIA module).
