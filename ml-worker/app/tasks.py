@@ -1,6 +1,7 @@
 import gc
 import io
 import json
+import logging
 import os
 import signal
 import sys
@@ -13,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from celery.signals import task_postrun
+from celery.signals import task_postrun, worker_ready
 from PIL import Image
 from sqlalchemy import text
 
@@ -30,6 +31,7 @@ from app.models import (
     InferenceRunStatus,
     Job,
     JobStatus,
+    JobType,
     Label,
     ModelVersion,
     TrainingRun,
@@ -42,6 +44,8 @@ from app.similarity_adapter import SimilarityAdapter
 from app.storage import get_storage_service
 from app.training_adapter import TrainingRequest
 from app.union_find import cluster_by_threshold
+
+logger = logging.getLogger(__name__)
 
 
 def _mask_is_empty(mask_png: bytes) -> bool:
@@ -1036,6 +1040,63 @@ def model_train(job_id: int, adapter=None) -> None:
         job.error = str(exc)[:2000]
         job.finished_at = run.finished_at
         session.commit()
+    finally:
+        session.close()
+
+
+ORPHANED_JOB_ERROR = "Abandoned: the worker process stopped while this job was running"
+
+
+def fail_orphaned_jobs(session) -> list[int]:
+    """Marks every job this worker could be running as FAILED, with its training run.
+
+    A host reset or a hard exit leaves jobs in RUNNING that nothing is running any
+    more, and the UI shows them as running forever. This worker is a single
+    `--pool=solo` process, so when it starts, any RUNNING job of the types it
+    executes is an orphan. Jobs of other workers (dataset export, video transcode)
+    are not ours and are left alone; a bulk UPDATE is used so rows with job types
+    this worker's enum does not know are never loaded.
+
+    Does NOT commit: the caller owns the transaction. Returns the closed job ids."""
+    ids = [
+        job_id
+        for (job_id,) in session.query(Job.id)
+        .filter(Job.status == JobStatus.RUNNING, Job.job_type.in_(list(JobType)))
+        .all()
+    ]
+    if not ids:
+        return []
+    now = datetime.now(timezone.utc)
+    session.query(Job).filter(Job.id.in_(ids)).update(
+        {Job.status: JobStatus.FAILED, Job.error: ORPHANED_JOB_ERROR, Job.finished_at: now},
+        synchronize_session=False,
+    )
+    session.query(TrainingRun).filter(
+        TrainingRun.job_id.in_(ids), TrainingRun.status == TrainingRunStatus.RUNNING
+    ).update(
+        {
+            TrainingRun.status: TrainingRunStatus.FAILED,
+            TrainingRun.error: ORPHANED_JOB_ERROR,
+            TrainingRun.finished_at: now,
+        },
+        synchronize_session=False,
+    )
+    return ids
+
+
+@worker_ready.connect
+def _fail_orphaned_jobs_on_worker_ready(**_kwargs) -> None:
+    """Closes jobs orphaned by a previous crash as soon as the worker is ready.
+    The cleanup is a convenience: it must never stop the worker from starting."""
+    session = SessionLocal()
+    try:
+        ids = fail_orphaned_jobs(session)
+        session.commit()
+        if ids:
+            logger.warning("Closed %d orphaned job(s) left RUNNING by a previous process: %s", len(ids), ids)
+    except Exception:  # noqa: BLE001 -- see docstring
+        session.rollback()
+        logger.exception("Could not close orphaned jobs at worker start")
     finally:
         session.close()
 
