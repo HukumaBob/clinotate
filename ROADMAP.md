@@ -2842,3 +2842,38 @@ step rests on the unit test that stored splits equal the planned ones; the real 
 `anatomy-001` is more labelled videos per class, which the report now makes visible; a
 selection with only two units still cannot satisfy every single-source class (reported, not
 hidden).
+
+### SAM2 host resets, and the Celery redelivery found on the way (2026-11-07/08)
+
+Two hard resets of the host (no kernel, NVIDIA or journal message; the journal simply stops) during
+bursts of SAM2 jobs: 2026-11-07 18:17 and 2026-11-08 17:18. A monitor sampling every 5 s into an
+fsynced log (`.superpowers/monitor-sam2.sh`, git-ignored) and the `jobs` table gave the timeline.
+
+- Both resets happened at the start of a SAM2 *track* right after a *predict*, after predict/track
+  alternated several times within a minute (5th job in 31 s; 8th job in 57 s). A slower series of
+  the same alternations (6 jobs in 4 min) was fine.
+- Ruled out by the samples: host RAM (7.4 GB free), swap, worker RAM (plateau 2.8 GB of 8),
+  temperature (55 C at the last sample), VRAM (about 30 % per job). GPU power touched the 215 W
+  limit (221.9 W seen) on tracks, but the same peaks occurred during the 38-job series below that
+  did not reset.
+- Suspect: every predict <-> track switch freed one predictor (`gc.collect()` +
+  `torch.cuda.empty_cache()`) and reloaded the other from disk (`from_pretrained`). Experiment
+  (`5ebe1f7`): both predictors stay resident, no unload on a switch (tests in
+  `test_sam2_adapter.py`).
+- Result so far: one rapid series of 38 jobs (20 predicts, 18 tracks) in 5 min 40 s, no reset,
+  none failed; a predict takes 0.5 s and a track 2.1 s (was 2.5-4 s and 4-5 s). The worker holds
+  2.8 GB, the GPU 3.4 GB. One series is not proof: the resets were probabilistic and the SAM-3 <->
+  SAM-2 family switch still unloads models.
+
+Found on the way and fixed:
+
+- `os._exit` in the worker (after a training run and after a failed SAM track) left the task's
+  message unacked in Redis, so it was redelivered after the next boot: training run 660 ran four
+  times. Reproduced on a scratch Redis db; fix is a SIGTERM warm shutdown (`0181408`). My earlier
+  note "Celery acks at task start" was wrong for this setup.
+- Jobs left `RUNNING` by a reset stayed running forever; the worker now closes them at start
+  (`0f8a6a5`), checked live with a fake orphan.
+
+Open: more rapid series (after a rest, with the desktop busy, with a SAM-3 switch in between);
+if a reset still happens, lower the GPU power limit (`nvidia-smi -pl`, needs sudo) to test the
+power hypothesis.

@@ -9,6 +9,9 @@ include breaking changes). Phase-by-phase decisions and deviations live in
 ## [Unreleased]
 
 ### Added
+- The ml-worker closes jobs left `RUNNING` by a crash when it starts (and the training run that
+  belonged to them), marking them failed with a reason. Before, a host reset left them running
+  forever in the UI.
 - Split report for datasets: a class-by-part table (frames and independent source units per
   train/val/test cell) with plain-language warnings (a class missing from a part, a class from
   fewer than three sources, a thin val/test cell, a part far from its target share). It is shown
@@ -61,7 +64,17 @@ include breaking changes). Phase-by-phase decisions and deviations live in
   `POST /reference/runs/{run_id}/commit-episodes` (a dry run returns the counts and writes
   nothing; at most 500 frames per commit); no migration.
 
+### Fixed
+- A training run was executed again after every restart of the ml-worker (run 660 three times).
+  The worker used to exit with a hard `os._exit` after a training run or a failed SAM track, but
+  with this Celery/Redis setup the message of a running task is acked only once the task has
+  completed, so Redis delivered it again. The worker now exits with SIGTERM (a warm shutdown that
+  acks first), with a 30 s hard-exit watchdog as a fallback.
+
 ### Changed
+- SAM 2.1: the image predictor and the video predictor now stay loaded side by side (about 2.3 GB)
+  instead of evicting each other on every predict/track switch. Experiment against the host resets
+  seen on the first track after a predict; see ROADMAP "SAM2 host resets".
 - New datasets are split with class coverage in mind: whole units (a video, or a sequence
   without one) are still never divided, but they are now placed so every class reaches as many
   of train/val/test as its number of units allows (three or more units: all three parts; two:
